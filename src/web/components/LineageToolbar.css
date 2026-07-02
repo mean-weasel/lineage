@@ -1,0 +1,148 @@
+.lineage-title {
+  min-width: 120px;
+}
+
+.lineage-primary-controls {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+.lineage-next-summary {
+  display: grid;
+  flex: 0 1 260px;
+  gap: 2px;
+  min-width: min(260px, 100%);
+  border: 1px solid #bdd5dc;
+  border-radius: 8px;
+  background: #f8fbfc;
+  color: #26343d;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.lineage-next-summary span,
+.lineage-next-summary small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lineage-next-summary strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.lineage-overflow {
+  position: relative;
+}
+
+.lineage-demo-menu,
+.lineage-overflow {
+  position: relative;
+}
+
+.lineage-demo-menu summary,
+.lineage-overflow summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid #bdd5dc;
+  border-radius: 8px;
+  background: #f4fafb;
+  color: #125d68;
+  cursor: pointer;
+  list-style: none;
+  padding: 0 13px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.lineage-demo-menu summary {
+  display: grid;
+  justify-items: start;
+  min-width: 145px;
+  padding-block: 5px;
+}
+
+.lineage-demo-menu summary span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lineage-demo-menu summary strong {
+  font-size: 12px;
+}
+
+.lineage-demo-menu summary::-webkit-details-marker,
+.lineage-overflow summary::-webkit-details-marker {
+  display: none;
+}
+
+.lineage-demo-menu div,
+.lineage-overflow div {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 25;
+  display: grid;
+  gap: 6px;
+  min-width: 190px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 42px rgba(18, 31, 45, 0.16);
+  padding: 8px;
+}
+
+.lineage-demo-menu div {
+  left: 0;
+  right: auto;
+  min-width: 220px;
+}
+
+.lineage-demo-menu p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 3px 3px 8px;
+}
+
+.lineage-demo-menu p span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.lineage-demo-menu button,
+.lineage-overflow button {
+  justify-content: flex-start;
+  min-height: 34px;
+  border: 1px solid #d4dde3;
+  border-radius: 7px;
+  background: #fff;
+  color: #26343d;
+  padding: 0 9px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (max-width: 960px) {
+  .lineage-primary-controls {
+    display: grid;
+    min-width: 0;
+  }
+
+  .lineage-next-summary {
+    min-width: 0;
+  }
+}

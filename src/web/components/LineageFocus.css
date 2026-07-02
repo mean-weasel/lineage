@@ -1,0 +1,35 @@
+.lineage-canvas .react-flow__edge-path {
+  transition: opacity 160ms ease, stroke 160ms ease, stroke-width 160ms ease;
+}
+
+.lineage-node {
+  transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
+}
+
+.lineage-canvas.focus-active .lineage-node.focus-none {
+  opacity: 0.48;
+}
+
+.lineage-canvas.focus-active .react-flow__edge:not(.lineage-edge-focus) .react-flow__edge-path {
+  opacity: 0.32;
+}
+
+.lineage-node.focus-parent {
+  border-color: #8a6bc9;
+  box-shadow: 0 0 0 4px rgba(138, 107, 201, 0.16), 0 10px 24px rgba(24, 36, 46, 0.08);
+}
+
+.lineage-node.focus-child {
+  border-color: #0d8b93;
+  box-shadow: 0 0 0 4px rgba(13, 139, 147, 0.16), 0 10px 24px rgba(24, 36, 46, 0.08);
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-focus-parent .react-flow__edge-path {
+  stroke: #8a6bc9;
+  stroke-width: 3;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-focus-child .react-flow__edge-path {
+  stroke: #0d8b93;
+  stroke-width: 3;
+}

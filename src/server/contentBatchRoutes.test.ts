@@ -1,0 +1,98 @@
+import express, { type Express } from 'express';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { defaultProject, repoRoot } from './assetCore';
+import { contentBatchRouter } from './contentBatchRoutes';
+
+const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-content-routes');
+const dbFile = join(scratchDir, 'content-routes.sqlite');
+let server: ReturnType<Express['listen']> | null = null;
+
+function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {
+  const candidate = input.body?.project || input.query?.project;
+  return typeof candidate === 'string' ? candidate : defaultProject;
+}
+
+function appWithContentRoutes() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/content', contentBatchRouter(projectFrom));
+  server = app.listen(0);
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+async function requestJson<T>(baseUrl: string, path: string, body?: Record<string, unknown>): Promise<T> {
+  const response = await fetch(`${baseUrl}${path}`, body ? {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  } : undefined);
+  return response.json() as Promise<T>;
+}
+
+describe('content batch routes', () => {
+  beforeEach(() => {
+    rmSync(scratchDir, { force: true, recursive: true });
+    process.env.ASSET_STUDIO_DB = dbFile;
+  });
+
+  afterEach(() => {
+    server?.close();
+    server = null;
+  });
+
+  it('imports bleep markdown batches through the HTTP contract', async () => {
+    const baseUrl = appWithContentRoutes();
+    const preview = await requestJson<{ dryRun: boolean; counts: { drafts: number } }>(baseUrl, '/api/content/import/bleep', {
+      batchId: 'route-preview',
+      confirmWrite: false,
+      kind: 'drafts',
+      project: defaultProject,
+    });
+    const imported = await requestJson<{ batch_id: string; counts: { drafts: number } }>(baseUrl, '/api/content/import/bleep', {
+      batchId: 'route-import',
+      confirmWrite: true,
+      kind: 'drafts',
+      project: defaultProject,
+      title: 'Route import',
+    });
+    const detail = await requestJson<{ posts: Array<{ body?: string; channel: string; source_path?: string }> }>(
+      baseUrl,
+      `/api/content/batches/route-import?project=${defaultProject}`
+    );
+
+    expect(preview.dryRun).toBe(true);
+    expect(existsSync(dbFile)).toBe(true);
+    expect(imported).toMatchObject({ batch_id: 'route-import' });
+    expect(imported.counts.drafts).toBeGreaterThanOrEqual(10);
+    expect(detail.posts.some(post => post.channel === 'tiktok' && post.source_path?.includes('/drafts/'))).toBe(true);
+    expect(detail.posts.some(post => post.body?.startsWith('# '))).toBe(true);
+  });
+
+  it('sets, inspects, and clears selected content target through HTTP routes', async () => {
+    const baseUrl = appWithContentRoutes();
+    await requestJson(baseUrl, '/api/content/import/bleep', {
+      batchId: 'route-target',
+      confirmWrite: true,
+      kind: 'drafts',
+      project: defaultProject,
+    });
+    const empty = await requestJson<{ selected: boolean; target: null }>(baseUrl, `/api/content/target?project=${defaultProject}`);
+    const selected = await requestJson<{ selected: boolean; target: { post: { id: string }; readiness: string } }>(baseUrl, '/api/content/target', {
+      confirmWrite: true,
+      notes: 'Next asset variation base',
+      postId: 'draft-tiktok-upload-bleep-export',
+      project: defaultProject,
+    });
+    const cleared = await requestJson<{ selected: boolean; target: null }>(baseUrl, '/api/content/target/clear', {
+      confirmWrite: true,
+      project: defaultProject,
+    });
+
+    expect(empty).toMatchObject({ selected: false, target: null });
+    expect(selected).toMatchObject({ selected: true, target: { post: { id: 'draft-tiktok-upload-bleep-export' }, readiness: 'draft_ready' } });
+    expect(cleared).toMatchObject({ selected: false, target: null });
+  });
+});

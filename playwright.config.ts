@@ -1,0 +1,40 @@
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { defineConfig, devices } from 'playwright/test';
+
+const port = Number(process.env.ASSET_STUDIO_E2E_PORT || 5197);
+const dbPath = process.env.ASSET_STUDIO_E2E_DB || join(tmpdir(), `asset-studio-e2e-lineage-${process.pid}.sqlite`);
+const richSeedRoot = process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT || join(process.cwd(), '.asset-scratch', 'e2e-rich-seed');
+process.env.ASSET_STUDIO_E2E_DB = dbPath;
+process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT = richSeedRoot;
+const promptContractE2e = process.env.ASSET_STUDIO_PROMPT_CONTRACTS === '1';
+
+export default defineConfig({
+  testDir: './asset-studio/e2e',
+  testMatch: '**/*.e2e.ts',
+  testIgnore: promptContractE2e ? [] : ['**/prompt-contract-ux.e2e.ts'],
+  timeout: 45_000,
+  expect: {
+    timeout: 10_000,
+  },
+  fullyParallel: false,
+  workers: 1,
+  reporter: process.env.CI ? 'github' : 'list',
+  outputDir: '.asset-scratch/playwright-results',
+  use: {
+    baseURL: `http://127.0.0.1:${port}`,
+    trace: 'retain-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+  webServer: {
+    command: `PORT=${port} HOST=127.0.0.1 ASSET_STUDIO_DB=${dbPath} ASSET_STUDIO_RICH_SEED_ASSET_ROOT=${richSeedRoot} npm run studio:dev`,
+    timeout: 120_000,
+    url: `http://127.0.0.1:${port}/api/projects`,
+    reuseExistingServer: false,
+  },
+});

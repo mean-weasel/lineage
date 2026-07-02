@@ -1,0 +1,125 @@
+import type { ReactElement, ReactNode } from 'react';
+import { describe, expect, it } from 'vitest';
+import type { LineageNode } from '../../shared/types';
+import { LineageContextMenu } from './LineageContextMenu';
+
+function flattenText(node: ReactNode): string {
+  if (!node || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(flattenText).join('');
+  const element = node as ReactElement<{ children?: ReactNode }>;
+  return flattenText(element.props?.children);
+}
+
+function collectButtons(node: ReactNode): ReactElement[] {
+  if (!node || typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') return [];
+  if (Array.isArray(node)) return node.flatMap(collectButtons);
+  const element = node as ReactElement<{ children?: ReactNode }>;
+  const children = collectButtons(element.props?.children);
+  return element.type === 'button' ? [element, ...children] : children;
+}
+
+const node = {
+  asset_id: 'asset-1',
+  is_latest: true,
+  media_type: 'image',
+  project: 'bleep-that-shit',
+  review_state: 'unreviewed',
+  source: 'local',
+  status: 'planned',
+  title: 'Variation A',
+  user_selected: false,
+} satisfies LineageNode;
+
+describe('LineageContextMenu', () => {
+  it('offers use for next variation when the node is not selected', () => {
+    const menu = LineageContextMenu(baseProps(node));
+
+    expect(flattenText(menu)).toContain('Use for next variation');
+  });
+
+  it('offers remove from next variation when the node is selected', () => {
+    const menu = LineageContextMenu(baseProps({ ...node, user_selected: true }));
+
+    expect(flattenText(menu)).toContain('Remove from next variation');
+  });
+
+  it('shows selection full when the node is not selected and the cap is reached', () => {
+    const menu = LineageContextMenu(baseProps(node, [], { selectionFull: true }));
+    const selection = collectButtons(menu).find(button => flattenText(button) === 'Selection full');
+
+    expect(selection?.props.disabled).toBe(true);
+  });
+
+  it('offers explicit replace and clear-all actions when another asset is selected', () => {
+    const events: string[] = [];
+    const menu = LineageContextMenu(baseProps(node, events, { selectedCount: 2, selectionFull: true }));
+    const replace = collectButtons(menu).find(button => flattenText(button) === 'Replace selection');
+    const clearAll = collectButtons(menu).find(button => flattenText(button) === 'Clear all next variation');
+
+    replace?.props.onClick();
+    clearAll?.props.onClick();
+
+    expect(events).toEqual(['replace', 'close', 'clear-all', 'close']);
+  });
+
+  it('offers use-only and stale warning when a selected node is not latest', () => {
+    const events: string[] = [];
+    const menu = LineageContextMenu(baseProps({ ...node, is_latest: false, user_selected: true }, events, { selectedCount: 2 }));
+    const useOnly = collectButtons(menu).find(button => flattenText(button) === 'Use only this for next variation');
+
+    useOnly?.props.onClick();
+
+    expect(flattenText(menu)).toContain('Selected but not latest');
+    expect(events).toEqual(['replace', 'close']);
+  });
+
+  it('routes review actions and closes after selection', () => {
+    const events: string[] = [];
+    const menu = LineageContextMenu(baseProps(node, events));
+    const reject = collectButtons(menu).find(button => flattenText(button) === 'Reject');
+
+    reject?.props.onClick();
+
+    expect(events).toEqual(['review:rejected', 'close']);
+  });
+
+  it('routes remove from lineage and closes after confirmation path starts', () => {
+    const events: string[] = [];
+    const menu = LineageContextMenu(baseProps(node, events));
+    const remove = collectButtons(menu).find(button => flattenText(button) === 'Remove from lineage');
+
+    remove?.props.onClick();
+
+    expect(events).toEqual(['remove-lineage', 'close']);
+  });
+
+  it('disables remove from lineage for the root node', () => {
+    const menu = LineageContextMenu(baseProps(node, [], { canRemoveFromLineage: false }));
+    const remove = collectButtons(menu).find(button => flattenText(button) === 'Root cannot be removed');
+
+    expect(remove?.props.disabled).toBe(true);
+  });
+});
+
+function baseProps(
+  nextNode: LineageNode,
+  events: string[] = [],
+  options: { canRemoveFromLineage?: boolean; selectedCount?: number; selectionFull?: boolean } = {}
+) {
+  return {
+    canRemoveFromLineage: options.canRemoveFromLineage ?? true,
+    node: nextNode,
+    onClearAllNext: () => events.push('clear-all'),
+    onClearNext: () => events.push('clear'),
+    onClose: () => events.push('close'),
+    onOpenDetail: () => events.push('detail'),
+    onRemoveFromLineage: () => events.push('remove-lineage'),
+    onReplaceNext: () => events.push('replace'),
+    onReview: (reviewState: string) => events.push(`review:${reviewState}`),
+    onSelectNext: () => events.push('select'),
+    position: { x: 20, y: 20 },
+    selectedCount: options.selectedCount ?? (nextNode.user_selected ? 1 : 0),
+    selectionFull: options.selectionFull ?? false,
+  };
+}

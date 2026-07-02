@@ -1,0 +1,46 @@
+.copy-fallback {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  border: 1px solid #9ecbd2;
+  border-radius: 8px;
+  background: #f4fbfc;
+  padding: 12px;
+}
+
+.copy-fallback strong {
+  display: block;
+  font-size: 13px;
+}
+
+.copy-fallback p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.copy-fallback code {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #c9dde2;
+  border-radius: 7px;
+  background: #fff;
+  padding: 9px 10px;
+  color: #142831;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.copy-fallback button {
+  justify-self: start;
+  min-height: 32px;
+  border: 1px solid #bdd5dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #125d68;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
