@@ -10,6 +10,7 @@ const filesToScan = [
   'package.json',
   'playwright.config.ts',
   'src',
+  'e2e',
   'scripts',
 ];
 
