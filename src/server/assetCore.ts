@@ -210,6 +210,20 @@ function isDefaultFallbackCatalog(catalog: AssetCatalog): boolean {
   return catalog.project === defaultProject && !existsSync(catalogPath(defaultProject));
 }
 
+function fallbackPreviewDataUrl(asset: GrowthAsset): string {
+  const label = `${asset.title}\n${asset.channel} / ${asset.status}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><rect width="1200" height="675" fill="#f7f5ef"/><rect x="56" y="56" width="1088" height="563" rx="18" fill="#10201c"/><text x="96" y="145" fill="#9fe6c8" font-family="Arial, sans-serif" font-size="34" font-weight="700">Lineage public demo preview</text><text x="96" y="230" fill="#fff8e6" font-family="Arial, sans-serif" font-size="56" font-weight="700">${escapeSvgText(asset.asset_id)}</text><text x="96" y="330" fill="#d9e8df" font-family="Arial, sans-serif" font-size="34">${escapeSvgText(label)}</text><text x="96" y="500" fill="#9fb7ae" font-family="Arial, sans-serif" font-size="26">Synthetic local placeholder. No external storage requested.</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function loadCatalog(project = defaultProject): AssetCatalog {
   const path = catalogPath(project);
   if (!existsSync(path)) {
@@ -429,6 +443,11 @@ export function updatePlacement(project: string, fields: PlacementFields): Mutat
 }
 
 export function presignAsset(project: string, assetId: string, expiresIn = 900): PresignResponse {
+  const catalog = loadCatalog(project);
+  if (isDefaultFallbackCatalog(catalog)) {
+    const asset = assetById(catalog, assetId);
+    return { assetId: asset.asset_id, expiresIn, url: fallbackPreviewDataUrl(asset) };
+  }
   return storageAdapter.presignAsset(project, assetId, expiresIn);
 }
 

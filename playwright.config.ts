@@ -2,12 +2,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { defineConfig, devices } from 'playwright/test';
 
-const port = Number(process.env.LINEAGE_E2E_PORT || process.env.ASSET_STUDIO_E2E_PORT || 5197);
-const dbPath = process.env.LINEAGE_E2E_DB || process.env.ASSET_STUDIO_E2E_DB || join(tmpdir(), `lineage-e2e-${process.pid}.sqlite`);
-const richSeedRoot = process.env.LINEAGE_RICH_SEED_ASSET_ROOT || process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT || join(process.cwd(), '.asset-scratch', 'e2e-rich-seed');
+const port = Number(process.env.LINEAGE_E2E_PORT || 5197);
+const dbPath = process.env.LINEAGE_E2E_DB || join(tmpdir(), `lineage-e2e-${process.pid}.sqlite`);
+const richSeedRoot = process.env.LINEAGE_RICH_SEED_ASSET_ROOT || join(process.cwd(), '.asset-scratch', 'e2e-rich-seed');
 process.env.LINEAGE_E2E_DB = dbPath;
 process.env.LINEAGE_RICH_SEED_ASSET_ROOT = richSeedRoot;
-const promptContractE2e = (process.env.LINEAGE_PROMPT_CONTRACTS || process.env.ASSET_STUDIO_PROMPT_CONTRACTS) === '1';
+const promptContractE2e = process.env.LINEAGE_PROMPT_CONTRACTS === '1';
 
 export default defineConfig({
   testDir: './e2e',

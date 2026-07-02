@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { defaultProject, defaultProduct, listAssets, listProjects, localPreviewPath, previewPlacement, repoRoot } from './assetCore';
+import { defaultProject, defaultProduct, listAssets, listProjects, localPreviewPath, presignAsset, previewPlacement, repoRoot } from './assetCore';
 import { initProject } from './assetProjects';
 
 describe('asset core catalog listing', () => {
@@ -112,6 +112,46 @@ describe('asset core catalog listing', () => {
       scheduled_at: '2026-06-24T16:00:00-07:00',
       status: 'scheduled',
     });
+  });
+
+  it('presigns public fallback assets with a local data URL without external scripts', () => {
+    const originalPath = process.env.PATH;
+    const blockedPath = join(repoRoot, '.asset-scratch', 'vitest-empty-path');
+    rmSync(blockedPath, { force: true, recursive: true });
+    mkdirSync(blockedPath, { recursive: true });
+    process.env.PATH = blockedPath;
+
+    try {
+      const preview = presignAsset(defaultProject, 'demo-meta-short-form-upload-demo-post-static', 123);
+      const encoded = preview.url.replace(/^data:image\/svg\+xml;base64,/, '');
+      const svg = Buffer.from(encoded, 'base64').toString('utf8');
+
+      expect(preview).toMatchObject({
+        assetId: 'demo-meta-short-form-upload-demo-post-static',
+        expiresIn: 123,
+      });
+      expect(preview.url).toMatch(/^data:image\/svg\+xml;base64,/);
+      expect(svg).toContain('Lineage public demo preview');
+      expect(svg).toContain('No external storage requested');
+    } finally {
+      process.env.PATH = originalPath;
+      rmSync(blockedPath, { force: true, recursive: true });
+    }
+  });
+
+  it('rejects missing public fallback assets without external scripts', () => {
+    const originalPath = process.env.PATH;
+    const blockedPath = join(repoRoot, '.asset-scratch', 'vitest-empty-path-missing');
+    rmSync(blockedPath, { force: true, recursive: true });
+    mkdirSync(blockedPath, { recursive: true });
+    process.env.PATH = blockedPath;
+
+    try {
+      expect(() => presignAsset(defaultProject, 'missing-fallback-asset')).toThrow('Unknown asset: missing-fallback-asset');
+    } finally {
+      process.env.PATH = originalPath;
+      rmSync(blockedPath, { force: true, recursive: true });
+    }
   });
 
   it('filters by placement status from catalog metadata', () => {
