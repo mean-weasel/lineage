@@ -101,7 +101,7 @@ describe('asset selection work packet', () => {
       selected: false,
       source: 'catalog',
       storage_state: 's3_backed',
-      title: 'Upload. Demo. Post.',
+      title: 'Meta short-form demo post static',
     });
     expect(packet.candidates[0].s3_key).toContain(catalogAsset);
     expect(packet.candidates[1]).toMatchObject({

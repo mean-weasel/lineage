@@ -344,9 +344,13 @@ if (isProduction) {
   }
 } else {
   const { createServer: createViteServer } = await import('vite');
+  const e2ePort = process.env.LINEAGE_E2E_PORT ? Number(process.env.LINEAGE_E2E_PORT) : undefined;
   const vite = await createViteServer({
     configFile: join(repoRoot, 'vite.config.ts'),
-    server: { middlewareMode: true },
+    server: {
+      middlewareMode: true,
+      ...(e2ePort ? { ws: { port: e2ePort + 1000 } } : {}),
+    },
     appType: 'spa',
   });
   app.use(vite.middlewares);

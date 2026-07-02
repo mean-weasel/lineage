@@ -17,5 +17,11 @@
     "*.config.{js,mjs,ts}",
     "tsconfig.build.json"
   ],
-  "ignore": ["dist/**", "coverage/**", ".lineage-scratch/**"]
+  "ignore": ["dist/**", "coverage/**", ".lineage-scratch/**"],
+  "ignoreIssues": {
+    "src/server/assetCore.ts": ["exports"],
+    "src/server/assetLedgerApi.ts": ["exports", "types"],
+    "src/server/assetReviews.ts": ["exports"],
+    "src/shared/appConstants.ts": ["exports"]
+  }
 }

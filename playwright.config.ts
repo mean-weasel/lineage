@@ -32,7 +32,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `PORT=${port} HOST=127.0.0.1 LINEAGE_DB=${dbPath} LINEAGE_RICH_SEED_ASSET_ROOT=${richSeedRoot} npm run dev`,
+    command: `PORT=${port} HOST=127.0.0.1 LINEAGE_E2E_PORT=${port} LINEAGE_DB=${dbPath} LINEAGE_RICH_SEED_ASSET_ROOT=${richSeedRoot} npm run dev`,
     timeout: 120_000,
     url: `http://127.0.0.1:${port}/api/projects`,
     reuseExistingServer: false,
