@@ -11,15 +11,25 @@ export function getAdapterStatus(project: string, env: NodeJS.ProcessEnv = proce
   return {
     project,
     fetchedAt: new Date().toISOString(),
-    storage: [{
-      provider: 's3',
-      configured: Boolean(summary?.default_bucket && summary?.default_region),
-      can_list: Boolean(summary?.default_bucket && summary?.default_region),
-      can_upload: Boolean(summary?.default_bucket && summary?.default_region),
-      mode: 'catalog-backed',
-      default_bucket: summary?.default_bucket || null,
-      default_region: summary?.default_region || null,
-    }],
+    storage: project === defaultProject
+      ? [{
+          provider: 'local',
+          configured: true,
+          can_list: true,
+          can_upload: false,
+          mode: 'public-fallback-catalog',
+          default_bucket: null,
+          default_region: null,
+        }]
+      : [{
+          provider: 's3',
+          configured: Boolean(summary?.default_bucket && summary?.default_region),
+          can_list: Boolean(summary?.default_bucket && summary?.default_region),
+          can_upload: Boolean(summary?.default_bucket && summary?.default_region),
+          mode: 'catalog-backed',
+          default_bucket: summary?.default_bucket || null,
+          default_region: summary?.default_region || null,
+        }],
     posting: [buffer.status()],
   };
 }

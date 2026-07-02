@@ -1,5 +1,6 @@
 import { ChevronDown, FileSearch, Loader2, MoreHorizontal, RefreshCcw, Search, Upload } from 'lucide-react';
 import { useState } from 'react';
+import { appName } from '../../shared/appConstants';
 import type { StudioView } from '../assetUi';
 import { primaryViews, secondaryViews } from './Topbar.navigation';
 import './Topbar.css';
@@ -31,7 +32,7 @@ export function Topbar(props: {
 
   return (
     <header className="topbar">
-      <div className="view-tabs" role="tablist" aria-label="Lineage views">
+      <div className="view-tabs" role="tablist" aria-label={`${appName} views`}>
         {primaryViews.map(item => (
           <button
             aria-pressed={props.view === item.view}

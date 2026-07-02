@@ -97,10 +97,10 @@ function backupCueForPost(project: string, post: ContentPost, sources: Map<strin
     approved_local: approvedLocal,
     label,
     local_and_s3: localAndS3,
-    local_backup_command: firstLocalOnly ? `npm run studio:cli -- local backup --project ${project} --asset-id ${firstLocalOnly} --dry-run --json` : undefined,
+    local_backup_command: firstLocalOnly ? `npx lineage local backup --project ${project} --asset-id ${firstLocalOnly} --dry-run --json` : undefined,
     local_only: localOnly,
-    local_queue_command: firstLocalOnly ? `npm run studio:cli -- local queue --project ${project} --json` : undefined,
-    local_review_command: firstLocalOnly ? `npm run studio:cli -- local review --project ${project} --asset-id ${firstLocalOnly} --state approved --dry-run --json` : undefined,
+    local_queue_command: firstLocalOnly ? `npx lineage local queue --project ${project} --json` : undefined,
+    local_review_command: firstLocalOnly ? `npx lineage local review --project ${project} --asset-id ${firstLocalOnly} --state approved --dry-run --json` : undefined,
     needs_review: needsReview,
     s3_backed: s3Backed,
     unresolved,
@@ -130,7 +130,7 @@ function laneSummary(lane: ContentOpsQueueLane): ContentOpsQueueLaneSummary {
 }
 
 function prefix(): string {
-  return `npm run studio:cli -- content queue`;
+  return `npx lineage content queue`;
 }
 
 function compactItem(item: ContentOpsQueueItem | undefined) {
@@ -189,7 +189,7 @@ export function getContentOpsQueue(project: string): ContentOpsQueueSnapshot {
   const nextAction = firstLaneItem(queueLanes, actionableLaneOrder);
   const storage = items.reduce((total, item) => addStorage(total, item.asset_storage), emptyStorage());
   const laneTotals = Object.fromEntries(queueLanes.map(lane => [lane.id, lane.total])) as Record<ContentOpsQueueLaneId, number>;
-  const contentPrefix = `npm run studio:cli -- content`;
+  const contentPrefix = `npx lineage content`;
   return {
     fetchedAt: nowIso(),
     handoff: {

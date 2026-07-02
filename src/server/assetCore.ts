@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createS3StorageAdapter } from './adapters/storage';
 import { listLocalReviewAssets, localPreviewPath as resolveLocalPreviewPath } from './localReview';
 import { syncLedgerPlacement } from './assetLedgerWorkflow';
+import { appName } from '../shared/appConstants';
 import type {
   AssetCatalog,
   AssetContentType,
@@ -49,6 +50,8 @@ function resolveRepoRoot(): string {
 export const repoRoot = resolveRepoRoot();
 export const defaultProject = 'demo-project';
 export const defaultProduct = process.env.LINEAGE_DEFAULT_PRODUCT || defaultProject;
+const publicFallbackBucket = 'lineage-demo-assets';
+const publicFallbackRegion = 'us-east-1';
 const contentTypes = new Set<AssetContentType>(['image', 'video', 'gif', 'audio', 'doc', 'other']);
 const baseChannels = ['linkedin', 'meta', 'tiktok', 'x-twitter', 'youtube'];
 const placementStatuses = new Set<PlacementStatus>(['planned', 'scheduled', 'posted', 'skipped']);
@@ -98,18 +101,121 @@ export function normalizeCatalog(catalog: Partial<AssetCatalog>, fallbackProject
   };
 }
 
+function fallbackS3(assetId: string, channel: string, status = 'working') {
+  return {
+    bucket: publicFallbackBucket,
+    checksum_sha256: undefined,
+    content_type: 'image/png',
+    key: `products/${defaultProject}/campaigns/2026-06-public-demo/channels/${channel}/audiences/creators/statuses/${status}/types/image/assets/${assetId}/${assetId}.png`,
+    region: publicFallbackRegion,
+    size_bytes: 2048,
+    updated_at: '2026-06-24T12:00:00.000Z',
+    version_id: 'public-demo-version',
+  };
+}
+
+function fallbackAsset(fields: Omit<GrowthAsset, 'audience' | 'campaign' | 'content_type' | 'cta' | 'hook' | 'product' | 'project' | 'source' | 'utm_content'> & {
+  audience?: string;
+  campaign?: string;
+  cta?: string;
+  hook?: string;
+  utm_content?: string;
+}): GrowthAsset {
+  return {
+    audience: fields.audience || 'creators',
+    campaign: fields.campaign || '2026-06-public-demo',
+    content_type: 'image',
+    cta: fields.cta || 'Save the idea',
+    hook: fields.hook || 'Public demo creative for local review.',
+    product: defaultProject,
+    project: defaultProject,
+    source: 'catalog',
+    utm_content: fields.utm_content || fields.asset_id.replace(/-/g, '_'),
+    ...fields,
+  };
+}
+
+function defaultFallbackCatalog(): AssetCatalog {
+  return normalizeCatalog({
+    assets: [
+      fallbackAsset({
+        asset_id: 'demo-meta-short-form-upload-demo-post-static',
+        channel: 'meta',
+        s3: fallbackS3('demo-meta-short-form-upload-demo-post-static', 'meta'),
+        status: 'working',
+        title: 'Meta short-form demo post static',
+      }),
+      fallbackAsset({
+        asset_id: 'demo-linkedin-ledger-catalog-shared',
+        channel: 'linkedin',
+        hook: 'Shared ledger creative with catalog metadata.',
+        s3: fallbackS3('demo-linkedin-ledger-catalog-shared', 'linkedin'),
+        status: 'working',
+        title: 'LinkedIn ledger catalog shared',
+      }),
+      fallbackAsset({
+        asset_id: 'demo-linkedin-upload-demo-done-static-grounded-v2',
+        channel: 'linkedin',
+        placements: [{
+          channel: 'linkedin',
+          notes: 'Synthetic public scheduled placement.',
+          scheduled_at: '2026-06-24T16:00:00-07:00',
+          status: 'scheduled',
+          updated_at: '2026-06-24T12:30:00.000Z',
+        }],
+        s3: fallbackS3('demo-linkedin-upload-demo-done-static-grounded-v2', 'linkedin', 'approved'),
+        status: 'approved',
+        title: 'LinkedIn upload demo scheduled static',
+      }),
+      fallbackAsset({
+        asset_id: 'demo-tiktok-upload-demo-export-vertical',
+        channel: 'tiktok',
+        format: 'vertical',
+        hook: 'Fast vertical demo export for content queue tests.',
+        s3: fallbackS3('demo-tiktok-upload-demo-export-vertical', 'tiktok'),
+        status: 'working',
+        title: 'TikTok upload demo export vertical',
+      }),
+      fallbackAsset({
+        asset_id: 'demo-youtube-short-demo-posted-cut',
+        channel: 'youtube',
+        placements: [{
+          channel: 'youtube',
+          notes: 'Synthetic public posted placement.',
+          posted_at: '2026-06-25T16:00:00-07:00',
+          status: 'posted',
+          updated_at: '2026-06-25T17:00:00.000Z',
+        }],
+        s3: fallbackS3('demo-youtube-short-demo-posted-cut', 'youtube', 'published'),
+        status: 'published',
+        title: 'YouTube short demo posted cut',
+      }),
+      fallbackAsset({
+        asset_id: 'demo-x-twitter-carousel-demo-working-static',
+        channel: 'x-twitter',
+        format: 'static',
+        s3: fallbackS3('demo-x-twitter-carousel-demo-working-static', 'x-twitter'),
+        status: 'working',
+        title: 'X Twitter carousel demo working static',
+      }),
+    ],
+    default_bucket: '',
+    default_region: '',
+    product: defaultProject,
+    project: defaultProject,
+  }, defaultProject);
+}
+
+function isDefaultFallbackCatalog(catalog: AssetCatalog): boolean {
+  return catalog.project === defaultProject && !existsSync(catalogPath(defaultProject));
+}
+
 export function loadCatalog(project = defaultProject): AssetCatalog {
   const path = catalogPath(project);
   if (!existsSync(path)) {
     const clean = cleanProject(project);
     if (clean === defaultProject) {
-      return normalizeCatalog({
-        assets: [],
-        default_bucket: 'lineage-demo-assets',
-        default_region: 'us-east-1',
-        product: defaultProject,
-        project: defaultProject,
-      }, defaultProject);
+      return defaultFallbackCatalog();
     }
     throw new AssetStudioError(`Missing catalog: ${path}`, 404);
   }
@@ -151,7 +257,7 @@ function runAws(args: string[]): CommandResult {
 }
 
 export function listProjects(): ProjectSummary[] {
-  return readdirSync(repoRoot, { withFileTypes: true })
+  const projects = readdirSync(repoRoot, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && projectNamePattern.test(entry.name) && existsSync(catalogPath(entry.name)))
     .flatMap(entry => {
       try {
@@ -163,6 +269,12 @@ export function listProjects(): ProjectSummary[] {
       }
     })
     .sort((a, b) => a.project.localeCompare(b.project));
+  if (!projects.some(item => item.project === defaultProject)) {
+    const catalog = defaultFallbackCatalog();
+    projects.push({ project: catalog.project, product: catalog.product, catalogPath: catalogPath(defaultProject), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length });
+    projects.sort((a, b) => a.project.localeCompare(b.project));
+  }
+  return projects;
 }
 
 function assetById(catalog: AssetCatalog, assetId: string): GrowthAsset {
@@ -231,7 +343,7 @@ export function listAssets(project = defaultProject, options: ListAssetsOptions 
   const pageAssets = filtered.slice(start, start + pageSize);
   let liveObjects: LiveS3Object[] = [];
   let error: string | undefined;
-  if (options.includeLive) {
+  if (options.includeLive && !isDefaultFallbackCatalog(catalog)) {
     try {
       liveObjects = storageAdapter.listLiveObjects(catalog);
     } catch (err) {
@@ -245,7 +357,7 @@ export function listAssets(project = defaultProject, options: ListAssetsOptions 
     pagination: { page: safePage, pageSize, total: filtered.length, totalPages },
     liveObjects,
     orphanObjects: liveObjects.filter(object => !object.cataloged),
-    identity: options.includeLive ? storageAdapter.getIdentity() : undefined,
+    identity: options.includeLive && !isDefaultFallbackCatalog(catalog) ? storageAdapter.getIdentity() : undefined,
     fetchedAt: new Date().toISOString(),
     error,
   };
@@ -264,7 +376,10 @@ export function doctorProject(project = defaultProject, options: { includeLive?:
   const summary = validateProject(project);
   let liveCheck: DoctorReport['liveCheck'] = 'skipped';
   let liveError: string | undefined;
-  if (options.includeLive) {
+  if (options.includeLive && isDefaultFallbackCatalog(loadCatalog(project))) {
+    liveCheck = 'skipped';
+    liveError = `${appName} public fallback uses local catalog data only.`;
+  } else if (options.includeLive) {
     try {
       storageAdapter.listLiveObjects(loadCatalog(project));
       liveCheck = 'ok';

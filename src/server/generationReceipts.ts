@@ -79,7 +79,7 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
   const importFilesFlag = parents.length > 1
     ? `--parent-files ${quote(parents.map(mapping => `${mapping.parent.asset_id}=<${mapping.output_indexes.map(index => `file-${index}`).join(',')}>`).join(';'))}`
     : '--files <comma-separated-.asset-scratch-files>';
-  const importCommand = `npm run studio:cli -- generate image import --project ${quote(project)} --job-id ${quote(id)} ${importFilesFlag} --confirm-write --json`;
+  const importCommand = `npx lineage generate image import --project ${quote(project)} --job-id ${quote(id)} ${importFilesFlag} --confirm-write --json`;
   return {
     schema_version: 'lineage.generation_handoff.v1', provider, project, job_id: id, prompt, expected_output_count: count,
     per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,

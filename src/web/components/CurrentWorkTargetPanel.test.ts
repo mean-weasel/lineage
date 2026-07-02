@@ -220,11 +220,11 @@ describe('CurrentWorkTargetPanel', () => {
     clickButton(panel, 'Copy next');
     clickButton(panel, 'Copy asset ID');
 
-    expect(copied).toContain('npm --silent run studio:cli -- agent selected --project demo-project');
+    expect(copied).toContain('npx lineage agent selected --project demo-project');
     expect(copied).toContain(
-      'npm --silent run studio:cli -- agent work on the selected target for demo-project --project demo-project'
+      'npx lineage agent work on the selected target for demo-project --project demo-project'
     );
-    expect(copied).toContain('npm --silent run studio:cli -- agent next --project demo-project');
+    expect(copied).toContain('npx lineage agent next --project demo-project');
     expect(copied).toContain('asset-1');
   });
 
@@ -247,7 +247,7 @@ describe('CurrentWorkTargetPanel', () => {
     expect(text).toContain('B:asset-1');
     expect(text).toContain('D:asset-2');
     clickButton(panel, 'Copy selections');
-    expect(copied).toContain('npm --silent run studio:cli -- agent selections --project demo-project');
+    expect(copied).toContain('npx lineage agent selections --project demo-project');
   });
 
   it('marks lineage context so only selected asset context is visible in that drawer mode', () => {

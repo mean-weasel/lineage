@@ -28,7 +28,7 @@ describe('adapter settings', () => {
     expect(snapshot.settings.find(setting => setting.provider === 's3')).toMatchObject({
       credential: { detected: false, label: 'Optional local cloud CLI credential', secret_ref: null },
       health_status: 'live_disabled',
-      safe_config: { bucket: expect.any(String), region: expect.any(String) },
+      safe_config: { bucket: '', mode: 'local-public-fallback', region: '' },
     });
     expect(snapshot.settings.find(setting => setting.provider === 'buffer')).toMatchObject({
       credential: { detected: true, label: 'LINEAGE_SCHEDULER_TOKEN + LINEAGE_SCHEDULER_ORGANIZATION_ID', secret_ref: 'env:LINEAGE_SCHEDULER_TOKEN' },
@@ -64,8 +64,9 @@ describe('adapter settings', () => {
       enabled: false,
       health_status: 'live_disabled',
       safe_config: {
-        bucket: 'lineage-demo-assets',
-        region: 'us-east-1',
+        bucket: '',
+        mode: 'local-public-fallback',
+        region: '',
       },
     });
   });

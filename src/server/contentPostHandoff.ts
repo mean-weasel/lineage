@@ -9,7 +9,7 @@ export function readinessForPost(post: ContentPost): ContentPostReadiness {
 }
 
 export function contentPostHandoff(project: string, post?: ContentPost): ContentTargetHandoff {
-  const prefix = 'npm run studio:cli -- content';
+  const prefix = 'npx lineage content';
   const postId = post?.id || '<post-id>';
   const batchId = post?.batch_id;
   return {

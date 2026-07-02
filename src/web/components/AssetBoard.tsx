@@ -143,7 +143,7 @@ export function AssetBoard(props: {
   }
 
   function continueFromNextContext() {
-    void props.onCopy?.(`npm run studio:cli -- agent "keep working on my selections" --project ${props.project} --json`, 'next context command');
+    void props.onCopy?.(`npx lineage agent "keep working on my selections" --project ${props.project} --json`, 'next context command');
   }
 
   useEffect(() => {

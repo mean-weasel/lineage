@@ -216,8 +216,8 @@ function QueueCard(props: {
   const localReviewState = props.asset.local ? reviewState(props.asset) : null;
   const isApprovedLocal = localReviewState === 'approved';
   const inspectCommand = props.asset.source === 'local'
-    ? `npm run studio:cli -- local inspect --asset-id ${props.asset.asset_id} --json`
-    : `npm run studio:cli -- inspect --asset-id ${props.asset.asset_id} --json`;
+    ? `npx lineage local inspect --asset-id ${props.asset.asset_id} --json`
+    : `npx lineage inspect --asset-id ${props.asset.asset_id} --json`;
   return (
     <article
       className={`queue-card ${props.selected ? 'selected' : ''}`}

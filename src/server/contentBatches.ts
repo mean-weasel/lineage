@@ -120,7 +120,7 @@ function phaseCounts(posts: ContentPost[]): Record<ContentPostPhase, number> {
 }
 
 function handoff(project: string, batchId: string): ContentBatchDetail['handoff'] {
-  const prefix = `npm run studio:cli -- content`;
+  const prefix = `npx lineage content`;
   return {
     inspectCommand: `${prefix} batch inspect --project ${project} --batch-id ${batchId} --json`,
     createPostTemplate: `${prefix} post create --project ${project} --batch-id ${batchId} --post-id <post-id> --channel <channel> --title <title> --confirm-write --json`,

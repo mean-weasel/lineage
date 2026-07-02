@@ -77,7 +77,7 @@ function laneFor(channel: string, localAssets: ReviewableAsset[], catalogAssets:
 }
 
 function handoff(project: string) {
-  const prefix = `npm run studio:cli --`;
+  const prefix = `npx lineage`;
   return {
     backupTemplate: `${prefix} local backup --project ${project} --asset-id <local-id> --dry-run --json`,
     lineageNextTemplate: `${prefix} lineage next --project ${project} --root <root-id> --json`,

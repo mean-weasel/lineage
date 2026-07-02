@@ -1,6 +1,7 @@
 import { ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import type { AssetLibrarySnapshot, ProjectSummary } from '../../shared/types';
+import { appDescription, appName } from '../../shared/appConstants';
 import { formatBytes } from '../../shared/format';
 import { placementFilters, sourceFilters, statusFilters, type PlacementFilter, type SourceFilter, type StudioView, type StatusFilter } from '../assetUi';
 import './Sidebar.css';
@@ -60,8 +61,8 @@ export function Sidebar({
         {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
       </button>
       <div className="brand">
-        <div className="brand-mark">GA</div>
-        <div><h1>Lineage</h1><p>{project}</p></div>
+        <div className="brand-mark" aria-label={appDescription}>L</div>
+        <div><h1>{appName}</h1><p>{project}</p></div>
       </div>
       <button
         aria-controls="mobile-sidebar-controls"

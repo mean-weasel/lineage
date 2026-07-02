@@ -62,7 +62,7 @@ describe('adapter routes', () => {
     expect(body).toMatchObject({
       ok: true,
       posting: [{ can_dry_run: true, can_post: false, provider: 'buffer' }],
-      storage: [{ provider: 's3' }],
+      storage: [{ provider: 'local' }],
     });
   });
 

@@ -2,7 +2,7 @@ import { Clipboard, Crosshair, Database, HardDrive, Search } from 'lucide-react'
 import type { ContentOpsQueueItem, ContentOpsQueueLane, ContentOpsQueueSnapshot, ContentPost } from '../../shared/types';
 
 function agentNextCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent next --project ${project}`;
+  return `npx lineage agent next --project ${project}`;
 }
 
 interface ContentOpsQueuePanelProps {

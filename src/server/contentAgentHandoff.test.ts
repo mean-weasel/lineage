@@ -238,10 +238,10 @@ describe('content agent handoff', () => {
       args: { project: defaultProject, 'set-id': setId },
       command: 'selections review-set inspect',
     });
-    expect(commands.currentSelectionCommand).toBe(`npm run studio:cli -- selections current --project ${shellQuote(defaultProject)} --json`);
-    expect(commands.reviewSetInspectCommand).toBe(`npm run studio:cli -- selections review-set inspect --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)} --json`);
-    expect(commands.reviewSetSetNextCommand).toBe(`npm run studio:cli -- selections review-set set-next --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)} --json`);
-    expect(commands.workPacketCommand).toBe(`npm run studio:cli -- selections review-set packet --project ${shellQuote(defaultProject)} --json`);
+    expect(commands.currentSelectionCommand).toBe(`npx lineage selections current --project ${shellQuote(defaultProject)} --json`);
+    expect(commands.reviewSetInspectCommand).toBe(`npx lineage selections review-set inspect --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)} --json`);
+    expect(commands.reviewSetSetNextCommand).toBe(`npx lineage selections review-set set-next --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)} --json`);
+    expect(commands.workPacketCommand).toBe(`npx lineage selections review-set packet --project ${shellQuote(defaultProject)} --json`);
   });
 
   it('wraps the active lineage workspace for agent continuation', () => {

@@ -27,14 +27,14 @@ function clickButton(node: ReactNode, label: string): void {
 
 const handoff = {
   agentPrompt: 'Review this selected target.',
-  attachAssetTemplate: 'npm run studio:cli -- content post attach-asset',
-  clearTargetCommand: 'npm run studio:cli -- content target clear',
-  inspectBatchCommand: 'npm run studio:cli -- content batch inspect',
-  inspectTargetCommand: 'npm run studio:cli -- content target inspect',
-  markPostedTemplate: 'npm run studio:cli -- content post phase --phase posted',
-  moveToReviewCommand: 'npm run studio:cli -- content post phase --phase review',
-  scheduleTemplate: 'npm run studio:cli -- content post phase --phase scheduled',
-  setTargetTemplate: 'npm run studio:cli -- content target set',
+  attachAssetTemplate: 'npx lineage content post attach-asset',
+  clearTargetCommand: 'npx lineage content target clear',
+  inspectBatchCommand: 'npx lineage content batch inspect',
+  inspectTargetCommand: 'npx lineage content target inspect',
+  markPostedTemplate: 'npx lineage content post phase --phase posted',
+  moveToReviewCommand: 'npx lineage content post phase --phase review',
+  scheduleTemplate: 'npx lineage content post phase --phase scheduled',
+  setTargetTemplate: 'npx lineage content target set',
 };
 
 const targetSnapshot = {
@@ -71,9 +71,9 @@ const targetSnapshot = {
 const queueSnapshot = {
   fetchedAt: '2026-06-26T00:00:00.000Z',
   handoff: {
-    inspectQueueCommand: 'npm run studio:cli -- content queue inspect',
-    inspectTargetCommand: 'npm run studio:cli -- content target inspect',
-    listPostsCommand: 'npm run studio:cli -- content post list',
+    inspectQueueCommand: 'npx lineage content queue inspect',
+    inspectTargetCommand: 'npx lineage content target inspect',
+    listPostsCommand: 'npx lineage content post list',
   },
   lanes: [],
   next_action: null,
@@ -110,9 +110,9 @@ describe('content agent commands', () => {
     clickButton(panel, 'Copy selected');
     clickButton(panel, 'Copy prompt');
 
-    expect(copied).toContain('npm --silent run studio:cli -- agent selected --project demo-project');
+    expect(copied).toContain('npx lineage agent selected --project demo-project');
     expect(copied).toContain(
-      'npm --silent run studio:cli -- agent work on the selected target for demo-project --project demo-project'
+      'npx lineage agent work on the selected target for demo-project --project demo-project'
     );
   });
 
@@ -126,6 +126,6 @@ describe('content agent commands', () => {
 
     clickButton(panel, 'Copy agent next');
 
-    expect(copied).toContain('npm --silent run studio:cli -- agent next --project demo-project');
+    expect(copied).toContain('npx lineage agent next --project demo-project');
   });
 });

@@ -2,11 +2,11 @@ import { Clipboard, Flag, X } from 'lucide-react';
 import type { ContentTargetSnapshot } from '../../shared/types';
 
 function agentSelectedCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent selected --project ${project}`;
+  return `npx lineage agent selected --project ${project}`;
 }
 
 function agentSelectedPromptCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent work on the selected target for ${project} --project ${project}`;
+  return `npx lineage agent work on the selected target for ${project} --project ${project}`;
 }
 
 interface ContentTargetPanelProps {

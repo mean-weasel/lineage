@@ -47,7 +47,7 @@ const definitions: AdapterDefinition[] = [
     label: 'Cloud storage',
     provider: 's3',
     safeConfig: project => {
-      if (project === defaultProject) return { bucket: 'lineage-demo-assets', region: 'us-east-1' };
+      if (project === defaultProject) return { bucket: '', mode: 'local-public-fallback', region: '' };
       const summary = listProjects().find(item => item.project === project);
       return { bucket: summary?.default_bucket || '', region: summary?.default_region || '' };
     },

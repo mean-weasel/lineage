@@ -3,7 +3,7 @@ import { shouldRevealCopiedText } from './copyFallback';
 
 describe('shouldRevealCopiedText', () => {
   it('reveals agent handoff commands as a visible fallback', () => {
-    expect(shouldRevealCopiedText('next context command', 'npm run studio:cli -- agent "keep working on my selections"')).toBe(true);
+    expect(shouldRevealCopiedText('next context command', 'npx lineage agent "keep working on my selections"')).toBe(true);
   });
 
   it('keeps ordinary copied links out of the fallback panel', () => {

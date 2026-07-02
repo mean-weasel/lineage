@@ -42,9 +42,9 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
       rationale,
     },
     handoff: {
-      next_command: `npm run studio:cli -- lineage next --project ${project} --root ${next.root_asset_id} --json`,
-      inspect_command: asset ? `npm run studio:cli -- lineage inspect --project ${project} --asset-id ${asset.asset_id} --json` : undefined,
-      link_child_command: asset ? `npm run studio:cli -- lineage link-child --project ${project} --root ${next.root_asset_id} --child <asset-id> --confirm-write --json` : undefined,
+      next_command: `npx lineage lineage next --project ${project} --root ${next.root_asset_id} --json`,
+      inspect_command: asset ? `npx lineage lineage inspect --project ${project} --asset-id ${asset.asset_id} --json` : undefined,
+      link_child_command: asset ? `npx lineage lineage link-child --project ${project} --root ${next.root_asset_id} --child <asset-id> --confirm-write --json` : undefined,
     },
     fetchedAt: nowIso(),
   };

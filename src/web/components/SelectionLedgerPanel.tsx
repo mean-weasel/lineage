@@ -134,8 +134,8 @@ export function SelectionLedgerPanel({
               <span>{activeReviewSet.items.length} candidates · {activeReviewSelectedCount} selected · SQLite-backed</span>
             </summary>
             <div className="review-set-work-packet-body">
-              <code>npm run studio:cli -- selections review-set packet --project {project} --json</code>
-              <code>npm run studio:cli -- agent "keep working on my selections" --project {project} --json</code>
+              <code>npx lineage selections review-set packet --project {project} --json</code>
+              <code>npx lineage agent "keep working on my selections" --project {project} --json</code>
               <button
                 disabled={activeReviewSet.items.length === 0 || !onContinueFromNextContext}
                 onClick={onContinueFromNextContext}
@@ -184,9 +184,9 @@ export function SelectionLedgerPanel({
               return <span className={isSelected(item) ? 'selected' : ''} key={item.id}>{label}: {asset?.title || item.asset_id}</span>;
             })}
           </div>
-          <code>npm run studio:cli -- selections review-set inspect --project {project} --set-id {inspectedSet.id} --json</code>
-          <code>npm run studio:cli -- selections review-set set-next --project {project} --set-id {inspectedSet.id} --json</code>
-          <code>After choosing labels: npm run studio:cli -- agent "keep working on my selections" --project {project} --json</code>
+          <code>npx lineage selections review-set inspect --project {project} --set-id {inspectedSet.id} --json</code>
+          <code>npx lineage selections review-set set-next --project {project} --set-id {inspectedSet.id} --json</code>
+          <code>After choosing labels: npx lineage agent "keep working on my selections" --project {project} --json</code>
         </details>
       )}
     </section>

@@ -314,7 +314,7 @@ export function ContentBatchesView({
             <div className="content-empty-state">
               <h3>No batch selected</h3>
               <p>Create a batch or seed one with the CLI, then it will appear here.</p>
-              <code>npm run studio:cli -- content batch create --project {project} --batch-id &lt;id&gt; --title &lt;title&gt; --confirm-write --json</code>
+              <code>npx lineage content batch create --project {project} --batch-id &lt;id&gt; --title &lt;title&gt; --confirm-write --json</code>
             </div>
           )}
         </div>

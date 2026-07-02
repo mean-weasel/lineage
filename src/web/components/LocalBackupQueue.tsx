@@ -32,7 +32,7 @@ export function LocalBackupQueue(props: {
   const localAssets = props.assets.filter(asset => asset.local?.relative_path && !asset.s3?.key);
   const approved = localAssets.filter(asset => reviewState(asset) === 'approved');
   const selectedCount = props.selectedBackupIds.length;
-  const queueCommand = `npm run studio:cli -- local queue --project ${props.project} --json`;
+  const queueCommand = `npx lineage local queue --project ${props.project} --json`;
 
   function selectApproved() {
     for (const asset of approved) props.onQueueBackup(asset);

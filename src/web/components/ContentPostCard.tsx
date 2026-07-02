@@ -22,7 +22,7 @@ interface PostCardProps {
 }
 
 export function ContentPostCard(props: PostCardProps) {
-  const fallbackCommand = `npm run studio:cli -- content post phase --project ${props.post.project} --post-id ${props.post.id} --phase scheduled --scheduled-at <iso> --confirm-write --json`;
+  const fallbackCommand = `npx lineage content post phase --project ${props.post.project} --post-id ${props.post.id} --phase scheduled --scheduled-at <iso> --confirm-write --json`;
   const handoffText = postHandoffText(props.post) || fallbackCommand;
   const hasAssets = props.post.assets.length > 0;
   return (

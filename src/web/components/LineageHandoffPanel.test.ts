@@ -41,9 +41,9 @@ const brief = {
   },
   fetchedAt: '2026-06-27T00:00:00.000Z',
   handoff: {
-    inspect_command: 'npm run studio:cli -- lineage inspect local-root',
-    link_child_command: 'npm run studio:cli -- lineage link-child local-root',
-    next_command: 'npm run studio:cli -- lineage next --project demo-project --root local-root --json',
+    inspect_command: 'npx lineage lineage inspect local-root',
+    link_child_command: 'npx lineage lineage link-child local-root',
+    next_command: 'npx lineage lineage next --project demo-project --root local-root --json',
   },
   latest: ['local-selected-base'],
   next_asset: nextBase,
@@ -83,7 +83,7 @@ describe('LineageHandoffPanel', () => {
 
     expect(text).toContain('Agent will evolve');
     expect(text).toContain('Chosen asset (local-selected-base)');
-    expect(text).toContain('npm run studio:cli -- lineage next --project demo-project --root local-root --json');
+    expect(text).toContain('npx lineage lineage next --project demo-project --root local-root --json');
     expect(text).toContain('Generated brief');
     expect(text).toContain('Keep working from Chosen asset.');
   });

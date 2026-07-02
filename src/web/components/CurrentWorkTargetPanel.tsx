@@ -6,19 +6,19 @@ import { assetStorageState, type StudioView } from '../assetUi';
 import './CurrentWorkTargetPanel.css';
 
 function agentSelectedCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent selected --project ${project}`;
+  return `npx lineage agent selected --project ${project}`;
 }
 
 function agentSelectedPromptCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent work on the selected target for ${project} --project ${project}`;
+  return `npx lineage agent work on the selected target for ${project} --project ${project}`;
 }
 
 function agentNextCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent next --project ${project}`;
+  return `npx lineage agent next --project ${project}`;
 }
 
 function agentSelectionsCommand(project: string): string {
-  return `npm --silent run studio:cli -- agent selections --project ${project}`;
+  return `npx lineage agent selections --project ${project}`;
 }
 
 export function CurrentWorkTarget({

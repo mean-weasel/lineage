@@ -3,17 +3,17 @@ import { defaultProject } from '../assetCore';
 import { getAdapterStatus } from './adapterStatus';
 
 describe('adapter status', () => {
-  it('reports S3 storage and dry-run-only Buffer posting adapters without credentials', () => {
+  it('reports local fallback storage and dry-run-only Buffer posting adapters without credentials', () => {
     const status = getAdapterStatus(defaultProject, {});
 
     expect(status.project).toBe(defaultProject);
     expect(status.storage).toEqual([
       expect.objectContaining({
         can_list: true,
-        can_upload: true,
+        can_upload: false,
         configured: true,
-        mode: 'catalog-backed',
-        provider: 's3',
+        mode: 'public-fallback-catalog',
+        provider: 'local',
       }),
     ]);
     expect(status.posting).toEqual([

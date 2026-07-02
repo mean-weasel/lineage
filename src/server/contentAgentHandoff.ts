@@ -194,11 +194,11 @@ export function getAssetSelectionAgentHandoff(project: string): ContentAgentHand
         tool: 'lineage_cli',
       },
       commands: {
-        currentSelectionCommand: `npm run studio:cli -- selections current --project ${quotedProject} --json`,
+        currentSelectionCommand: `npx lineage selections current --project ${quotedProject} --json`,
         ...(activeReviewSet ? {
-          reviewSetInspectCommand: `npm run studio:cli -- selections review-set inspect --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)} --json`,
-          reviewSetSetNextCommand: `npm run studio:cli -- selections review-set set-next --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)} --json`,
-          workPacketCommand: `npm run studio:cli -- selections review-set packet --project ${quotedProject} --json`,
+          reviewSetInspectCommand: `npx lineage selections review-set inspect --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)} --json`,
+          reviewSetSetNextCommand: `npx lineage selections review-set set-next --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)} --json`,
+          workPacketCommand: `npx lineage selections review-set packet --project ${quotedProject} --json`,
         } : {}),
       },
       instructions: selectedAssets.length > 0
@@ -278,12 +278,12 @@ export function getLineageWorkspaceAgentHandoff(project: string): ContentAgentHa
         tool: 'lineage_cli',
       },
       commands: {
-        workspaceListCommand: `npm run studio:cli -- lineage workspace list --project ${quotedProject} --json`,
-        workspaceInspectCommand: `npm run studio:cli -- lineage workspace inspect --project ${quotedProject} --workspace ${quotedWorkspace} --json`,
-        workspaceActivateCommand: `npm run studio:cli -- lineage workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write --json`,
-        lineageNextCommand: `npm run studio:cli -- lineage next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        lineageBriefCommand: `npm run studio:cli -- lineage brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        linkChildCommand: nextAssets.length > 0 ? `npm run studio:cli -- lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --confirm-write --json` : '',
+        workspaceListCommand: `npx lineage lineage workspace list --project ${quotedProject} --json`,
+        workspaceInspectCommand: `npx lineage lineage workspace inspect --project ${quotedProject} --workspace ${quotedWorkspace} --json`,
+        workspaceActivateCommand: `npx lineage lineage workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write --json`,
+        lineageNextCommand: `npx lineage lineage next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
+        lineageBriefCommand: `npx lineage lineage brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
+        linkChildCommand: nextAssets.length > 0 ? `npx lineage lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --confirm-write --json` : '',
       },
       instructions: safeToStart
         ? 'Continue this lineage workspace from the selected next variation base or bases. Generate local variations, index them, and link chosen children back to the workspace root before any S3 backup or external posting.'

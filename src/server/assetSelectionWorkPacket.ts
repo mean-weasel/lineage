@@ -1,5 +1,6 @@
 import { listAssets } from './assetCore';
 import { getAssetSelectionSnapshot } from './assetSelections';
+import { lineageCommand } from '../shared/appConstants';
 import type {
   AssetSelectionWorkPacket,
   AssetSelectionWorkPacketCandidate,
@@ -12,7 +13,7 @@ function shellQuote(value: string): string {
 }
 
 function command(project: string, value: string): string {
-  return `npm run studio:cli -- ${value} --project ${shellQuote(project)} --json`;
+  return `${lineageCommand(value)} --project ${shellQuote(project)} --json`;
 }
 
 function storageState(asset?: GrowthAsset): AssetSelectionWorkPacketStorageState {
