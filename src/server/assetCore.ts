@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createS3StorageAdapter } from './adapters/storage';
 import { listLocalReviewAssets, localPreviewPath as resolveLocalPreviewPath } from './localReview';
 import { syncLedgerPlacement } from './assetLedgerWorkflow';
@@ -21,7 +22,32 @@ import type {
   UploadFields,
 } from '../shared/types';
 
-export const repoRoot = resolve(new URL('../..', import.meta.url).pathname);
+function isPackageRoot(path: string): boolean {
+  const packageJson = join(path, 'package.json');
+  if (!existsSync(packageJson)) return false;
+  try {
+    const packageInfo = JSON.parse(readFileSync(packageJson, 'utf8')) as { name?: string };
+    return packageInfo.name === '@mean-weasel/lineage';
+  } catch {
+    return false;
+  }
+}
+
+function resolveRepoRoot(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    process.env.LINEAGE_REPO_ROOT,
+    process.env.ASSET_STUDIO_REPO_ROOT,
+    resolve(moduleDir, '..'),
+    resolve(moduleDir, '../..'),
+    process.cwd(),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  const root = candidates.find(isPackageRoot);
+  if (!root) throw new Error('Unable to locate Lineage package root');
+  return root;
+}
+
+export const repoRoot = resolveRepoRoot();
 export const defaultProject = 'bleep-that-shit';
 export const defaultProduct = process.env.GROWTH_ASSETS_DEFAULT_PRODUCT || defaultProject;
 const contentTypes = new Set<AssetContentType>(['image', 'video', 'gif', 'audio', 'doc', 'other']);
