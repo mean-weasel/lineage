@@ -51,4 +51,20 @@ describe('lineage CLI start options', () => {
       port: 6123,
     });
   });
+
+  it('rejects invalid ports before spawning a server', () => {
+    expect(() =>
+      resolveStartOptions(
+        { binName: 'lineage', channel: 'stable', defaultPort: 5197, displayName: 'Lineage' },
+        ['--port', 'not-a-port']
+      )
+    ).toThrow('Invalid port: not-a-port');
+
+    expect(() =>
+      resolveStartOptions(
+        { binName: 'lineage', channel: 'stable', defaultPort: 5197, displayName: 'Lineage' },
+        ['--port', '70000']
+      )
+    ).toThrow('Invalid port: 70000');
+  });
 });

@@ -89,13 +89,21 @@ try {
   for (const binName of ['lineage', 'lineage-dev']) {
     const port = await freePort();
     const dbPath = join(tmpProject, `${binName}-smoke.sqlite`);
+    let stdout = '';
+    let stderr = '';
     const server = spawn(join(binDir, binName), ['start', '--host', '127.0.0.1', '--port', String(port), '--db', dbPath, '--json'], {
       cwd: tmpProject,
       env: { ...process.env, LINEAGE_HOME: join(tmpProject, `${binName}-home`) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    server.stdout?.on('data', chunk => { stdout += chunk.toString(); });
+    server.stderr?.on('data', chunk => { stderr += chunk.toString(); });
     try {
       await waitForProjects(`http://127.0.0.1:${port}/api/projects`);
+    } catch (error) {
+      console.error(`${binName} stdout:\n${stdout.trim() || '(empty)'}`);
+      console.error(`${binName} stderr:\n${stderr.trim() || '(empty)'}`);
+      throw error;
     } finally {
       await stopServer(server);
     }

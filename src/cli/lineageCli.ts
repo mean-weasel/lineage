@@ -19,6 +19,11 @@ interface StartOptions {
   port: number;
 }
 
+const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+};
+
 function packageRoot(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 }
@@ -50,12 +55,17 @@ function readOption(args: string[], name: string): string | undefined {
 
 export function resolveStartOptions(config: LineageCliConfig, args: string[]): StartOptions {
   const runtimeDir = dataRoot(config.displayName);
+  const rawPort = readOption(args, '--port') || process.env.PORT || String(config.defaultPort);
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid port: ${rawPort}`);
+  }
   return {
     dbPath: readOption(args, '--db') || process.env.LINEAGE_DB || join(runtimeDir, `${config.binName}.sqlite`),
     host: readOption(args, '--host') || process.env.HOST || '127.0.0.1',
     json: args.includes('--json'),
     open: args.includes('--open'),
-    port: Number(readOption(args, '--port') || process.env.PORT || config.defaultPort),
+    port,
   };
 }
 
@@ -78,7 +88,16 @@ function openBrowser(url: string): void {
 }
 
 function start(config: LineageCliConfig, args: string[]): void {
-  const options = resolveStartOptions(config, args);
+  let options: StartOptions;
+  const json = args.includes('--json');
+  try {
+    options = resolveStartOptions(config, args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) console.error(JSON.stringify({ ok: false, error: message }, null, 2));
+    else console.error(`${config.binName}: ${message}`);
+    process.exit(1);
+  }
   const serverPath = join(packageRoot(), 'dist', 'server.js');
   if (!existsSync(serverPath)) {
     const message = `Missing bundled server at ${serverPath}. Run npm run build before using ${config.binName} start from a source checkout.`;
@@ -90,7 +109,7 @@ function start(config: LineageCliConfig, args: string[]): void {
   mkdirSync(dirname(options.dbPath), { recursive: true });
   const url = `http://${options.host}:${options.port}`;
   if (options.json) {
-    console.log(JSON.stringify({ ok: true, channel: config.channel, dbPath: options.dbPath, host: options.host, port: options.port, url }, null, 2));
+    console.log(JSON.stringify({ channel: config.channel, dbPath: options.dbPath, host: options.host, port: options.port, status: 'starting', url }, null, 2));
   } else {
     console.log(`${config.displayName} starting at ${url}`);
     console.log(`SQLite: ${options.dbPath}`);
@@ -109,12 +128,14 @@ function start(config: LineageCliConfig, args: string[]): void {
     stdio: 'inherit',
   });
 
+  let forwardedSignal: NodeJS.Signals | undefined;
   const stop = (signal: NodeJS.Signals) => {
+    forwardedSignal = signal;
     child.kill(signal);
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  child.on('exit', code => process.exit(code ?? 0));
+  child.on('exit', code => process.exit(code ?? (forwardedSignal ? signalExitCodes[forwardedSignal] || 1 : 0)));
   child.on('error', error => {
     console.error(`${config.binName}: failed to start server: ${error.message}`);
     process.exit(1);
