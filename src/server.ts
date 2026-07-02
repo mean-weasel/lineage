@@ -26,7 +26,7 @@ const app = express();
 const port = Number(process.env.PORT || 5173);
 const host = process.env.HOST || '127.0.0.1';
 const isProduction = process.env.NODE_ENV === 'production';
-const maxUploadBytes = Number(process.env.ASSET_STUDIO_MAX_UPLOAD_MB || 200) * 1024 * 1024;
+const maxUploadBytes = Number(process.env.LINEAGE_MAX_UPLOAD_MB || 200) * 1024 * 1024;
 const upload = multer({ dest: ensureUploadDir(), limits: { fileSize: maxUploadBytes } });
 app.use(express.json({ limit: '1mb' }));
 function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {
@@ -393,4 +393,4 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ error: message });
 });
 
-app.listen(port, host, () => { console.log(`Growth Asset Studio listening on http://${host}:${port}`); });
+app.listen(port, host, () => { console.log(`Lineage listening on http://${host}:${port}`); });

@@ -81,7 +81,7 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
     : '--files <comma-separated-.asset-scratch-files>';
   const importCommand = `npm run studio:cli -- generate image import --project ${quote(project)} --job-id ${quote(id)} ${importFilesFlag} --confirm-write --json`;
   return {
-    schema_version: 'asset_studio.generation_handoff.v1', provider, project, job_id: id, prompt, expected_output_count: count,
+    schema_version: 'lineage.generation_handoff.v1', provider, project, job_id: id, prompt, expected_output_count: count,
     per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,
     lineage: {
       root_asset_id: next.root_asset_id, parent_asset_id: parent.asset_id, selection_strategy: next.strategy,
@@ -92,7 +92,7 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
       })) : undefined,
     },
     instructions: [
-      'Use Codex image generation outside Asset Studio server code.',
+      'Use Codex image generation outside Lineage server code.',
       'Write generated output files under .asset-scratch before import.',
       'Do not call live provider APIs from the CLI or server.',
       'Import the exact expected output count with --confirm-write to persist lineage children.',

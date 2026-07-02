@@ -20,31 +20,31 @@ const dbFile = join(scratchDir, 'content-batches.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
-function seedBatch(batchId = 'bleep-priority-june') {
+function seedBatch(batchId = 'demo-priority-june') {
   createContentBatch(defaultProject, {
     batchId,
     campaign: '2026-06-organic-traffic-test',
     channel: 'tiktok',
     confirmWrite: true,
-    notes: 'Priority bleep content.',
-    title: 'Bleep priority June',
+    notes: 'Priority demo content.',
+    title: 'Demo priority June',
   });
 }
 
 function seedPost(postId = 'tiktok-upload-clean') {
   createContentPost(defaultProject, {
-    batchId: 'bleep-priority-june',
+    batchId: 'demo-priority-june',
     campaign: '2026-06-organic-traffic-test',
     channel: 'tiktok',
     confirmWrite: true,
-    cta: 'Try Bleep That Shit',
+    cta: 'Try Demo That Shit',
     phase: 'draft',
     postId,
-    sourcePath: 'bleep-that-shit/channels/tiktok/drafts/2026-06-tiktok-upload-bleep-export.md',
-    title: 'Upload, bleep, export',
+    sourcePath: 'demo-project/channels/tiktok/drafts/2026-06-tiktok-upload-demo-export.md',
+    title: 'Upload, demo, export',
   });
 }
 
@@ -75,25 +75,25 @@ describe('content batch ledger', () => {
     seedPost();
 
     const attach = attachContentPostAsset(defaultProject, {
-      assetId: 'bleep-tiktok-upload-bleep-export-vertical',
+      assetId: 'demo-tiktok-upload-demo-export-vertical',
       confirmWrite: true,
       notes: 'Primary vertical static.',
       postId: 'tiktok-upload-clean',
       role: 'primary',
     });
-    const detail = getContentBatch(defaultProject, 'bleep-priority-june');
+    const detail = getContentBatch(defaultProject, 'demo-priority-june');
 
     expect(attach).toMatchObject({ ok: true, post: { id: 'tiktok-upload-clean' } });
-    expect(detail.batch).toMatchObject({ channel: 'tiktok', id: 'bleep-priority-june' });
+    expect(detail.batch).toMatchObject({ channel: 'tiktok', id: 'demo-priority-june' });
     expect(detail.posts[0]).toMatchObject({
-      assets: [{ asset_id: 'bleep-tiktok-upload-bleep-export-vertical', role: 'primary' }],
+      assets: [{ asset_id: 'demo-tiktok-upload-demo-export-vertical', role: 'primary' }],
       handoff: {
         attachAssetTemplate: expect.stringContaining('--post-id tiktok-upload-clean'),
         setTargetTemplate: expect.stringContaining('content target set'),
       },
       phase: 'draft',
       readiness: 'draft_ready',
-      source_path: 'bleep-that-shit/channels/tiktok/drafts/2026-06-tiktok-upload-bleep-export.md',
+      source_path: 'demo-project/channels/tiktok/drafts/2026-06-tiktok-upload-demo-export.md',
     });
     expect(detail.handoff.attachAssetTemplate).toContain('content post attach-asset');
   });
@@ -125,7 +125,7 @@ describe('content batch ledger', () => {
     seedBatch();
     seedPost('tiktok-upload-clean');
     createContentPost(defaultProject, {
-      batchId: 'bleep-priority-june',
+      batchId: 'demo-priority-june',
       channel: 'linkedin',
       confirmWrite: true,
       phase: 'review',
@@ -139,7 +139,7 @@ describe('content batch ledger', () => {
       handoff: { moveToReviewCommand: expect.stringContaining('--phase review') },
       readiness: 'in_review',
     });
-    expect(listContentPosts(defaultProject, { batchId: 'bleep-priority-june' }).posts).toHaveLength(2);
+    expect(listContentPosts(defaultProject, { batchId: 'demo-priority-june' }).posts).toHaveLength(2);
   });
 
   it('keeps batch ids scoped to each project', () => {
@@ -172,13 +172,13 @@ describe('content batch ledger', () => {
     seedBatch();
     seedPost();
     attachContentPostAsset(defaultProject, {
-      assetId: 'bleep-tiktok-upload-bleep-export-vertical',
+      assetId: 'demo-tiktok-upload-demo-export-vertical',
       confirmWrite: true,
       postId: 'tiktok-upload-clean',
     });
 
     const detached = detachContentPostAsset(defaultProject, {
-      assetId: 'bleep-tiktok-upload-bleep-export-vertical',
+      assetId: 'demo-tiktok-upload-demo-export-vertical',
       confirmWrite: true,
       postId: 'tiktok-upload-clean',
     });
@@ -190,7 +190,7 @@ describe('content batch ledger', () => {
     seedBatch();
     seedPost();
     attachContentPostAsset(defaultProject, {
-      assetId: 'bleep-tiktok-upload-bleep-export-vertical',
+      assetId: 'demo-tiktok-upload-demo-export-vertical',
       confirmWrite: true,
       postId: 'tiktok-upload-clean',
     });
@@ -204,14 +204,14 @@ describe('content batch ledger', () => {
 
     expect(selected).toMatchObject({ ok: true, selected: true });
     expect(inspected.target).toMatchObject({
-      batch: { id: 'bleep-priority-june' },
+      batch: { id: 'demo-priority-june' },
       notes: 'Use this as the next variation base.',
       post: { id: 'tiktok-upload-clean' },
       readiness: 'draft_ready',
     });
     expect(inspected.target?.handoff.attachAssetTemplate).toContain('--post-id tiktok-upload-clean');
     expect(inspected.target?.handoff.moveToReviewCommand).toContain('--phase review');
-    expect(inspected.target?.handoff.agentPrompt).toContain('Upload, bleep, export');
+    expect(inspected.target?.handoff.agentPrompt).toContain('Upload, demo, export');
   });
 
   it('reports no target and clears selected content targets safely', () => {
@@ -260,9 +260,9 @@ describe('content batch ledger', () => {
   it('derives content target readiness from post phase and assets', () => {
     seedBatch();
     seedPost();
-    const draft = getContentBatch(defaultProject, 'bleep-priority-june').posts[0]!;
+    const draft = getContentBatch(defaultProject, 'demo-priority-june').posts[0]!;
     attachContentPostAsset(defaultProject, { assetId: 'asset-1', confirmWrite: true, postId: 'tiktok-upload-clean' });
-    const ready = getContentBatch(defaultProject, 'bleep-priority-june').posts[0]!;
+    const ready = getContentBatch(defaultProject, 'demo-priority-june').posts[0]!;
     const review = updateContentPost(defaultProject, { confirmWrite: true, phase: 'review', postId: 'tiktok-upload-clean' }).post!;
     const scheduled = updateContentPost(defaultProject, { confirmWrite: true, phase: 'scheduled', postId: 'tiktok-upload-clean' }).post!;
     const posted = updateContentPost(defaultProject, { confirmWrite: true, phase: 'posted', postId: 'tiktok-upload-clean' }).post!;

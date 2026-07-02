@@ -34,8 +34,8 @@ function asset(fields: Partial<GrowthAsset>): GrowthAsset {
     content_type: 'image',
     cta: 'Try it',
     hook: 'Hook',
-    product: 'bleep-that-shit',
-    project: 'bleep-that-shit',
+    product: 'demo-project',
+    project: 'demo-project',
     source: 'catalog',
     status: 'working',
     title: 'Asset A',
@@ -84,24 +84,24 @@ const selection = {
   active_review_set: {
     created_at: '2026-06-26T00:00:00.000Z',
     created_by: 'agent',
-    id: 'bleep-that-shit:review:review-ux-dogfood',
+    id: 'demo-project:review:review-ux-demo',
     items: [
       reviewItem('A', 'asset-a', 0),
       reviewItem('B', 'asset-b', 1, true),
       reviewItem('C', 'asset-c', 2),
       reviewItem('D', 'asset-d', 3, true),
     ],
-    key: 'review-ux-dogfood',
+    key: 'review-ux-demo',
     kind: 'review',
-    label: 'Review UX dogfood',
-    project: 'bleep-that-shit',
+    label: 'Review UX demo',
+    project: 'demo-project',
     status: 'active',
     updated_at: '2026-06-26T00:00:00.000Z',
   },
   current: {
     created_at: '2026-06-26T00:00:00.000Z',
     created_by: 'system',
-    id: 'bleep-that-shit:current:current',
+    id: 'demo-project:current:current',
     items: [
       reviewItem('B', 'asset-b', 0, true, 'primary'),
       reviewItem('D', 'asset-d', 1, true, 'primary'),
@@ -109,18 +109,18 @@ const selection = {
     key: 'current',
     kind: 'current',
     label: 'Current selections',
-    project: 'bleep-that-shit',
+    project: 'demo-project',
     status: 'active',
     updated_at: '2026-06-26T00:00:00.000Z',
   },
   fetchedAt: '2026-06-26T00:00:00.000Z',
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   review_sets: [],
 } satisfies AssetSelectionSnapshot;
 
 const archivedReviewSet = {
   ...selection.active_review_set,
-  id: 'bleep-that-shit:review:older-review',
+  id: 'demo-project:review:older-review',
   key: 'older-review',
   label: 'Older review',
   status: 'archived' as const,
@@ -157,14 +157,14 @@ describe('SelectionLedgerPanel', () => {
       onRefresh: () => undefined,
       onToggleReviewLabel: () => undefined,
       pending: false,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       reviewDraftLabels: ['B', 'D'],
       selection: selectionWithHistory,
     });
     const text = flattenText(panel);
 
     expect(text).toContain('Active review set');
-    expect(text).toContain('Review UX dogfood');
+    expect(text).toContain('Review UX demo');
     expect(text).toContain('4 candidates');
     expect(text).toContain('A');
     expect(text).toContain('Variation A');
@@ -210,7 +210,7 @@ describe('SelectionLedgerPanel', () => {
       onRefresh: () => undefined,
       onToggleReviewLabel: label => { toggled.push(label); },
       pending: false,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       reviewDraftLabels: ['B', 'D'],
       selection: selectionWithHistory,
     });
@@ -223,9 +223,9 @@ describe('SelectionLedgerPanel', () => {
 
     expect(toggled).toEqual(['A']);
     expect(chosen).toEqual([['B', 'D']]);
-    expect(inspected).toEqual(['bleep-that-shit:review:review-ux-dogfood']);
-    expect(archived).toEqual(['bleep-that-shit:review:review-ux-dogfood']);
-    expect(activated).toEqual(['bleep-that-shit:review:older-review']);
+    expect(inspected).toEqual(['demo-project:review:review-ux-demo']);
+    expect(archived).toEqual(['demo-project:review:review-ux-demo']);
+    expect(activated).toEqual(['demo-project:review:older-review']);
   });
 
   it('calls the next-context continuation handler from the work packet action', () => {
@@ -239,7 +239,7 @@ describe('SelectionLedgerPanel', () => {
       onContinueFromNextContext,
       onRefresh: () => undefined,
       pending: false,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       selection: selectionWithHistory,
     });
 
@@ -256,7 +256,7 @@ describe('SelectionLedgerPanel', () => {
       onClear: () => undefined,
       onRefresh: () => undefined,
       pending: false,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       selection: { ...selection, active_review_set: null, review_sets: [] },
     });
     const text = flattenText(panel);

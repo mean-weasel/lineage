@@ -61,7 +61,7 @@ export function Sidebar({
       </button>
       <div className="brand">
         <div className="brand-mark">GA</div>
-        <div><h1>Asset Studio</h1><p>{project}</p></div>
+        <div><h1>Lineage</h1><p>{project}</p></div>
       </div>
       <button
         aria-controls="mobile-sidebar-controls"

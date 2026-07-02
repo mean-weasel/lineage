@@ -14,7 +14,7 @@ const assetD = 'selection-asset-d';
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
 describe('asset selection ledger', () => {

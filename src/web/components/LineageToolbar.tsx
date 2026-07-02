@@ -107,7 +107,7 @@ export function LineageToolbar({
           </summary>
           <div>
             <p>
-              <strong>Bleep demo lineage</strong>
+              <strong>Demo demo lineage</strong>
               <span>{mediaLabel}</span>
             </p>
             <button disabled={workspaceLoading || demoSeedStatus?.present === demoSeedStatus?.total} onClick={onRestoreDemoMedia} type="button">Restore media</button>

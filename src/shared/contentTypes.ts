@@ -216,7 +216,7 @@ export type ContentAgentHandoffTarget = ContentAgentContentTarget | ContentAgent
 interface ContentAgentHandoffCanonicalCall {
   args: Record<string, string | boolean | null>;
   command: string;
-  tool: 'asset_studio_cli';
+  tool: 'lineage_cli';
 }
 
 export interface ContentAgentHandoffNextAction {
@@ -253,7 +253,7 @@ export interface ContentAgentHandoff {
     text: string;
   }>;
   next_action: ContentAgentHandoffNextAction | null;
-  schema_version: 'asset_studio.agent_handoff.v1';
+  schema_version: 'lineage.agent_handoff.v1';
   status: ContentAgentHandoffStatus;
   target: ContentAgentHandoffTarget | null;
 }

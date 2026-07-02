@@ -6,7 +6,7 @@ import { getLineageNextAsset } from './assetLineage';
 import { listLineageWorkspaces } from './assetLineageWorkspaces';
 import type { ContentAgentHandoff, ContentAgentHandoffNextAction, ContentAgentHandoffTarget, ContentOpsQueueItem, ContentOpsQueueLaneId, ContentPost, ContentPostReadiness, ContentTargetSnapshot } from '../shared/types';
 
-const schemaVersion = 'asset_studio.agent_handoff.v1' as const;
+const schemaVersion = 'lineage.agent_handoff.v1' as const;
 const defaultDoNotModify = [
   'external social platforms',
   'unrelated projects',
@@ -54,7 +54,7 @@ function nextActionFor(item: ContentOpsQueueItem, lane: ContentOpsQueueLaneId | 
     canonical_call: {
       args: { agent: true, project: item.post.project },
       command: canonicalCommand,
-      tool: 'asset_studio_cli',
+      tool: 'lineage_cli',
     },
     commands: item.handoff || {},
     instructions: instructionsFor(item.readiness),
@@ -191,7 +191,7 @@ export function getAssetSelectionAgentHandoff(project: string): ContentAgentHand
       canonical_call: {
         args: canonicalArgs,
         command: canonicalCommand,
-        tool: 'asset_studio_cli',
+        tool: 'lineage_cli',
       },
       commands: {
         currentSelectionCommand: `npm run studio:cli -- selections current --project ${quotedProject} --json`,
@@ -275,7 +275,7 @@ export function getLineageWorkspaceAgentHandoff(project: string): ContentAgentHa
       canonical_call: {
         args: { project, workspace: workspace.id },
         command: 'lineage workspace inspect',
-        tool: 'asset_studio_cli',
+        tool: 'lineage_cli',
       },
       commands: {
         workspaceListCommand: `npm run studio:cli -- lineage workspace list --project ${quotedProject} --json`,

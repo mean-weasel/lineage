@@ -9,7 +9,7 @@ import {
   listContentPosts,
   updateContentPost,
 } from './contentBatches';
-import { importBleepContentBatch } from './contentBatchImport';
+import { importDemoContentBatch } from './contentBatchImport';
 import { getContentOpsQueue } from './contentOpsQueue';
 import { clearContentTarget, getContentTarget, setContentTarget } from './contentTargets';
 import type { ContentPostPhase } from '../shared/types';
@@ -47,9 +47,9 @@ export function contentBatchRouter(projectFrom: ProjectResolver): Router {
     }));
   });
 
-  router.post('/import/bleep', (req, res) => {
+  router.post('/import/demo', (req, res) => {
     const kind = stringBody(req, 'kind');
-    res.json(importBleepContentBatch(projectFrom(bodyProjectShape(req)), {
+    res.json(importDemoContentBatch(projectFrom(bodyProjectShape(req)), {
       batchId: stringBody(req, 'batchId') || '',
       campaign: stringBody(req, 'campaign'),
       confirmWrite: boolBody(req, 'confirmWrite'),

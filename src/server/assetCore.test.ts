@@ -22,7 +22,7 @@ describe('asset core catalog listing', () => {
 
     try {
       const created = initProject(project, {
-        defaultBucket: 'mean-weasel-growth-assets-production',
+        defaultBucket: 'lineage-demo-assets',
         defaultRegion: 'us-east-1',
         product: 'Vitest Project Init',
       });
@@ -75,14 +75,14 @@ describe('asset core catalog listing', () => {
 
   it('lists local pre-push assets without cataloging them', () => {
     const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-local-review');
-    const file = join(scratchDir, 'bleep-tiktok-local-prepush.png');
+    const file = join(scratchDir, 'demo-tiktok-local-prepush.png');
     rmSync(scratchDir, { force: true, recursive: true });
     mkdirSync(scratchDir, { recursive: true });
     writeFileSync(file, Buffer.from('local-review-only'));
 
     try {
       const snapshot = listAssets(defaultProduct, { page: 1, pageSize: 100, query: 'local-prepush', source: 'local' });
-      const asset = snapshot.assets.find(item => item.local?.relative_path === 'vitest-local-review/bleep-tiktok-local-prepush.png');
+      const asset = snapshot.assets.find(item => item.local?.relative_path === 'vitest-local-review/demo-tiktok-local-prepush.png');
 
       expect(asset).toBeTruthy();
       expect(asset?.source).toBe('local');

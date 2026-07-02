@@ -14,7 +14,7 @@ const dbFile = join(scratchDir, 'asset-ledger.sqlite');
 function seedLocalAsset() {
   rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
-  const file = join(scratchDir, 'bleep-linkedin-ledger-local.png');
+  const file = join(scratchDir, 'demo-linkedin-ledger-local.png');
   writeFileSync(file, Buffer.from('asset-ledger-local'));
   return { file, checksum: fileSha256(file) };
 }
@@ -58,9 +58,9 @@ function syntheticAsset(source: 'catalog' | 'local', checksum: string): GrowthAs
         }
       : {
           s3: {
-            bucket: 'mean-weasel-growth-assets-production',
+            bucket: 'lineage-demo-assets',
             checksum_sha256: checksum,
-            key: 'products/bleep-that-shit/campaigns/2026-06-ledger-test/channels/linkedin/audiences/internal-ops/statuses/working/types/image/assets/ledger-catalog-shared/ledger.png',
+            key: 'products/demo-project/campaigns/2026-06-ledger-test/channels/linkedin/audiences/internal-ops/statuses/working/types/image/assets/ledger-catalog-shared/ledger.png',
             region: 'us-east-1',
             version_id: 'ledger-version',
           },
@@ -71,7 +71,7 @@ function syntheticAsset(source: 'catalog' | 'local', checksum: string): GrowthAs
 describe('asset ledger foundation', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('indexes catalog, local, and S3 metadata into one SQLite ledger', () => {
@@ -80,7 +80,7 @@ describe('asset ledger foundation', () => {
     const summary = indexAssetLedger(defaultProject);
     const snapshot = getAssetLedgerSnapshot(defaultProject);
     const localRecord = snapshot.records.find(record =>
-      record.sources.some(source => source.local_path === 'vitest-asset-ledger/bleep-linkedin-ledger-local.png')
+      record.sources.some(source => source.local_path === 'vitest-asset-ledger/demo-linkedin-ledger-local.png')
     );
 
     expect(summary.database).toBe(dbFile);
@@ -119,7 +119,7 @@ describe('asset ledger foundation', () => {
     expect(summary.run.assets_indexed).toBe(summary.assets_indexed);
     expect(snapshot.totals.local).toBe(0);
     expect(snapshot.records.some(record =>
-      record.sources.some(source => source.local_path === 'vitest-asset-ledger/bleep-linkedin-ledger-local.png')
+      record.sources.some(source => source.local_path === 'vitest-asset-ledger/demo-linkedin-ledger-local.png')
     )).toBe(false);
   });
 

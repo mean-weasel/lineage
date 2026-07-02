@@ -7,8 +7,7 @@ import {
   listLineageWorkspaces,
   updateLineageWorkspace,
 } from './assetLineageWorkspaces';
-import { archiveDemoLineageWorkspace, seedDemoLineageWorkspace } from './assetLineageDemo';
-import { restoreRichBleepSeedMedia, richBleepSeedMediaStatus } from './assetLineageRichSeed';
+import { archiveDemoLineageWorkspace, demoSeedMediaStatus, restoreDemoSeedMedia, seedDemoLineageWorkspace } from './assetLineageDemo';
 
 type ProjectFrom = (input: { body?: Record<string, unknown>; query?: Record<string, unknown> }) => string;
 type AsyncRoute = (handler: (req: express.Request, res: express.Response) => Promise<void> | void) => express.RequestHandler;
@@ -42,11 +41,11 @@ export function registerLineageWorkspaceRoutes(app: express.Express, projectFrom
   }));
 
   app.get('/api/lineage-workspaces/demo/media', asyncRoute((_req, res) => {
-    res.json({ ok: true, status: richBleepSeedMediaStatus() });
+    res.json({ ok: true, status: demoSeedMediaStatus() });
   }));
 
   app.post('/api/lineage-workspaces/demo/media/restore', asyncRoute((req, res) => {
-    res.json({ ok: true, result: restoreRichBleepSeedMedia({ confirmWrite: req.body.confirmWrite === true }) });
+    res.json({ ok: true, result: restoreDemoSeedMedia({ confirmWrite: req.body.confirmWrite === true }) });
   }));
 
   app.get('/api/lineage-workspaces/:workspaceId', asyncRoute((req, res) => {

@@ -10,7 +10,7 @@ function snippetBetween(start: string, end: string): string {
   return appSource.slice(startIndex, endIndex);
 }
 
-describe('Asset Studio navigation behavior', () => {
+describe('Lineage navigation behavior', () => {
   it('keeps Review asset inspection in the current view instead of redirecting to Assets', () => {
     const reviewSnippet = snippetBetween('<ReviewQueue', 'project={project}');
 

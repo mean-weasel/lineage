@@ -7,7 +7,7 @@ interface BufferPostingAdapterDependencies {
 }
 
 function missingConfig(env: NodeJS.ProcessEnv): string[] {
-  return ['BUFFER_API_KEY', 'BUFFER_ORGANIZATION_ID'].filter(key => !env[key]);
+  return ['LINEAGE_SCHEDULER_TOKEN', 'LINEAGE_SCHEDULER_ORGANIZATION_ID'].filter(key => !env[key]);
 }
 
 function textForPost(request: PostingDryRunRequest): string {

@@ -28,9 +28,9 @@ function writeScratch(relativePath: string, content: string): string {
 }
 
 function setupSelectedLineage(prefix = 'generation') {
-  const root = writeScratch(`bleep-linkedin-${prefix}-root.png`, `${prefix}-root-${Date.now()}`);
-  const selected = writeScratch(`bleep-linkedin-${prefix}-selected.png`, `${prefix}-selected-${Date.now()}`);
-  const other = writeScratch(`bleep-linkedin-${prefix}-other.png`, `${prefix}-other-${Date.now()}`);
+  const root = writeScratch(`demo-linkedin-${prefix}-root.png`, `${prefix}-root-${Date.now()}`);
+  const selected = writeScratch(`demo-linkedin-${prefix}-selected.png`, `${prefix}-selected-${Date.now()}`);
+  const other = writeScratch(`demo-linkedin-${prefix}-other.png`, `${prefix}-other-${Date.now()}`);
   const rootId = localId(root);
   const selectedId = localId(selected);
   const otherId = localId(other);
@@ -56,9 +56,9 @@ function setupSelectedLineage(prefix = 'generation') {
 }
 
 function setupWorkspaceWithoutSelection() {
-  const root = writeScratch('bleep-linkedin-generation-unselected-root.png', `generation-unselected-root-${Date.now()}`);
-  const childA = writeScratch('bleep-linkedin-generation-unselected-a.png', `generation-unselected-a-${Date.now()}`);
-  const childB = writeScratch('bleep-linkedin-generation-unselected-b.png', `generation-unselected-b-${Date.now()}`);
+  const root = writeScratch('demo-linkedin-generation-unselected-root.png', `generation-unselected-root-${Date.now()}`);
+  const childA = writeScratch('demo-linkedin-generation-unselected-a.png', `generation-unselected-a-${Date.now()}`);
+  const childB = writeScratch('demo-linkedin-generation-unselected-b.png', `generation-unselected-b-${Date.now()}`);
   const rootId = localId(root);
   indexLineageAssets(defaultProject);
   linkLineageAssets(defaultProject, { childAssetId: localId(childA), confirmWrite: true, parentAssetId: rootId });
@@ -119,7 +119,7 @@ describe('generation receipts', () => {
   beforeEach(() => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('plans, inspects, and imports local generation outputs as lineage children', () => {
@@ -140,8 +140,8 @@ describe('generation receipts', () => {
     expect(inspected.job.prompt).toContain('cleaner image variations');
     expect(inspected.job.receipts).toHaveLength(1);
 
-    const firstOutput = writeScratch('imports/bleep-linkedin-generation-output-a.png', 'generation-output-a');
-    const secondOutput = writeScratch('imports/bleep-linkedin-generation-output-b.png', 'generation-output-b');
+    const firstOutput = writeScratch('imports/demo-linkedin-generation-output-a.png', 'generation-output-a');
+    const secondOutput = writeScratch('imports/demo-linkedin-generation-output-b.png', 'generation-output-b');
     const imported = importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
       files: [firstOutput, secondOutput],
@@ -169,7 +169,7 @@ describe('generation receipts', () => {
   it('lists generation jobs by root and asset involvement for UX proof', () => {
     const lineage = setupSelectedLineage('generation-list');
     const plan = planImageGeneration(defaultProject, { count: 1, fromLineageSelection: true, prompt: 'Create one proof-list output.' });
-    const output = writeScratch('imports/bleep-linkedin-generation-listed-output.png', 'generation-listed-output');
+    const output = writeScratch('imports/demo-linkedin-generation-listed-output.png', 'generation-listed-output');
     const imported = importImageGenerationOutputs(defaultProject, { confirmWrite: true, files: [output], jobId: plan.job.id });
     const outputAssetId = imported.imported[0].imported_asset_id;
 
@@ -309,7 +309,7 @@ describe('generation receipts', () => {
       fromLineageSelection: true,
       prompt: 'Create one output for confirm-write guardrail.',
     });
-    const output = writeScratch('imports/bleep-linkedin-generation-no-confirm.png', 'generation-no-confirm');
+    const output = writeScratch('imports/demo-linkedin-generation-no-confirm.png', 'generation-no-confirm');
 
     expect(() => importImageGenerationOutputs(defaultProject, {
       confirmWrite: false,
@@ -387,7 +387,7 @@ describe('generation receipts', () => {
       fromLineageSelection: true,
       prompt: 'Create two outputs for count guardrail.',
     });
-    const output = writeScratch('imports/bleep-linkedin-generation-only-one.png', 'generation-only-one');
+    const output = writeScratch('imports/demo-linkedin-generation-only-one.png', 'generation-only-one');
 
     expect(() => importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,

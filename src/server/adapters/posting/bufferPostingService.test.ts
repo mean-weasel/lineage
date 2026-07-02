@@ -11,7 +11,7 @@ const dbFile = join(scratchDir, 'buffer-posting-service.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
 function seedPost() {
@@ -24,14 +24,14 @@ function seedPost() {
   });
   createContentPost(defaultProject, {
     batchId: 'buffer-batch',
-    body: 'Show the clean review workflow for Bleep.',
+    body: 'Show the clean review workflow for Demo.',
     channel: 'linkedin',
     confirmWrite: true,
     cta: 'Try the workflow',
     phase: 'scheduled',
     postId: 'linkedin-review-workflow',
     scheduledAt: '2026-07-01T16:00:00-07:00',
-    title: 'Bleep review workflow',
+    title: 'Demo review workflow',
   });
 }
 
@@ -41,7 +41,7 @@ describe('Buffer posting service', () => {
   it('previews a Buffer dry-run payload from an explicit content post without credentials', () => {
     seedPost();
     attachContentPostAsset(defaultProject, {
-      assetId: 'bleep-linkedin-review-ready-carousel',
+      assetId: 'demo-linkedin-review-ready-carousel',
       confirmWrite: true,
       postId: 'linkedin-review-workflow',
       role: 'primary',
@@ -57,7 +57,7 @@ describe('Buffer posting service', () => {
       configured: false,
       executed: false,
       mode: 'dry-run-only',
-      missing: ['BUFFER_API_KEY', 'BUFFER_ORGANIZATION_ID'],
+      missing: ['LINEAGE_SCHEDULER_TOKEN', 'LINEAGE_SCHEDULER_ORGANIZATION_ID'],
       post: { id: 'linkedin-review-workflow', phase: 'scheduled' },
       provider: 'buffer',
       source: 'post',
@@ -68,11 +68,11 @@ describe('Buffer posting service', () => {
       channelId: 'buffer-linkedin-page',
       mode: 'schedule',
       scheduledAt: '2026-07-01T16:00:00-07:00',
-      text: 'Show the clean review workflow for Bleep.\n\nTry the workflow',
+      text: 'Show the clean review workflow for Demo.\n\nTry the workflow',
     });
     expect(result.attached_assets).toEqual([
       expect.objectContaining({
-        asset_id: 'bleep-linkedin-review-ready-carousel',
+        asset_id: 'demo-linkedin-review-ready-carousel',
         publishable_url: null,
       }),
     ]);
@@ -88,7 +88,7 @@ describe('Buffer posting service', () => {
       bufferChannelId: 'buffer-linkedin-page',
       execute: true,
       target: 'selected',
-    }, { BUFFER_API_KEY: 'token', BUFFER_ORGANIZATION_ID: 'org' });
+    }, { LINEAGE_SCHEDULER_TOKEN: 'token', LINEAGE_SCHEDULER_ORGANIZATION_ID: 'org' });
 
     expect(result).toMatchObject({
       configured: true,

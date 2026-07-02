@@ -1,7 +1,7 @@
 {
   "name": "@mean-weasel/lineage",
   "version": "0.1.0",
-  "description": "Local-first creative lineage workspace for reviewing, branching, and handing off asset variations.",
+  "description": "Local-first creative lineage workspace",
   "license": "MIT",
   "type": "module",
   "bin": {

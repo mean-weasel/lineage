@@ -13,12 +13,12 @@ vi.mock('./assetCore', async importOriginal => {
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-selection-work-packet');
 const dbFile = join(scratchDir, 'selection-work-packet.sqlite');
-const catalogAsset = 'bleep-meta-short-form-upload-bleep-post-static';
+const catalogAsset = 'demo-meta-short-form-upload-demo-post-static';
 const mockedListAssets = vi.mocked(listAssets);
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
   mockedListAssets.mockClear();
 }
 
@@ -101,7 +101,7 @@ describe('asset selection work packet', () => {
       selected: false,
       source: 'catalog',
       storage_state: 's3_backed',
-      title: 'Upload. Bleep. Post.',
+      title: 'Upload. Demo. Post.',
     });
     expect(packet.candidates[0].s3_key).toContain(catalogAsset);
     expect(packet.candidates[1]).toMatchObject({

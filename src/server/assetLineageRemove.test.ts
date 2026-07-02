@@ -17,10 +17,10 @@ function localId(file: string): string {
 function seedFiles() {
   rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
-  const parent = join(scratchDir, 'bleep-lineage-remove-parent.png');
-  const child = join(scratchDir, 'bleep-lineage-remove-child.png');
-  const variation = join(scratchDir, 'bleep-lineage-remove-variation.png');
-  const alternate = join(scratchDir, 'bleep-lineage-remove-alternate.png');
+  const parent = join(scratchDir, 'demo-lineage-remove-parent.png');
+  const child = join(scratchDir, 'demo-lineage-remove-child.png');
+  const variation = join(scratchDir, 'demo-lineage-remove-variation.png');
+  const alternate = join(scratchDir, 'demo-lineage-remove-alternate.png');
   writeFileSync(parent, Buffer.from('lineage-remove-parent'));
   writeFileSync(child, Buffer.from('lineage-remove-child'));
   writeFileSync(variation, Buffer.from('lineage-remove-variation'));
@@ -33,7 +33,7 @@ function seedFiles() {
 
 describe('lineage node removal', () => {
   beforeEach(() => {
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('blocks removing the root lineage node', () => {

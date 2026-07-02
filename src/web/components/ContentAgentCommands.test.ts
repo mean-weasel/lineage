@@ -40,13 +40,13 @@ const handoff = {
 const targetSnapshot = {
   fetchedAt: '2026-06-26T00:00:00.000Z',
   handoff,
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   selected: true,
   target: {
     batch: {
       created_at: '2026-06-26T00:00:00.000Z',
       id: 'batch-1',
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       status: 'active',
       title: 'Batch',
       updated_at: '2026-06-26T00:00:00.000Z',
@@ -59,7 +59,7 @@ const targetSnapshot = {
       created_at: '2026-06-26T00:00:00.000Z',
       id: 'post-1',
       phase: 'draft',
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       title: 'Post',
       updated_at: '2026-06-26T00:00:00.000Z',
     },
@@ -78,7 +78,7 @@ const queueSnapshot = {
   lanes: [],
   next_action: null,
   next_action_lane: null,
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   target: null,
   totals: {
     attached_assets: 0,
@@ -110,9 +110,9 @@ describe('content agent commands', () => {
     clickButton(panel, 'Copy selected');
     clickButton(panel, 'Copy prompt');
 
-    expect(copied).toContain('npm --silent run studio:cli -- agent selected --project bleep-that-shit');
+    expect(copied).toContain('npm --silent run studio:cli -- agent selected --project demo-project');
     expect(copied).toContain(
-      'npm --silent run studio:cli -- agent work on the selected target for bleep-that-shit --project bleep-that-shit'
+      'npm --silent run studio:cli -- agent work on the selected target for demo-project --project demo-project'
     );
   });
 
@@ -126,6 +126,6 @@ describe('content agent commands', () => {
 
     clickButton(panel, 'Copy agent next');
 
-    expect(copied).toContain('npm --silent run studio:cli -- agent next --project bleep-that-shit');
+    expect(copied).toContain('npm --silent run studio:cli -- agent next --project demo-project');
   });
 });

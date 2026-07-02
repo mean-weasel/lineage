@@ -6,10 +6,10 @@ const snapshot = {
   assets: [],
   catalog: {
     asset_count: 27,
-    default_bucket: 'mean-weasel-growth-assets-production',
+    default_bucket: 'lineage-demo-assets',
     default_region: 'us-east-1',
-    product: 'bleep-that-shit',
-    project: 'bleep-that-shit',
+    product: 'demo-project',
+    project: 'demo-project',
   },
   facets: {
     audiences: [],
@@ -34,7 +34,7 @@ const snapshot = {
 const reviewSet = {
   created_at: '2026-06-26T00:00:00.000Z',
   created_by: 'agent',
-  id: 'bleep-that-shit:review:pass-02',
+  id: 'demo-project:review:pass-02',
   items: [
     reviewItem('A', 'asset-a', 0),
     reviewItem('B', 'asset-b', 1),
@@ -42,7 +42,7 @@ const reviewSet = {
   key: 'pass-02',
   kind: 'review',
   label: 'Pass 02',
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   status: 'active',
   updated_at: '2026-06-26T00:00:00.000Z',
 } satisfies AssetSelectionSet;

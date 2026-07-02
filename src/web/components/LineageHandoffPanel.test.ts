@@ -16,7 +16,7 @@ const nextBase = {
   channel: 'tiktok',
   is_latest: true,
   media_type: 'image',
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   review_state: 'approved',
   source: 'local',
   status: 'working',
@@ -43,12 +43,12 @@ const brief = {
   handoff: {
     inspect_command: 'npm run studio:cli -- lineage inspect local-root',
     link_child_command: 'npm run studio:cli -- lineage link-child local-root',
-    next_command: 'npm run studio:cli -- lineage next --project bleep-that-shit --root local-root --json',
+    next_command: 'npm run studio:cli -- lineage next --project demo-project --root local-root --json',
   },
   latest: ['local-selected-base'],
   next_asset: nextBase,
   next_assets: [nextBase],
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   reason: 'user_selected',
   recommended_action: 'evolve_variations',
   root_asset_id: 'local-root',
@@ -76,14 +76,14 @@ describe('LineageHandoffPanel', () => {
       nextBase,
       onRefreshBrief: () => undefined,
       onToast: () => undefined,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       rootAssetId: 'local-root',
     });
     const text = flattenText(panel);
 
     expect(text).toContain('Agent will evolve');
     expect(text).toContain('Chosen asset (local-selected-base)');
-    expect(text).toContain('npm run studio:cli -- lineage next --project bleep-that-shit --root local-root --json');
+    expect(text).toContain('npm run studio:cli -- lineage next --project demo-project --root local-root --json');
     expect(text).toContain('Generated brief');
     expect(text).toContain('Keep working from Chosen asset.');
   });
@@ -94,7 +94,7 @@ describe('LineageHandoffPanel', () => {
       nextBase: branchBase,
       onRefreshBrief: () => undefined,
       onToast: () => undefined,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       rootAssetId: 'local-root',
     });
 

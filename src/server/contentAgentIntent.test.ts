@@ -15,11 +15,11 @@ const dbFile = join(scratchDir, 'content-agent-intent.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
 function seedLocalAsset(): string {
-  const file = join(scratchDir, 'bleep-content-agent-intent-local.png');
+  const file = join(scratchDir, 'demo-content-agent-intent-local.png');
   mkdirSync(scratchDir, { recursive: true });
   writeFileSync(file, Buffer.from('content-agent-intent-local'));
   return `local-${fileSha256(file).slice(0, 12)}`;
@@ -55,8 +55,8 @@ function seedQueue() {
 }
 
 function seedLineageWorkspace() {
-  const root = join(scratchDir, 'bleep-lineage-intent-root.png');
-  const child = join(scratchDir, 'bleep-lineage-intent-child.png');
+  const root = join(scratchDir, 'demo-lineage-intent-root.png');
+  const child = join(scratchDir, 'demo-lineage-intent-child.png');
   mkdirSync(scratchDir, { recursive: true });
   writeFileSync(root, Buffer.from('lineage-intent-root'));
   writeFileSync(child, Buffer.from('lineage-intent-child'));
@@ -79,11 +79,11 @@ describe('content agent natural-language intent resolver', () => {
 
   it('resolves next actionable content prompts to queue-next handoff', () => {
     seedQueue();
-    const handoff = resolveContentAgentHandoff('Continue the next actionable Bleep content item');
+    const handoff = resolveContentAgentHandoff('Continue the next actionable Demo content item');
 
     expect(handoff).toMatchObject({
       intent: { resolved: 'content.queue.next', selection_mode: 'next_action' },
-      natural_language: { matched_intent: 'content.queue.next', project_alias: 'bleep' },
+      natural_language: { matched_intent: 'content.queue.next', project_alias: 'demo' },
       status: 'ok',
       target: { id: 'needs-asset-post' },
     });
@@ -91,7 +91,7 @@ describe('content agent natural-language intent resolver', () => {
 
   it('resolves selected target prompts without falling through to queue next', () => {
     seedQueue();
-    const handoff = resolveContentAgentHandoff('Work on the selected target for the Bleep app');
+    const handoff = resolveContentAgentHandoff('Work on the selected target for the Demo app');
 
     expect(handoff).toMatchObject({
       intent: { resolved: 'content.target.selected', selection_mode: 'selected_target' },
@@ -104,7 +104,7 @@ describe('content agent natural-language intent resolver', () => {
   it('resolves my selections to the asset selection ledger', () => {
     selectCurrentAssets(defaultProject, { assetIds: ['selected-image-a', 'selected-image-b'], confirmWrite: true });
 
-    const handoff = resolveContentAgentHandoff('Let us keep working on my selections for Bleep');
+    const handoff = resolveContentAgentHandoff('Let us keep working on my selections for Demo');
 
     expect(handoff).toMatchObject({
       context: { selected_assets: ['selected-image-a', 'selected-image-b'] },
@@ -118,7 +118,7 @@ describe('content agent natural-language intent resolver', () => {
   it('resolves selected lineage workspace prompts before selected content-target prompts', () => {
     const { childId, workspace } = seedLineageWorkspace();
 
-    const handoff = resolveContentAgentHandoff('Let us keep working on my selected lineage workspace for Bleep');
+    const handoff = resolveContentAgentHandoff('Let us keep working on my selected lineage workspace for Demo');
 
     expect(handoff).toMatchObject({
       intent: { resolved: 'lineage.workspace.active', selection_mode: 'lineage_workspace' },
@@ -142,7 +142,7 @@ describe('content agent natural-language intent resolver', () => {
       label: 'Intent review set',
     });
 
-    const handoff = resolveContentAgentHandoff('Let us keep working on my selections for Bleep');
+    const handoff = resolveContentAgentHandoff('Let us keep working on my selections for Demo');
 
     expect(handoff).toMatchObject({
       context: { selected_assets: [childId] },
@@ -166,7 +166,7 @@ describe('content agent natural-language intent resolver', () => {
       label: 'Intent variations',
     });
 
-    const handoff = resolveContentAgentHandoff('I like variation B and D for Bleep');
+    const handoff = resolveContentAgentHandoff('I like variation B and D for Demo');
 
     expect(handoff).toMatchObject({
       context: { selected_assets: ['variation-b', 'variation-d'] },

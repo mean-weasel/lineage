@@ -170,7 +170,7 @@ export function CurrentWorkTargetPanel({
           ) : (
             <>
               <strong>No selected content target</strong>
-              <p>Say: work on the selected target for Bleep.</p>
+              <p>Say: work on the selected target for Demo.</p>
               <code className="command-line">{agentSelectedCommand(project)}</code>
             </>
           )}
@@ -196,7 +196,7 @@ export function CurrentWorkTargetPanel({
           ) : (
             <>
               <strong>No actionable queue item</strong>
-              <p>{queue?.warning || 'Say: what should I work on next for Bleep.'}</p>
+              <p>{queue?.warning || 'Say: what should I work on next for Demo.'}</p>
               <code className="command-line">{agentNextCommand(project)}</code>
             </>
           )}

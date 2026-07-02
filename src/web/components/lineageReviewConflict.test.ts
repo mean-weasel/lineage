@@ -6,7 +6,7 @@ const selectedNode = {
   asset_id: 'asset-1',
   is_latest: true,
   media_type: 'image',
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   review_state: 'unreviewed',
   source: 'local',
   status: 'planned',

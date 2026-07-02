@@ -23,7 +23,7 @@ export interface GenerationJobReceipt {
 }
 
 export interface GenerationHandoffPacket {
-  schema_version: 'asset_studio.generation_handoff.v1';
+  schema_version: 'lineage.generation_handoff.v1';
   provider: GenerationProvider; project: string; job_id: string; prompt: string;
   expected_output_count: number; per_base_count?: number;
   lineage: {

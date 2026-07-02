@@ -17,7 +17,7 @@ let server: ReturnType<Express['listen']> | null = null;
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
 function appWithContentRoutes() {
@@ -32,7 +32,7 @@ function appWithContentRoutes() {
 }
 
 function seedLocalAsset(): string {
-  const file = join(scratchDir, 'bleep-tiktok-local-queue.png');
+  const file = join(scratchDir, 'demo-tiktok-local-queue.png');
   mkdirSync(scratchDir, { recursive: true });
   writeFileSync(file, Buffer.from('content-ops-queue-local'));
   return `local-${fileSha256(file).slice(0, 12)}`;
@@ -66,7 +66,7 @@ function seedQueuePosts() {
   }
   attachContentPostAsset(defaultProject, { assetId: localAssetId, confirmWrite: true, postId: 'ready-local-post' });
   attachContentPostAsset(defaultProject, {
-    assetId: 'bleep-tiktok-upload-bleep-export-vertical',
+    assetId: 'demo-tiktok-upload-demo-export-vertical',
     confirmWrite: true,
     postId: 'review-s3-post',
   });

@@ -83,15 +83,15 @@ function createDeps(overrides: Partial<StorageAdapterDependencies> = {}) {
 }
 
 describe('s3 storage adapter', () => {
-  const previousDeleteFlag = process.env.GROWTH_ASSETS_ENABLE_S3_DELETE;
+  const previousDeleteFlag = process.env.LINEAGE_ENABLE_CLOUD_DELETE;
 
   beforeEach(() => {
-    delete process.env.GROWTH_ASSETS_ENABLE_S3_DELETE;
+    delete process.env.LINEAGE_ENABLE_CLOUD_DELETE;
   });
 
   afterEach(() => {
-    if (previousDeleteFlag === undefined) delete process.env.GROWTH_ASSETS_ENABLE_S3_DELETE;
-    else process.env.GROWTH_ASSETS_ENABLE_S3_DELETE = previousDeleteFlag;
+    if (previousDeleteFlag === undefined) delete process.env.LINEAGE_ENABLE_CLOUD_DELETE;
+    else process.env.LINEAGE_ENABLE_CLOUD_DELETE = previousDeleteFlag;
   });
 
   it('parses asset ids from existing S3 key shape', () => {
@@ -121,7 +121,7 @@ describe('s3 storage adapter', () => {
     expect(failing.adapter.getIdentity()).toBeUndefined();
   });
 
-  it('delegates pull and presign to the legacy asset script with doppler-compatible arguments', () => {
+  it('delegates pull and presign to the asset script with direct arguments', () => {
     const { adapter, calls } = createDeps({
       runAssetScript: (command, args) => {
         calls.push({ args, command, kind: 'script' });
@@ -211,7 +211,7 @@ describe('s3 storage adapter', () => {
     const { adapter, calls, getCatalog } = createDeps();
 
     expect(() => adapter.deleteObjectGuarded('adapter-project', 'asset-001', 'delete asset-001')).toThrow('S3 delete is disabled');
-    process.env.GROWTH_ASSETS_ENABLE_S3_DELETE = 'true';
+    process.env.LINEAGE_ENABLE_CLOUD_DELETE = 'true';
     expect(() => adapter.deleteObjectGuarded('adapter-project', 'asset-001', 'delete wrong')).toThrow('Delete confirmation must exactly equal: delete asset-001');
 
     const result = adapter.deleteObjectGuarded('adapter-project', 'asset-001', 'delete asset-001');

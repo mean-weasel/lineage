@@ -35,7 +35,7 @@ async function requestJson<T>(baseUrl: string, path: string, body?: Record<strin
 describe('content batch routes', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   afterEach(() => {
@@ -43,15 +43,15 @@ describe('content batch routes', () => {
     server = null;
   });
 
-  it('imports bleep markdown batches through the HTTP contract', async () => {
+  it('imports demo markdown batches through the HTTP contract', async () => {
     const baseUrl = appWithContentRoutes();
-    const preview = await requestJson<{ dryRun: boolean; counts: { drafts: number } }>(baseUrl, '/api/content/import/bleep', {
+    const preview = await requestJson<{ dryRun: boolean; counts: { drafts: number } }>(baseUrl, '/api/content/import/demo', {
       batchId: 'route-preview',
       confirmWrite: false,
       kind: 'drafts',
       project: defaultProject,
     });
-    const imported = await requestJson<{ batch_id: string; counts: { drafts: number } }>(baseUrl, '/api/content/import/bleep', {
+    const imported = await requestJson<{ batch_id: string; counts: { drafts: number } }>(baseUrl, '/api/content/import/demo', {
       batchId: 'route-import',
       confirmWrite: true,
       kind: 'drafts',
@@ -66,24 +66,34 @@ describe('content batch routes', () => {
     expect(preview.dryRun).toBe(true);
     expect(existsSync(dbFile)).toBe(true);
     expect(imported).toMatchObject({ batch_id: 'route-import' });
-    expect(imported.counts.drafts).toBeGreaterThanOrEqual(10);
-    expect(detail.posts.some(post => post.channel === 'tiktok' && post.source_path?.includes('/drafts/'))).toBe(true);
-    expect(detail.posts.some(post => post.body?.startsWith('# '))).toBe(true);
+    expect(imported.counts.drafts).toBe(0);
+    expect(detail.posts).toEqual([]);
   });
 
   it('sets, inspects, and clears selected content target through HTTP routes', async () => {
     const baseUrl = appWithContentRoutes();
-    await requestJson(baseUrl, '/api/content/import/bleep', {
+    await requestJson(baseUrl, '/api/content/batches', {
       batchId: 'route-target',
+      channel: 'tiktok',
       confirmWrite: true,
-      kind: 'drafts',
       project: defaultProject,
+      title: 'Route target batch',
+    });
+    await requestJson(baseUrl, '/api/content/posts', {
+      batchId: 'route-target',
+      body: 'Demo route post body',
+      channel: 'tiktok',
+      confirmWrite: true,
+      phase: 'draft',
+      postId: 'draft-demo-route-target',
+      project: defaultProject,
+      title: 'Demo route target',
     });
     const empty = await requestJson<{ selected: boolean; target: null }>(baseUrl, `/api/content/target?project=${defaultProject}`);
     const selected = await requestJson<{ selected: boolean; target: { post: { id: string }; readiness: string } }>(baseUrl, '/api/content/target', {
       confirmWrite: true,
       notes: 'Next asset variation base',
-      postId: 'draft-tiktok-upload-bleep-export',
+      postId: 'draft-demo-route-target',
       project: defaultProject,
     });
     const cleared = await requestJson<{ selected: boolean; target: null }>(baseUrl, '/api/content/target/clear', {
@@ -92,7 +102,7 @@ describe('content batch routes', () => {
     });
 
     expect(empty).toMatchObject({ selected: false, target: null });
-    expect(selected).toMatchObject({ selected: true, target: { post: { id: 'draft-tiktok-upload-bleep-export' }, readiness: 'draft_ready' } });
+    expect(selected).toMatchObject({ selected: true, target: { post: { id: 'draft-demo-route-target' }, readiness: 'needs_asset' } });
     expect(cleared).toMatchObject({ selected: false, target: null });
   });
 });

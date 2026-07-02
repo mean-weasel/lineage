@@ -14,9 +14,9 @@ export function parseAssetIdFromS3Key(key: string): string | undefined {
 export function createS3StorageAdapter(deps: StorageAdapterDependencies): StorageAdapter {
   return {
     deleteObjectGuarded(project, assetId, confirmation): MutationResponse {
-      const enabled = process.env.GROWTH_ASSETS_ENABLE_S3_DELETE === 'true';
+      const enabled = process.env.LINEAGE_ENABLE_CLOUD_DELETE === 'true';
       if (!enabled) {
-        throw deps.createError('S3 delete is disabled. Use archive unless a human enables GROWTH_ASSETS_ENABLE_S3_DELETE.', 403);
+        throw deps.createError('S3 delete is disabled. Use archive unless a human enables LINEAGE_ENABLE_CLOUD_DELETE.', 403);
       }
       if (confirmation !== `delete ${assetId}`) {
         throw deps.createError(`Delete confirmation must exactly equal: delete ${assetId}`);
@@ -61,13 +61,13 @@ export function createS3StorageAdapter(deps: StorageAdapterDependencies): Storag
     },
 
     presignAsset(project, assetId, expiresIn = 900): PresignResponse {
-      const output = deps.runAssetScript('presign', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--expires-in', String(expiresIn)], true);
+      const output = deps.runAssetScript('presign', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--expires-in', String(expiresIn)]);
       return { assetId, expiresIn, url: output.stdout.trim() };
     },
 
     promoteAsset(project, assetId, confirmWrite): MutationResponse {
       if (!confirmWrite) throw deps.createError('Promote requires confirmWrite=true');
-      const output = deps.runAssetScript('promote', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--confirm-write'], true);
+      const output = deps.runAssetScript('promote', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--confirm-write']);
       return {
         ok: true,
         message: `Promoted ${assetId}`,
@@ -77,7 +77,7 @@ export function createS3StorageAdapter(deps: StorageAdapterDependencies): Storag
     },
 
     pullAsset(project, assetId, out = '.asset-scratch'): MutationResponse {
-      const output = deps.runAssetScript('pull', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--out', out], true);
+      const output = deps.runAssetScript('pull', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--out', out]);
       return { ok: true, message: output.stdout.trim() || `Pulled ${assetId}` };
     },
 
@@ -98,7 +98,7 @@ export function createS3StorageAdapter(deps: StorageAdapterDependencies): Storag
       if (fields.format) args.push('--format', fields.format);
       if (fields.notes) args.push('--notes', fields.notes);
 
-      const output = deps.runAssetScript('upload', args, true);
+      const output = deps.runAssetScript('upload', args);
       const uploaded = JSON.parse(output.stdout || '{}') as unknown;
       return {
         ok: true,

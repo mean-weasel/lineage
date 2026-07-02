@@ -1,10 +1,9 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import { archiveDemoLineageWorkspace, seedDemoLineageWorkspace } from './assetLineageDemo';
-import { richBleepDemoAssets } from './assetLineageRichSeed';
 import {
   activateLineageWorkspace,
   archiveLineageWorkspace,
@@ -21,7 +20,7 @@ const dbFile = join(scratchDir, 'asset-lineage-workspaces.sqlite');
 const demoProject = 'vitest-lineage-demo';
 const demoProjectDir = join(repoRoot, demoProject);
 const demoFilesDir = join(repoRoot, '.asset-scratch', 'lineage-demo', '2026-06-lineage-demo', demoProject);
-const richSeedRoot = join(scratchDir, 'rich-seed-files');
+const defaultDemoFilesDir = join(repoRoot, '.asset-scratch', 'lineage-demo', '2026-06-lineage-demo', defaultProject);
 
 function localId(file: string): string {
   return `local-${fileSha256(file).slice(0, 12)}`;
@@ -30,10 +29,10 @@ function localId(file: string): string {
 function seedFiles() {
   rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
-  const rootA = join(scratchDir, 'bleep-tiktok-hook-root-a.png');
-  const childA = join(scratchDir, 'bleep-tiktok-hook-child-a.png');
-  const rootB = join(scratchDir, 'bleep-linkedin-founder-root-b.png');
-  const childB = join(scratchDir, 'bleep-linkedin-founder-child-b.png');
+  const rootA = join(scratchDir, 'demo-tiktok-hook-root-a.png');
+  const childA = join(scratchDir, 'demo-tiktok-hook-child-a.png');
+  const rootB = join(scratchDir, 'demo-linkedin-founder-root-b.png');
+  const childB = join(scratchDir, 'demo-linkedin-founder-child-b.png');
   writeFileSync(rootA, Buffer.from('workspace-root-a'));
   writeFileSync(childA, Buffer.from('workspace-child-a'));
   writeFileSync(rootB, Buffer.from('workspace-root-b'));
@@ -83,16 +82,15 @@ function seedDemoProjectCatalog() {
 
 describe('lineage workspaces', () => {
   beforeEach(() => {
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
     rmSync(demoProjectDir, { force: true, recursive: true });
     rmSync(demoFilesDir, { force: true, recursive: true });
   });
 
   afterEach(() => {
-    delete process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT;
     rmSync(demoProjectDir, { force: true, recursive: true });
     rmSync(demoFilesDir, { force: true, recursive: true });
-    rmSync(richSeedRoot, { force: true, recursive: true });
+    rmSync(defaultDemoFilesDir, { force: true, recursive: true });
   });
 
   it('seeds workspace rows from existing root-scoped selections without rewriting them', () => {
@@ -223,43 +221,23 @@ describe('lineage workspaces', () => {
     expect(listLineageWorkspaces(demoProject).active_workspace).toBeNull();
   });
 
-  it('uses the rich Bleep graph and screenshots as the single default seed', () => {
-    process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT = richSeedRoot;
-    for (const [assetId, localPath] of richBleepDemoAssets) {
-      const file = join(richSeedRoot, localPath);
-      mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, `rich-seed-${assetId}`);
-    }
-
+  it('uses generated local media for the default demo seed', () => {
     const seeded = seedDemoLineageWorkspace(defaultProject, { confirmWrite: true });
     const snapshot = getLineageSnapshot(defaultProject, seeded.root_asset_id);
     const next = getLineageNextAsset(defaultProject, seeded.root_asset_id);
 
     expect(seeded.workspace).toMatchObject({
-      root_asset_id: 'local-e88bc3fcd9e8',
-      title: 'Bleep LinkedIn dogfood round 02 grounded',
+      status: 'active',
+      title: 'Demo: Content iteration tree',
     });
-    expect(snapshot.nodes).toHaveLength(19);
-    expect(snapshot.edges).toHaveLength(18);
+    expect(snapshot.nodes).toHaveLength(10);
+    expect(snapshot.edges).toHaveLength(9);
     expect(snapshot.nodes.every(node => node.preview_url?.includes('/api/assets/local-preview?'))).toBe(true);
-    expect(snapshot.nodes.some(node => node.local_path?.includes('lineage-demo'))).toBe(false);
-    expect(next.selected).toEqual(['local-0809da1e2b16']);
+    expect(snapshot.nodes.every(node => node.local_path?.includes('lineage-demo'))).toBe(true);
+    expect(next.strategy).toBe('selected');
 
     const archived = archiveDemoLineageWorkspace(defaultProject, true);
     expect(archived.archived.workspace).toMatchObject({ status: 'archived' });
-  });
-
-  it('restores rich Bleep seed media before seeding the default workspace', () => {
-    process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT = richSeedRoot;
-
-    const seeded = seedDemoLineageWorkspace(defaultProject, { confirmWrite: true });
-    const snapshot = getLineageSnapshot(defaultProject, seeded.root_asset_id);
-    const next = getLineageNextAsset(defaultProject, seeded.root_asset_id);
-
-    expect(seeded.summary).toMatchObject({ local: 19, total: 19 });
-    expect(snapshot.nodes).toHaveLength(19);
-    expect(snapshot.edges).toHaveLength(18);
-    expect(snapshot.nodes.every(node => existsSync(join(richSeedRoot, node.local_path || '')))).toBe(true);
-    expect(next.selected).toEqual(['local-0809da1e2b16']);
+    expect(existsSync(defaultDemoFilesDir)).toBe(false);
   });
 });

@@ -91,7 +91,7 @@ export function ReviewQueue(props: {
       <div className="review-summary">
         <div>
           <h2>{queue.project} review queue</h2>
-          <p>Local-first queue for bleep assets, channel posting state, and agent handoff.</p>
+          <p>Local-first queue for demo assets, channel posting state, and agent handoff.</p>
           <p>{queue.totals.channels} channels · refreshed {formatDate(queue.fetchedAt)}</p>
         </div>
         <QueueStat label="Local review" value={localReviewTotal} />

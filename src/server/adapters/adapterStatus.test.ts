@@ -21,7 +21,7 @@ describe('adapter status', () => {
         can_dry_run: true,
         can_post: false,
         configured: false,
-        missing: ['BUFFER_API_KEY', 'BUFFER_ORGANIZATION_ID'],
+        missing: ['LINEAGE_SCHEDULER_TOKEN', 'LINEAGE_SCHEDULER_ORGANIZATION_ID'],
         mode: 'dry-run-only',
         provider: 'buffer',
       },
@@ -29,7 +29,7 @@ describe('adapter status', () => {
   });
 
   it('reports Buffer configured status while keeping live posting disabled', () => {
-    const status = getAdapterStatus(defaultProject, { BUFFER_API_KEY: 'token', BUFFER_ORGANIZATION_ID: 'org' });
+    const status = getAdapterStatus(defaultProject, { LINEAGE_SCHEDULER_TOKEN: 'token', LINEAGE_SCHEDULER_ORGANIZATION_ID: 'org' });
 
     expect(status.posting[0]).toMatchObject({
       can_dry_run: true,

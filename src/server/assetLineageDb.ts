@@ -12,7 +12,7 @@ export function nowIso(): string {
 }
 
 export function lineageDbPath(): string {
-  return process.env.ASSET_STUDIO_DB || join(repoRoot, '.asset-studio', 'asset-lineage.sqlite');
+  return process.env.LINEAGE_DB || join(repoRoot, '.lineage', 'asset-lineage.sqlite');
 }
 
 export function lineageDb(): DatabaseSync {

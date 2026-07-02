@@ -83,7 +83,7 @@ function aliasFor(project: string): string[] {
     project,
     compact,
     compact.replace(/\bapp\b/g, '').trim(),
-    project.replace(/-that-shit$/, ''),
+    project.replace(/-project$/, ''),
   ].filter(Boolean);
 }
 
@@ -94,6 +94,9 @@ function resolveProject(prompt: string, fallbackProject: string): { alias: strin
     const match = aliases.find(alias => normalized.includes(normalizePrompt(alias)));
     if (match) return { alias: match, project: item.project };
   }
+  const fallback = fallbackProject || defaultProject;
+  const fallbackMatch = aliasFor(fallback).find(alias => normalized.includes(normalizePrompt(alias)));
+  if (fallbackMatch) return { alias: fallbackMatch, project: fallback };
   return { alias: null, project: fallbackProject || defaultProject };
 }
 
@@ -116,7 +119,7 @@ function unresolved(
     messages: [{ level, text }],
     natural_language: { ...natural, normalized_prompt: normalizePrompt(prompt), prompt },
     next_action: null,
-    schema_version: 'asset_studio.agent_handoff.v1',
+    schema_version: 'lineage.agent_handoff.v1',
     status,
     target: null,
   };
@@ -135,7 +138,7 @@ export function resolveContentAgentHandoff(prompt: string, fallbackProject = def
 
   const blocked = matchedTerms(normalized, blockedTerms);
   if (blocked.length > 0) {
-    return unresolved(project, prompt, { matched_intent: 'blocked', matched_terms: blocked, project_alias: alias }, 'blocked', 'error', 'This resolver only prepares local Asset Studio handoffs. It will not post, publish, schedule, or modify external platforms.');
+    return unresolved(project, prompt, { matched_intent: 'blocked', matched_terms: blocked, project_alias: alias }, 'blocked', 'error', 'This resolver only prepares local Lineage handoffs. It will not post, publish, schedule, or modify external platforms.');
   }
 
   const variationChoice = matchedTerms(normalized, variationChoiceTerms);

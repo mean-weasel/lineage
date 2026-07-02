@@ -15,7 +15,7 @@ const dbFile = join(scratchDir, 'content-agent-handoff.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
 function shellQuote(value: string): string {
@@ -23,7 +23,7 @@ function shellQuote(value: string): string {
 }
 
 function seedLocalAsset(): string {
-  const file = join(scratchDir, 'bleep-content-agent-local.png');
+  const file = join(scratchDir, 'demo-content-agent-local.png');
   mkdirSync(scratchDir, { recursive: true });
   writeFileSync(file, Buffer.from('content-agent-handoff-local'));
   return `local-${fileSha256(file).slice(0, 12)}`;
@@ -59,8 +59,8 @@ function seedQueue() {
 }
 
 function seedLineageWorkspace() {
-  const root = join(scratchDir, 'bleep-lineage-agent-root.png');
-  const child = join(scratchDir, 'bleep-lineage-agent-child.png');
+  const root = join(scratchDir, 'demo-lineage-agent-root.png');
+  const child = join(scratchDir, 'demo-lineage-agent-child.png');
   mkdirSync(scratchDir, { recursive: true });
   writeFileSync(root, Buffer.from('lineage-agent-root'));
   writeFileSync(child, Buffer.from('lineage-agent-child'));
@@ -91,7 +91,7 @@ describe('content agent handoff', () => {
     const handoff = getContentQueueNextAgentHandoff(defaultProject);
 
     expect(handoff).toMatchObject({
-      schema_version: 'asset_studio.agent_handoff.v1',
+      schema_version: 'lineage.agent_handoff.v1',
       status: 'ok',
       intent: { project: defaultProject, resolved: 'content.queue.next', selection_mode: 'next_action' },
       target: { id: 'needs-asset-post', is_selected_target: false, readiness: 'needs_asset', type: 'content_post' },
@@ -108,7 +108,7 @@ describe('content agent handoff', () => {
     const handoff = getContentTargetAgentHandoff(defaultProject);
 
     expect(handoff).toMatchObject({
-      schema_version: 'asset_studio.agent_handoff.v1',
+      schema_version: 'lineage.agent_handoff.v1',
       status: 'ok',
       intent: { resolved: 'content.target.selected', selection_mode: 'selected_target' },
       target: { id: 'selected-ready-post', is_selected_target: true, readiness: 'draft_ready' },
@@ -171,7 +171,7 @@ describe('content agent handoff', () => {
       guardrails: { requires_confirmation: false, safe_to_start: true, write_scope: ['asset_selections'] },
       intent: { resolved: 'asset.selection.current', selection_mode: 'asset_selection' },
       next_action: { kind: 'continue_asset_selection' },
-      schema_version: 'asset_studio.agent_handoff.v1',
+      schema_version: 'lineage.agent_handoff.v1',
       status: 'ok',
       target: null,
     });
@@ -264,7 +264,7 @@ describe('content agent handoff', () => {
         canonical_call: { command: 'lineage workspace inspect' },
         kind: 'continue_lineage_workspace',
       },
-      schema_version: 'asset_studio.agent_handoff.v1',
+      schema_version: 'lineage.agent_handoff.v1',
       status: 'ok',
       target: {
         id: workspace.id,

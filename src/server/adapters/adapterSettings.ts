@@ -42,15 +42,16 @@ export function isAdapterSettingsError(error: unknown): error is AdapterSettings
 const definitions: AdapterDefinition[] = [
   {
     adapter_type: 'cloud',
-    default_enabled: true,
-    description: 'Back up reviewed local assets and inspect cloud storage state.',
-    label: 'S3',
+    default_enabled: false,
+    description: 'Optional cloud storage inspection for projects that configure it explicitly.',
+    label: 'Cloud storage',
     provider: 's3',
     safeConfig: project => {
+      if (project === defaultProject) return { bucket: 'lineage-demo-assets', region: 'us-east-1' };
       const summary = listProjects().find(item => item.project === project);
       return { bucket: summary?.default_bucket || '', region: summary?.default_region || '' };
     },
-    secret_ref: 'aws:default-chain',
+    secret_ref: null,
   },
   {
     adapter_type: 'scheduler',
@@ -59,7 +60,7 @@ const definitions: AdapterDefinition[] = [
     label: 'Buffer',
     provider: 'buffer',
     safeConfig: () => ({ defaultMode: 'dry-run' }),
-    secret_ref: 'env:BUFFER_API_KEY',
+    secret_ref: 'env:LINEAGE_SCHEDULER_TOKEN',
   },
   {
     adapter_type: 'image_generator',
@@ -120,17 +121,18 @@ function parseConfig(value: string): Record<string, unknown> {
 
 function credentialFor(provider: AdapterProvider, env: NodeJS.ProcessEnv) {
   if (provider === 's3') {
-    return { detected: true, label: 'AWS default credential chain (delegated)', secret_ref: 'aws:default-chain' };
+    return { detected: false, label: 'Optional local cloud CLI credential', secret_ref: null };
   }
   if (provider === 'buffer') {
-    const detected = Boolean(env.BUFFER_API_KEY && env.BUFFER_ORGANIZATION_ID);
-    return { detected, label: 'BUFFER_API_KEY + BUFFER_ORGANIZATION_ID', secret_ref: 'env:BUFFER_API_KEY' };
+    const detected = Boolean(env.LINEAGE_SCHEDULER_TOKEN && env.LINEAGE_SCHEDULER_ORGANIZATION_ID);
+    return { detected, label: 'LINEAGE_SCHEDULER_TOKEN + LINEAGE_SCHEDULER_ORGANIZATION_ID', secret_ref: 'env:LINEAGE_SCHEDULER_TOKEN' };
   }
   return { detected: true, label: 'No external secret required', secret_ref: null };
 }
 
 function healthStatus(provider: AdapterProvider, enabled: boolean, config: Record<string, unknown>, credential: ReturnType<typeof credentialFor>) {
   if (provider === 's3') {
+    if (!enabled) return 'live_disabled';
     return config.bucket && config.region ? 'not_tested' : 'missing_config';
   }
   if (provider === 'buffer') {

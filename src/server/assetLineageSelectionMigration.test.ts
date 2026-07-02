@@ -25,7 +25,7 @@ function seedFiles() {
 
 describe('asset lineage selection migration', () => {
   beforeEach(() => {
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('drops a legacy root-level selection index from partially migrated databases', () => {

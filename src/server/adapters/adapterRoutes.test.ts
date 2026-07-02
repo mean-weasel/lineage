@@ -13,7 +13,7 @@ let server: ReturnType<Express['listen']> | null = null;
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.ASSET_STUDIO_DB = dbFile;
+  process.env.LINEAGE_DB = dbFile;
 }
 
 function appWithRoutes() {
@@ -67,8 +67,8 @@ describe('adapter routes', () => {
   });
 
   it('serves and updates adapter settings without echoing env secrets', async () => {
-    process.env.BUFFER_API_KEY = 'route-buffer-secret';
-    process.env.BUFFER_ORGANIZATION_ID = 'route-buffer-org';
+    process.env.LINEAGE_SCHEDULER_TOKEN = 'route-buffer-secret';
+    process.env.LINEAGE_SCHEDULER_ORGANIZATION_ID = 'route-buffer-org';
     const baseUrl = appWithRoutes();
     const before = await fetch(`${baseUrl}/api/adapters/settings?project=${defaultProject}`);
     const updated = await fetch(`${baseUrl}/api/adapters/settings/scheduler/buffer`, {
@@ -91,8 +91,8 @@ describe('adapter routes', () => {
     });
     expect(JSON.stringify({ beforeBody, updatedBody, afterBody })).not.toContain('route-buffer-secret');
     expect(JSON.stringify({ beforeBody, updatedBody, afterBody })).not.toContain('route-buffer-org');
-    delete process.env.BUFFER_API_KEY;
-    delete process.env.BUFFER_ORGANIZATION_ID;
+    delete process.env.LINEAGE_SCHEDULER_TOKEN;
+    delete process.env.LINEAGE_SCHEDULER_ORGANIZATION_ID;
   });
 
   it('serves Buffer dry-run payloads over HTTP without live posting', async () => {

@@ -43,7 +43,7 @@ export function UploadDrawer({
   function syncTitle(value: string) {
     setForm(current => ({
       ...current,
-      assetId: current.assetId || slug(`bleep-${current.channel}-${value}`),
+      assetId: current.assetId || slug(`demo-${current.channel}-${value}`),
       title: value,
       utmContent: current.utmContent || slug(value).replaceAll('-', '_'),
     }));

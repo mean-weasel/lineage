@@ -27,10 +27,10 @@ function localId(file: string): string {
 function seedFiles() {
   rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
-  const parent = join(scratchDir, 'bleep-linkedin-lineage-parent.png');
-  const child = join(scratchDir, 'bleep-linkedin-lineage-child.png');
-  const variation = join(scratchDir, 'bleep-linkedin-lineage-variation.png');
-  const alternate = join(scratchDir, 'bleep-linkedin-lineage-alternate.png');
+  const parent = join(scratchDir, 'demo-linkedin-lineage-parent.png');
+  const child = join(scratchDir, 'demo-linkedin-lineage-child.png');
+  const variation = join(scratchDir, 'demo-linkedin-lineage-variation.png');
+  const alternate = join(scratchDir, 'demo-linkedin-lineage-alternate.png');
   writeFileSync(parent, Buffer.from('lineage-parent'));
   writeFileSync(child, Buffer.from('lineage-child'));
   writeFileSync(variation, Buffer.from('lineage-variation'));
@@ -45,7 +45,7 @@ function seedFiles() {
 
 describe('asset lineage index', () => {
   beforeEach(() => {
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('indexes local assets, links lineage, and computes latest leaves', () => {

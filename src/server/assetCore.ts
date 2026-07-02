@@ -37,7 +37,6 @@ function resolveRepoRoot(): string {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     process.env.LINEAGE_REPO_ROOT,
-    process.env.ASSET_STUDIO_REPO_ROOT,
     resolve(moduleDir, '..'),
     resolve(moduleDir, '../..'),
     process.cwd(),
@@ -48,8 +47,8 @@ function resolveRepoRoot(): string {
 }
 
 export const repoRoot = resolveRepoRoot();
-export const defaultProject = 'bleep-that-shit';
-export const defaultProduct = process.env.GROWTH_ASSETS_DEFAULT_PRODUCT || defaultProject;
+export const defaultProject = 'demo-project';
+export const defaultProduct = process.env.LINEAGE_DEFAULT_PRODUCT || defaultProject;
 const contentTypes = new Set<AssetContentType>(['image', 'video', 'gif', 'audio', 'doc', 'other']);
 const baseChannels = ['linkedin', 'meta', 'tiktok', 'x-twitter', 'youtube'];
 const placementStatuses = new Set<PlacementStatus>(['planned', 'scheduled', 'posted', 'skipped']);
@@ -101,7 +100,19 @@ export function normalizeCatalog(catalog: Partial<AssetCatalog>, fallbackProject
 
 export function loadCatalog(project = defaultProject): AssetCatalog {
   const path = catalogPath(project);
-  if (!existsSync(path)) throw new AssetStudioError(`Missing catalog: ${path}`, 404);
+  if (!existsSync(path)) {
+    const clean = cleanProject(project);
+    if (clean === defaultProject) {
+      return normalizeCatalog({
+        assets: [],
+        default_bucket: 'lineage-demo-assets',
+        default_region: 'us-east-1',
+        product: defaultProject,
+        project: defaultProject,
+      }, defaultProject);
+    }
+    throw new AssetStudioError(`Missing catalog: ${path}`, 404);
+  }
   return normalizeCatalog(JSON.parse(readFileSync(path, 'utf8')) as Partial<AssetCatalog>, project);
 }
 
@@ -111,11 +122,8 @@ function saveCatalog(project: string, catalog: AssetCatalog): AssetCatalog {
   return normalized;
 }
 
-function run(command: string, args: string[], options: { doppler?: boolean } = {}): CommandResult {
-  const useDoppler = options.doppler && !process.env.AWS_ACCESS_KEY_ID;
-  const fullCommand = useDoppler ? 'doppler' : command;
-  const fullArgs = useDoppler ? ['run', '--', command, ...args] : args;
-  const result = spawnSync(fullCommand, fullArgs, {
+function run(command: string, args: string[]): CommandResult {
+  const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -128,18 +136,18 @@ function run(command: string, args: string[], options: { doppler?: boolean } = {
 
   if (result.status !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim();
-    throw new AssetStudioError(`${fullCommand} ${fullArgs.join(' ')} failed${detail ? `: ${detail}` : ''}`, 502);
+    throw new AssetStudioError(`${command} ${args.join(' ')} failed${detail ? `: ${detail}` : ''}`, 502);
   }
 
   return { stdout: result.stdout, stderr: result.stderr };
 }
 
-function runAssetScript(command: string, args: string[], doppler = false): CommandResult {
-  return run('node', ['scripts/growth-assets.mjs', command, ...args], { doppler });
+function runAssetScript(command: string, args: string[]): CommandResult {
+  return run('node', ['scripts/lineage-assets.mjs', command, ...args]);
 }
 
 function runAws(args: string[]): CommandResult {
-  return run('aws', args, { doppler: true });
+  return run('aws', args);
 }
 
 export function listProjects(): ProjectSummary[] {
@@ -265,7 +273,7 @@ export function doctorProject(project = defaultProject, options: { includeLive?:
       liveError = error instanceof Error ? error.message : String(error);
     }
   }
-  return { catalogExists: true, deleteEnabled: process.env.GROWTH_ASSETS_ENABLE_S3_DELETE === 'true', project: summary, liveCheck, liveError };
+  return { catalogExists: true, deleteEnabled: process.env.LINEAGE_ENABLE_CLOUD_DELETE === 'true', project: summary, liveCheck, liveError };
 }
 
 export function pullAsset(project: string, assetId: string, out = '.asset-scratch'): MutationResponse {

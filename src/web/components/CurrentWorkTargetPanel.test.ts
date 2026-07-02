@@ -40,13 +40,13 @@ const handoff = {
 const target = {
   fetchedAt: '2026-06-26T00:00:00.000Z',
   handoff,
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   selected: true,
   target: {
     batch: {
       created_at: '2026-06-26T00:00:00.000Z',
       id: 'batch-1',
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       status: 'active',
       title: 'Batch',
       updated_at: '2026-06-26T00:00:00.000Z',
@@ -59,7 +59,7 @@ const target = {
       created_at: '2026-06-26T00:00:00.000Z',
       id: 'selected-post',
       phase: 'draft',
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       title: 'Selected post',
       updated_at: '2026-06-26T00:00:00.000Z',
     },
@@ -88,14 +88,14 @@ const queue = {
       created_at: '2026-06-26T00:00:00.000Z',
       id: 'queue-post',
       phase: 'draft',
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       title: 'Queue post',
       updated_at: '2026-06-26T00:00:00.000Z',
     },
     readiness: 'needs_asset',
   },
   next_action_lane: { id: 'needs_asset', label: 'Needs Assets', total: 1 },
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   target: target.target,
   totals: {
     attached_assets: 1,
@@ -130,8 +130,8 @@ const selectedAsset = {
     size_bytes: 123,
     updated_at: '2026-06-26T00:00:00.000Z',
   },
-  product: 'bleep-that-shit',
-  project: 'bleep-that-shit',
+  product: 'demo-project',
+  project: 'demo-project',
   source: 'local',
   status: 'working',
   title: 'Selected asset',
@@ -143,7 +143,7 @@ const selection = {
   current: {
     created_at: '2026-06-26T00:00:00.000Z',
     created_by: 'system',
-    id: 'bleep-that-shit:current:current',
+    id: 'demo-project:current:current',
     items: [{
       asset_id: 'asset-1',
       created_at: '2026-06-26T00:00:00.000Z',
@@ -152,7 +152,7 @@ const selection = {
       role: 'primary',
       selected_at: '2026-06-26T00:00:00.000Z',
       selected_by: 'human',
-      set_id: 'bleep-that-shit:current:current',
+      set_id: 'demo-project:current:current',
       updated_at: '2026-06-26T00:00:00.000Z',
       variation_label: 'B',
     }, {
@@ -163,19 +163,19 @@ const selection = {
       role: 'primary',
       selected_at: '2026-06-26T00:00:00.000Z',
       selected_by: 'human',
-      set_id: 'bleep-that-shit:current:current',
+      set_id: 'demo-project:current:current',
       updated_at: '2026-06-26T00:00:00.000Z',
       variation_label: 'D',
     }],
     key: 'current',
     kind: 'current',
     label: 'Current selections',
-    project: 'bleep-that-shit',
+    project: 'demo-project',
     status: 'active',
     updated_at: '2026-06-26T00:00:00.000Z',
   },
   fetchedAt: '2026-06-26T00:00:00.000Z',
-  project: 'bleep-that-shit',
+  project: 'demo-project',
   review_sets: [],
 } satisfies AssetSelectionSnapshot;
 
@@ -185,7 +185,7 @@ describe('CurrentWorkTargetPanel', () => {
       loading: false,
       onCopy: async () => undefined,
       onRefresh: () => undefined,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       queue,
       selectedAsset,
       target,
@@ -208,7 +208,7 @@ describe('CurrentWorkTargetPanel', () => {
       loading: false,
       onCopy: async text => { copied.push(text); },
       onRefresh: () => undefined,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       queue,
       selectedAsset,
       target,
@@ -220,11 +220,11 @@ describe('CurrentWorkTargetPanel', () => {
     clickButton(panel, 'Copy next');
     clickButton(panel, 'Copy asset ID');
 
-    expect(copied).toContain('npm --silent run studio:cli -- agent selected --project bleep-that-shit');
+    expect(copied).toContain('npm --silent run studio:cli -- agent selected --project demo-project');
     expect(copied).toContain(
-      'npm --silent run studio:cli -- agent work on the selected target for bleep-that-shit --project bleep-that-shit'
+      'npm --silent run studio:cli -- agent work on the selected target for demo-project --project demo-project'
     );
-    expect(copied).toContain('npm --silent run studio:cli -- agent next --project bleep-that-shit');
+    expect(copied).toContain('npm --silent run studio:cli -- agent next --project demo-project');
     expect(copied).toContain('asset-1');
   });
 
@@ -234,7 +234,7 @@ describe('CurrentWorkTargetPanel', () => {
       loading: false,
       onCopy: async text => { copied.push(text); },
       onRefresh: () => undefined,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       queue,
       selectedAsset,
       selection,
@@ -247,7 +247,7 @@ describe('CurrentWorkTargetPanel', () => {
     expect(text).toContain('B:asset-1');
     expect(text).toContain('D:asset-2');
     clickButton(panel, 'Copy selections');
-    expect(copied).toContain('npm --silent run studio:cli -- agent selections --project bleep-that-shit');
+    expect(copied).toContain('npm --silent run studio:cli -- agent selections --project demo-project');
   });
 
   it('marks lineage context so only selected asset context is visible in that drawer mode', () => {
@@ -256,7 +256,7 @@ describe('CurrentWorkTargetPanel', () => {
       loading: false,
       onCopy: async () => undefined,
       onRefresh: () => undefined,
-      project: 'bleep-that-shit',
+      project: 'demo-project',
       queue,
       selectedAsset,
       selection,

@@ -10,32 +10,32 @@ const dbFile = join(scratchDir, 'adapter-settings.sqlite');
 describe('adapter settings', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('creates safe default settings for each adapter type', () => {
     const snapshot = getAdapterSettings(defaultProject, {
-      AWS_PROFILE: 'growth-ops',
-      BUFFER_API_KEY: 'buffer-secret',
-      BUFFER_ORGANIZATION_ID: 'buffer-org',
+      LINEAGE_CLOUD_PROFILE: 'local-cloud',
+      LINEAGE_SCHEDULER_TOKEN: 'scheduler-secret',
+      LINEAGE_SCHEDULER_ORGANIZATION_ID: 'scheduler-org',
     });
 
     expect(snapshot.settings.map(setting => [setting.adapter_type, setting.provider, setting.enabled])).toEqual([
-      ['cloud', 's3', true],
+      ['cloud', 's3', false],
       ['scheduler', 'buffer', false],
       ['image_generator', 'codex-handoff', true],
     ]);
     expect(snapshot.settings.find(setting => setting.provider === 's3')).toMatchObject({
-      credential: { detected: true, label: 'AWS default credential chain (delegated)', secret_ref: 'aws:default-chain' },
-      health_status: 'not_tested',
+      credential: { detected: false, label: 'Optional local cloud CLI credential', secret_ref: null },
+      health_status: 'live_disabled',
       safe_config: { bucket: expect.any(String), region: expect.any(String) },
     });
     expect(snapshot.settings.find(setting => setting.provider === 'buffer')).toMatchObject({
-      credential: { detected: true, label: 'BUFFER_API_KEY + BUFFER_ORGANIZATION_ID', secret_ref: 'env:BUFFER_API_KEY' },
+      credential: { detected: true, label: 'LINEAGE_SCHEDULER_TOKEN + LINEAGE_SCHEDULER_ORGANIZATION_ID', secret_ref: 'env:LINEAGE_SCHEDULER_TOKEN' },
       health_status: 'live_disabled',
     });
-    expect(JSON.stringify(snapshot)).not.toContain('buffer-secret');
-    expect(JSON.stringify(snapshot)).not.toContain('buffer-org');
+    expect(JSON.stringify(snapshot)).not.toContain('scheduler-secret');
+    expect(JSON.stringify(snapshot)).not.toContain('scheduler-org');
   });
 
   it('persists enabled state and non-secret config in sqlite', () => {
@@ -57,14 +57,14 @@ describe('adapter settings', () => {
     });
   });
 
-  it('does not report configured S3 catalog storage as missing credentials before live testing', () => {
+  it('keeps cloud catalog storage disabled until a user enables live inspection', () => {
     const snapshot = getAdapterSettings(defaultProject, {});
 
     expect(snapshot.settings.find(setting => setting.provider === 's3')).toMatchObject({
-      enabled: true,
-      health_status: 'not_tested',
+      enabled: false,
+      health_status: 'live_disabled',
       safe_config: {
-        bucket: 'mean-weasel-growth-assets-production',
+        bucket: 'lineage-demo-assets',
         region: 'us-east-1',
       },
     });

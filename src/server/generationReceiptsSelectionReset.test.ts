@@ -22,9 +22,9 @@ function writeScratch(relativePath: string, content: string): string {
 }
 
 function setupSelectedLineage() {
-  const root = writeScratch('bleep-linkedin-clear-root.png', `clear-root-${Date.now()}`);
-  const selected = writeScratch('bleep-linkedin-clear-selected.png', `clear-selected-${Date.now()}`);
-  const other = writeScratch('bleep-linkedin-clear-other.png', `clear-other-${Date.now()}`);
+  const root = writeScratch('demo-linkedin-clear-root.png', `clear-root-${Date.now()}`);
+  const selected = writeScratch('demo-linkedin-clear-selected.png', `clear-selected-${Date.now()}`);
+  const other = writeScratch('demo-linkedin-clear-other.png', `clear-other-${Date.now()}`);
   const rootId = localId(root), selectedId = localId(selected), otherId = localId(other);
   indexLineageAssets(defaultProject);
   linkLineageAssets(defaultProject, { childAssetId: selectedId, confirmWrite: true, parentAssetId: rootId });
@@ -49,7 +49,7 @@ describe('generation receipt selection reset', () => {
   beforeEach(() => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('clears next variation selections after generation import while preserving parent receipts', () => {

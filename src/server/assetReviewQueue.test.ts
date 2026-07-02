@@ -12,14 +12,14 @@ const dbFile = join(dbDir, 'asset-lineage.sqlite');
 describe('asset review queue', () => {
   beforeEach(() => {
     rmSync(dbDir, { force: true, recursive: true });
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('summarizes local QA and posting state without live S3 access', () => {
     const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-review-queue');
     rmSync(scratchDir, { force: true, recursive: true });
     mkdirSync(scratchDir, { recursive: true });
-    writeFileSync(join(scratchDir, 'bleep-tiktok-vertical-review.png'), Buffer.from('queue-local'));
+    writeFileSync(join(scratchDir, 'demo-tiktok-vertical-review.png'), Buffer.from('queue-local'));
 
     try {
       const queue = getReviewQueue(defaultProject, { channel: 'tiktok', limit: 2 });
@@ -41,8 +41,8 @@ describe('asset review queue', () => {
     const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-review-queue-decisions');
     rmSync(scratchDir, { force: true, recursive: true });
     mkdirSync(scratchDir, { recursive: true });
-    const approvedFile = join(scratchDir, 'bleep-tiktok-approved-local.png');
-    const revisionFile = join(scratchDir, 'bleep-tiktok-needs-revision-local.png');
+    const approvedFile = join(scratchDir, 'demo-tiktok-approved-local.png');
+    const revisionFile = join(scratchDir, 'demo-tiktok-needs-revision-local.png');
     writeFileSync(approvedFile, Buffer.from('approved-local'));
     writeFileSync(revisionFile, Buffer.from('needs-revision-local'));
 
@@ -75,7 +75,7 @@ describe('asset review queue', () => {
     const queue = getReviewQueue(defaultProject, { channel: 'linkedin', limit: 8 });
     const linkedin = queue.lanes.find(lane => lane.channel === 'linkedin');
 
-    expect(linkedin?.scheduled.some(asset => asset.asset_id === 'bleep-linkedin-upload-bleep-done-static-grounded-v2')).toBe(true);
-    expect(linkedin?.readyToPost.some(asset => asset.asset_id === 'bleep-linkedin-upload-bleep-done-static-grounded-v2')).toBe(false);
+    expect(linkedin?.scheduled.some(asset => asset.asset_id === 'demo-linkedin-upload-demo-done-static-grounded-v2')).toBe(true);
+    expect(linkedin?.readyToPost.some(asset => asset.asset_id === 'demo-linkedin-upload-demo-done-static-grounded-v2')).toBe(false);
   });
 });

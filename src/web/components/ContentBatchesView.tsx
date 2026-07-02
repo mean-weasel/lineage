@@ -36,7 +36,7 @@ export function ContentBatchesView({
   const [error, setError] = useState<string | null>(null);
   const [batchForm, setBatchForm] = useState({ batchId: '', campaign: '2026-06-organic-traffic-test', channel: '', title: '' });
   const [postForm, setPostForm] = useState({ channel: 'tiktok', phase: 'draft' as ContentPostPhase, postId: '', title: '' });
-  const [importForm, setImportForm] = useState({ batchId: 'bleep-2026-06-priority', kind: 'drafts', title: 'Bleep imported drafts' });
+  const [importForm, setImportForm] = useState({ batchId: 'demo-2026-06-priority', kind: 'drafts', title: 'Demo imported drafts' });
   const [filters, setFilters] = useState({ asset: 'all' as AssetFilter, channel: 'all', phase: 'all' as ContentPostPhase | 'all' });
   const [attachForm, setAttachForm] = useState({ assetId: '', postId: '', role: 'primary' });
   const [phaseInputs, setPhaseInputs] = useState<Record<string, { phase: ContentPostPhase; scheduledAt: string; postedAt: string; url: string }>>({});
@@ -159,8 +159,8 @@ export function ContentBatchesView({
     setPostForm(current => ({ ...current, postId: '', title: '' }));
   }
 
-  async function importBleepBatch() {
-    await mutate('Imported bleep content batch', () => api('/api/content/import/bleep', {
+  async function importDemoBatch() {
+    await mutate('Imported demo content batch', () => api('/api/content/import/demo', {
       body: JSON.stringify({ ...importForm, confirmWrite: true, project }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
@@ -249,7 +249,7 @@ export function ContentBatchesView({
       <div className="content-grid">
         <aside className="content-panel content-sidebar">
           <CreateBatchForm form={batchForm} pending={Boolean(pending)} setForm={setBatchForm} submit={createBatch} />
-          <ImportBatchForm form={importForm} pending={Boolean(pending)} setForm={setImportForm} submit={importBleepBatch} />
+          <ImportBatchForm form={importForm} pending={Boolean(pending)} setForm={setImportForm} submit={importDemoBatch} />
           <div className="batch-list">
             {batches.map(batch => (
               <button aria-pressed={selectedBatch?.id === batch.id} key={batch.id} onClick={() => void refresh(batch.id)} type="button">
@@ -357,7 +357,7 @@ function ImportBatchForm({ form, pending, setForm, submit }: {
         <option value="concepts">concepts</option>
         <option value="all">all</option>
       </select>
-      <button className="secondary-button" disabled={pending} type="submit"><FileDown size={16} />Import bleep</button>
+      <button className="secondary-button" disabled={pending} type="submit"><FileDown size={16} />Import demo</button>
     </form>
   );
 }

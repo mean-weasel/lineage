@@ -16,6 +16,6 @@ describe('format helpers', () => {
   });
 
   it('creates kebab-case slugs', () => {
-    expect(slug('Upload. Bleep. Export.')).toBe('upload-bleep-export');
+    expect(slug('Upload. Demo. Export.')).toBe('upload-demo-export');
   });
 });

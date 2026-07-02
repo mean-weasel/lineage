@@ -9,11 +9,11 @@ const asset = {
 
 describe('lineage new workspace helpers', () => {
   it('searches local and catalog assets without live S3 reads', () => {
-    const path = lineageAssetSearchPath('bleep-that-shit', 'hook idea', 8);
-    const url = new URL(path, 'http://asset-studio.local');
+    const path = lineageAssetSearchPath('demo-project', 'hook idea', 8);
+    const url = new URL(path, 'http://lineage.local');
 
     expect(url.pathname).toBe('/api/assets');
-    expect(url.searchParams.get('project')).toBe('bleep-that-shit');
+    expect(url.searchParams.get('project')).toBe('demo-project');
     expect(url.searchParams.get('source')).toBe('all');
     expect(url.searchParams.get('pageSize')).toBe('8');
     expect(url.searchParams.get('q')).toBe('hook idea');
@@ -25,8 +25,8 @@ describe('lineage new workspace helpers', () => {
   });
 
   it('creates workspace payloads from the explicit selected asset', () => {
-    expect(lineageCreateWorkspaceBody('bleep-that-shit', asset, ' Root exploration ', ' Try vertical variations ')).toEqual({
-      project: 'bleep-that-shit',
+    expect(lineageCreateWorkspaceBody('demo-project', asset, ' Root exploration ', ' Try vertical variations ')).toEqual({
+      project: 'demo-project',
       rootAssetId: 'local-explicit-root',
       title: 'Root exploration',
       notes: 'Try vertical variations',

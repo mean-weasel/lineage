@@ -30,7 +30,7 @@ export interface StorageAdapterDependencies {
   createError(message: string, status?: number): Error;
   defaultProject: string;
   loadCatalog(project?: string): AssetCatalog;
-  runAssetScript(command: string, args: string[], doppler?: boolean): StorageCommandResult;
+  runAssetScript(command: string, args: string[]): StorageCommandResult;
   runAws(args: string[]): StorageCommandResult;
   saveCatalog(project: string, catalog: AssetCatalog): AssetCatalog;
   supportedContentTypes: ReadonlySet<AssetContentType>;

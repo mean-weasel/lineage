@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { repoRoot } from './assetCore';
 import { attachContentPostAsset, createContentBatch, createContentPost } from './contentBatches';
@@ -84,8 +84,9 @@ function itemFromFile(file: string): MarkdownItem | null {
   };
 }
 
-function bleepMarkdownItems(kind: ImportKind): MarkdownItem[] {
-  const root = join(repoRoot, 'bleep-that-shit', 'channels');
+function demoMarkdownItems(kind: ImportKind): MarkdownItem[] {
+  const root = join(repoRoot, 'demo-project', 'channels');
+  if (!existsSync(root)) return [];
   return walk(root)
     .map(itemFromFile)
     .filter((item): item is MarkdownItem => Boolean(item))
@@ -93,15 +94,15 @@ function bleepMarkdownItems(kind: ImportKind): MarkdownItem[] {
     .sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
 }
 
-export function importBleepContentBatch(project: string, options: ContentImportOptions) {
+export function importDemoContentBatch(project: string, options: ContentImportOptions) {
   const kind = options.kind || 'all';
-  const items = bleepMarkdownItems(kind);
+  const items = demoMarkdownItems(kind);
   const batch = {
     batchId: options.batchId,
     campaign: options.campaign || '2026-06-organic-traffic-test',
     confirmWrite: options.confirmWrite,
-    notes: `Imported ${kind} from bleep-that-shit/channels markdown.`,
-    title: options.title || 'Bleep imported content batch',
+    notes: `Imported ${kind} from demo-project/channels markdown.`,
+    title: options.title || 'Demo imported content batch',
   };
   if (!options.confirmWrite) {
     return { ok: true, dryRun: true, batch, counts: countsFor(items), items: previewItems(items) };

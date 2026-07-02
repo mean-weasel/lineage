@@ -16,7 +16,7 @@ npm install -g @mean-weasel/lineage@next
 lineage-dev start
 ```
 
-`lineage` and `lineage-dev` use separate runtime directories, ports, and SQLite databases so a stable dogfood install can coexist with development builds.
+`lineage` and `lineage-dev` use separate runtime directories, ports, and SQLite databases so a stable install can coexist with development builds.
 
 ## Local Development
 

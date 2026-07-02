@@ -1,8 +1,8 @@
-import { listProjects } from '../assetCore';
+import { defaultProject, listProjects, validateProject } from '../assetCore';
 import { createBufferPostingAdapter } from './posting/bufferPostingAdapter';
 
 export function getAdapterStatus(project: string, env: NodeJS.ProcessEnv = process.env) {
-  const summary = listProjects().find(item => item.project === project);
+  const summary = listProjects().find(item => item.project === project) || (project === defaultProject ? validateProject(project) : undefined);
   const buffer = createBufferPostingAdapter({
     env,
     runBuffer: () => ({ stdout: '{}', stderr: '' }),

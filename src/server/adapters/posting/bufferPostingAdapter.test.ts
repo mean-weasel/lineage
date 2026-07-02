@@ -7,12 +7,12 @@ const baseRequest: PostingDryRunRequest = {
     { assetId: 'asset-001', altText: 'Workflow screenshot', url: 'https://assets.example.test/asset-001.png' },
   ],
   post: {
-    body: 'A clean export flow for bleeped launch clips.',
+    body: 'A clean export flow for demo launch clips.',
     channel: 'linkedin',
     cta: 'Review the workflow',
     id: 'linkedin-export-flow',
     scheduled_at: undefined,
-    title: 'Bleep export flow',
+    title: 'Demo export flow',
   },
   target: {
     channelId: 'buffer-channel-linkedin',
@@ -32,7 +32,7 @@ describe('buffer posting adapter', () => {
       can_dry_run: true,
       can_post: false,
       configured: false,
-      missing: ['BUFFER_API_KEY', 'BUFFER_ORGANIZATION_ID'],
+      missing: ['LINEAGE_SCHEDULER_TOKEN', 'LINEAGE_SCHEDULER_ORGANIZATION_ID'],
       mode: 'dry-run-only',
       provider: 'buffer',
     });
@@ -40,7 +40,7 @@ describe('buffer posting adapter', () => {
 
   it('reports configured status when Buffer env is available but still refuses live posting', () => {
     const adapter = createBufferPostingAdapter({
-      env: { BUFFER_API_KEY: 'token', BUFFER_ORGANIZATION_ID: 'org-1' },
+      env: { LINEAGE_SCHEDULER_TOKEN: 'token', LINEAGE_SCHEDULER_ORGANIZATION_ID: 'org-1' },
       runBuffer: () => ({ stdout: '{}', stderr: '' }),
       writePayload: () => 'payload.json',
     });
@@ -55,7 +55,7 @@ describe('buffer posting adapter', () => {
       media: [{ altText: 'Workflow screenshot', url: 'https://assets.example.test/asset-001.png' }],
       mode: 'addToQueue',
       schedulingType: 'automatic',
-      text: 'A clean export flow for bleeped launch clips.\n\nReview the workflow',
+      text: 'A clean export flow for demo launch clips.\n\nReview the workflow',
     });
   });
 
@@ -69,7 +69,7 @@ describe('buffer posting adapter', () => {
       mode: 'schedule',
       scheduledAt: '2026-07-01T16:00:00-07:00',
       schedulingType: 'scheduled',
-      text: 'A clean export flow for bleeped launch clips.\n\nReview the workflow',
+      text: 'A clean export flow for demo launch clips.\n\nReview the workflow',
     });
   });
 

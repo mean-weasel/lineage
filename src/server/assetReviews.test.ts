@@ -15,7 +15,7 @@ function localId(file: string): string {
 function seedLocalAsset() {
   rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
-  const file = join(scratchDir, 'bleep-tiktok-local-review-decision.png');
+  const file = join(scratchDir, 'demo-tiktok-local-review-decision.png');
   writeFileSync(file, Buffer.from('local-review-decision'));
   return { file, assetId: localId(file) };
 }
@@ -24,8 +24,8 @@ function seedLocalAssets() {
   rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const files = [
-    join(scratchDir, 'bleep-tiktok-local-review-batch-one.png'),
-    join(scratchDir, 'bleep-tiktok-local-review-batch-two.png'),
+    join(scratchDir, 'demo-tiktok-local-review-batch-one.png'),
+    join(scratchDir, 'demo-tiktok-local-review-batch-two.png'),
   ];
   files.forEach((file, index) => writeFileSync(file, Buffer.from(`local-review-batch-${index}`)));
   return files.map(file => ({ file, assetId: localId(file) }));
@@ -33,7 +33,7 @@ function seedLocalAssets() {
 
 describe('asset review helpers', () => {
   beforeEach(() => {
-    process.env.ASSET_STUDIO_DB = dbFile;
+    process.env.LINEAGE_DB = dbFile;
   });
 
   it('indexes local assets and returns their review state', () => {
@@ -152,7 +152,7 @@ describe('asset review helpers', () => {
 
   it('requires approved review state before server local backup writes', () => {
     const { assetId } = seedLocalAsset();
-    const relativePath = 'vitest-local-review-decisions/bleep-tiktok-local-review-decision.png';
+    const relativePath = 'vitest-local-review-decisions/demo-tiktok-local-review-decision.png';
 
     try {
       requireApprovedLocalBackupPath(defaultProject, relativePath);

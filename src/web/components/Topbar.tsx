@@ -31,7 +31,7 @@ export function Topbar(props: {
 
   return (
     <header className="topbar">
-      <div className="view-tabs" role="tablist" aria-label="Asset Studio views">
+      <div className="view-tabs" role="tablist" aria-label="Lineage views">
         {primaryViews.map(item => (
           <button
             aria-pressed={props.view === item.view}
