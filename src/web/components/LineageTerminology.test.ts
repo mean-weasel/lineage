@@ -2,16 +2,16 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const uiFiles = [
-  'asset-studio/src/components/LineageView.tsx',
-  'asset-studio/src/components/LineageDetailModal.tsx',
-  'asset-studio/src/components/LineageSidePanel.tsx',
-  'asset-studio/src/components/LineageContextMenu.tsx',
-  'asset-studio/src/components/LineageHandoffPanel.tsx',
-  'asset-studio/src/components/LineageAssetNode.tsx',
-  'asset-studio/src/components/LineageToolbar.tsx',
-  'asset-studio/src/components/LineageWorkspacePicker.tsx',
-  'asset-studio/src/components/LineageView.css',
-  'asset-studio/src/components/LedgerView.tsx',
+  'src/web/components/LineageView.tsx',
+  'src/web/components/LineageDetailModal.tsx',
+  'src/web/components/LineageSidePanel.tsx',
+  'src/web/components/LineageContextMenu.tsx',
+  'src/web/components/LineageHandoffPanel.tsx',
+  'src/web/components/LineageAssetNode.tsx',
+  'src/web/components/LineageToolbar.tsx',
+  'src/web/components/LineageWorkspacePicker.tsx',
+  'src/web/components/LineageView.css',
+  'src/web/components/LedgerView.tsx',
 ];
 
 const staleHumanPhrases = [

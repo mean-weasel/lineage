@@ -339,13 +339,13 @@ app.post(
   })
 );
 if (isProduction) {
-  const dist = join(repoRoot, 'dist', 'asset-studio');
+  const dist = join(repoRoot, 'dist', 'web');
   if (existsSync(dist)) {
     app.use(express.static(dist)); app.get('*', (_req, res) => res.sendFile(join(dist, 'index.html')));
   }
 } else {
   const vite = await createViteServer({
-    configFile: join(repoRoot, 'asset-studio', 'vite.config.ts'),
+    configFile: join(repoRoot, 'vite.config.ts'),
     server: { middlewareMode: true },
     appType: 'spa',
   });

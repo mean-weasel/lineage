@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const appSource = readFileSync(join(process.cwd(), 'asset-studio/src/App.tsx'), 'utf8');
+const appSource = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
 
 function snippetBetween(start: string, end: string): string {
   const startIndex = appSource.indexOf(start);

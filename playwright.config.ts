@@ -10,7 +10,7 @@ process.env.ASSET_STUDIO_RICH_SEED_ASSET_ROOT = richSeedRoot;
 const promptContractE2e = process.env.ASSET_STUDIO_PROMPT_CONTRACTS === '1';
 
 export default defineConfig({
-  testDir: './asset-studio/e2e',
+  testDir: './e2e',
   testMatch: '**/*.e2e.ts',
   testIgnore: promptContractE2e ? [] : ['**/prompt-contract-ux.e2e.ts'],
   timeout: 45_000,
@@ -32,7 +32,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `PORT=${port} HOST=127.0.0.1 ASSET_STUDIO_DB=${dbPath} ASSET_STUDIO_RICH_SEED_ASSET_ROOT=${richSeedRoot} npm run studio:dev`,
+    command: `PORT=${port} HOST=127.0.0.1 ASSET_STUDIO_DB=${dbPath} ASSET_STUDIO_RICH_SEED_ASSET_ROOT=${richSeedRoot} npm run dev`,
     timeout: 120_000,
     url: `http://127.0.0.1:${port}/api/projects`,
     reuseExistingServer: false,

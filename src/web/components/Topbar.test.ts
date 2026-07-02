@@ -13,7 +13,7 @@ describe('Topbar navigation groups', () => {
   });
 
   it('keeps live cloud inventory out of the global topbar', () => {
-    const source = readFileSync(join(process.cwd(), 'asset-studio/src/components/Topbar.tsx'), 'utf8');
+    const source = readFileSync(join(process.cwd(), 'src/web/components/Topbar.tsx'), 'utf8');
 
     expect(source).not.toContain('liveSync');
     expect(source).not.toContain('setLiveSync');
