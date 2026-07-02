@@ -2,7 +2,6 @@ import express from 'express';
 import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createServer as createViteServer } from 'vite';
 import { archiveAsset, cleanupUploadedTemp, defaultProduct, deleteObjectGuarded, ensureUploadDir, isAssetStudioError, listAssets, listProjects, localPreviewPath, presignAsset, pullAsset, promoteAsset, repoRoot, uploadAsset, updatePlacement } from './server/assetCore';
 import { isAssetLookupError, lookupAssets } from './server/assetLookup';
 import { getLineageChildren, getLineageNextAsset, getLineageSnapshot, indexLineageAssets, isLineageError, linkLineageAssets, updateAssetReview, updateLineageLayout, updateSelectedAsset } from './server/assetLineage';
@@ -344,6 +343,7 @@ if (isProduction) {
     app.use(express.static(dist)); app.get('*', (_req, res) => res.sendFile(join(dist, 'index.html')));
   }
 } else {
+  const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
     configFile: join(repoRoot, 'vite.config.ts'),
     server: { middlewareMode: true },
