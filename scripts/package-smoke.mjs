@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+let tarball;
 const requiredBuildFiles = [
   'dist/server.js',
   'dist/web/index.html',
@@ -22,20 +23,19 @@ for (const file of requiredBuildFiles) {
   }
 }
 
-const packOutput = execFileSync('npm', ['pack', '--json'], { cwd: root, encoding: 'utf8' });
-const [pack] = JSON.parse(packOutput);
-const packedFiles = new Set(pack.files.map(file => file.path));
-for (const file of requiredBuildFiles) {
-  if (!packedFiles.has(file)) {
-    console.error(`Packed tarball is missing ${file}`);
-    process.exit(1);
-  }
-}
-
 const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-package-smoke-'));
-const tarball = join(root, pack.filename);
 
 try {
+  const packOutput = execFileSync('npm', ['pack', '--json'], { cwd: root, encoding: 'utf8' });
+  const [pack] = JSON.parse(packOutput);
+  tarball = join(root, pack.filename);
+  const packedFiles = new Set(pack.files.map(file => file.path));
+  for (const file of requiredBuildFiles) {
+    if (!packedFiles.has(file)) {
+      throw new Error(`Packed tarball is missing ${file}`);
+    }
+  }
+
   execFileSync('npm', ['init', '-y'], { cwd: tmpProject, stdio: 'ignore' });
   execFileSync('npm', ['install', tarball], { cwd: tmpProject, stdio: 'ignore' });
 
@@ -46,5 +46,5 @@ try {
   console.log('package smoke passed');
 } finally {
   rmSync(tmpProject, { force: true, recursive: true });
-  rmSync(tarball, { force: true });
+  if (tarball) rmSync(tarball, { force: true });
 }

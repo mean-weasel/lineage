@@ -6,9 +6,19 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const filesToScan = [
+  'AGENTS.md',
+  'CHANGELOG.md',
+  'LICENSE',
   'README.md',
+  'eslint.config.js',
+  'knip.json',
   'package.json',
+  'package-lock.json',
   'playwright.config.ts',
+  'tsconfig.build.json',
+  'tsconfig.json',
+  'vite.config.ts',
+  'vitest.config.ts',
   'src',
   'e2e',
   'scripts',
