@@ -19,6 +19,7 @@ const filesToScan = [
   'tsconfig.json',
   'vite.config.ts',
   'vitest.config.ts',
+  '.github',
   'fixtures',
   'src',
   'e2e',

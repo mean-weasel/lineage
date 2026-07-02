@@ -3,10 +3,7 @@
 import { execFileSync } from 'node:child_process';
 
 const commands = [
-  ['npm', ['run', 'check']],
-  ['npm', ['run', 'build']],
-  ['npm', ['run', 'public:readiness']],
-  ['npm', ['run', 'package:smoke']],
+  ['npm', ['run', 'ci']],
 ];
 
 for (const [command, args] of commands) {

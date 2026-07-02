@@ -43,6 +43,18 @@ npm run ci
 
 `npm run dev` starts the local development server from source. `npm run ci` runs the full local verification gate.
 
+## Release Checks
+
+Use `next` for dogfooding builds and `latest` for the stable public channel:
+
+```bash
+npm run release:dry-run -- --tag next
+npm run release:next
+npm run release:latest
+```
+
+The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
+
 ## Demo Fixture
 
 Source checkouts and installed packages include a synthetic public demo catalog at `fixtures/demo-project/assets/catalog.json`. When `demo-project/assets/catalog.json` does not exist in the repo root, Lineage uses that fixture so the demo project can load without private storage or customer data.
