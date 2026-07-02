@@ -1,0 +1,79 @@
+{
+  "name": "@mean-weasel/lineage",
+  "version": "0.1.0",
+  "description": "Local-first creative lineage workspace for reviewing, branching, and handing off asset variations.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "lineage": "./dist/cli/lineage.js",
+    "lineage-dev": "./dist/cli/lineage-dev.js"
+  },
+  "files": [
+    "dist",
+    "fixtures/demo-project",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "NODE_ENV=development tsx src/server.ts",
+    "start": "NODE_ENV=production node dist/server.js",
+    "build:web": "vite build --config vite.config.ts",
+    "build:server": "tsc -p tsconfig.build.json",
+    "build": "npm run build:web && npm run build:server",
+    "check": "tsc --noEmit",
+    "lint": "eslint src scripts --max-warnings=0",
+    "test": "NODE_OPTIONS=--no-warnings vitest run --config vitest.config.ts",
+    "e2e": "playwright test --config playwright.config.ts",
+    "knip": "knip",
+    "audit": "npm audit --audit-level=moderate",
+    "public:readiness": "node scripts/public-readiness.mjs",
+    "package:smoke": "node scripts/package-smoke.mjs",
+    "ci": "npm run check && npm run lint && npm run test && npm run knip && npm run build && npm run e2e && npm run public:readiness && npm run package:smoke && npm run audit",
+    "prepare-release": "node scripts/prepare-release.mjs"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "@xyflow/react": "^12.11.1",
+    "express": "^4.19.2",
+    "lucide-react": "^0.468.0",
+    "multer": "^2.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "knip": "^6.17.1",
+    "playwright": "^1.61.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.61.1",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/mean-weasel/lineage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mean-weasel/lineage/issues"
+  },
+  "homepage": "https://github.com/mean-weasel/lineage#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}

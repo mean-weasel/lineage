@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": false,
+    "sourceMap": true,
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["src/server.ts", "src/server/**/*.ts", "src/shared/**/*.ts", "src/cli/**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "src/web/**"]
+}
