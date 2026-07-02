@@ -83,6 +83,18 @@ export function catalogPath(project = defaultProject): string {
   return join(repoRoot, cleanProject(project), 'assets', 'catalog.json');
 }
 
+function fixtureCatalogPath(project = defaultProject): string {
+  return join(repoRoot, 'fixtures', cleanProject(project), 'assets', 'catalog.json');
+}
+
+function resolvedCatalogPath(project = defaultProject): string {
+  const path = catalogPath(project);
+  if (existsSync(path)) return path;
+  const clean = cleanProject(project);
+  if (clean === defaultProject && existsSync(fixtureCatalogPath(clean))) return fixtureCatalogPath(clean);
+  return path;
+}
+
 export function normalizeCatalog(catalog: Partial<AssetCatalog>, fallbackProject = defaultProject): AssetCatalog {
   const project = cleanProject(catalog.project || catalog.product || fallbackProject);
   const product = catalog.product || project;
@@ -226,14 +238,18 @@ function escapeSvgText(value: string): string {
 
 export function loadCatalog(project = defaultProject): AssetCatalog {
   const path = catalogPath(project);
-  if (!existsSync(path)) {
-    const clean = cleanProject(project);
-    if (clean === defaultProject) {
-      return defaultFallbackCatalog();
-    }
-    throw new AssetStudioError(`Missing catalog: ${path}`, 404);
+  if (existsSync(path)) {
+    return normalizeCatalog(JSON.parse(readFileSync(path, 'utf8')) as Partial<AssetCatalog>, project);
   }
-  return normalizeCatalog(JSON.parse(readFileSync(path, 'utf8')) as Partial<AssetCatalog>, project);
+  const clean = cleanProject(project);
+  if (clean === defaultProject) {
+    const fixturePath = fixtureCatalogPath(clean);
+    if (existsSync(fixturePath)) {
+      return normalizeCatalog(JSON.parse(readFileSync(fixturePath, 'utf8')) as Partial<AssetCatalog>, project);
+    }
+    return defaultFallbackCatalog();
+  }
+  throw new AssetStudioError(`Missing catalog: ${path}`, 404);
 }
 
 function saveCatalog(project: string, catalog: AssetCatalog): AssetCatalog {
@@ -276,7 +292,7 @@ export function listProjects(): ProjectSummary[] {
     .flatMap(entry => {
       try {
         const catalog = loadCatalog(entry.name);
-        return [{ project: catalog.project, product: catalog.product, catalogPath: catalogPath(entry.name), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length }];
+        return [{ project: catalog.project, product: catalog.product, catalogPath: resolvedCatalogPath(entry.name), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length }];
       } catch (error) {
         if (error instanceof AssetStudioError && error.status === 404) return [];
         throw error;
@@ -284,8 +300,8 @@ export function listProjects(): ProjectSummary[] {
     })
     .sort((a, b) => a.project.localeCompare(b.project));
   if (!projects.some(item => item.project === defaultProject)) {
-    const catalog = defaultFallbackCatalog();
-    projects.push({ project: catalog.project, product: catalog.product, catalogPath: catalogPath(defaultProject), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length });
+    const catalog = loadCatalog(defaultProject);
+    projects.push({ project: catalog.project, product: catalog.product, catalogPath: resolvedCatalogPath(defaultProject), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length });
     projects.sort((a, b) => a.project.localeCompare(b.project));
   }
   return projects;
@@ -383,7 +399,7 @@ export function inspectAsset(project: string, assetId: string): GrowthAsset {
 
 export function validateProject(project = defaultProject): ProjectSummary {
   const catalog = loadCatalog(project);
-  return { project: catalog.project, product: catalog.product, catalogPath: catalogPath(project), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length };
+  return { project: catalog.project, product: catalog.product, catalogPath: resolvedCatalogPath(project), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length };
 }
 
 export function doctorProject(project = defaultProject, options: { includeLive?: boolean } = {}): DoctorReport {

@@ -1,10 +1,73 @@
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { defaultProject, defaultProduct, listAssets, listProjects, localPreviewPath, presignAsset, previewPlacement, repoRoot } from './assetCore';
+import { defaultProject, defaultProduct, listAssets, listProjects, loadCatalog, localPreviewPath, presignAsset, previewPlacement, repoRoot } from './assetCore';
 import { initProject } from './assetProjects';
 
 describe('asset core catalog listing', () => {
+  it('loads the public demo fixture when no root project catalog exists', () => {
+    const projectDir = join(repoRoot, defaultProject);
+    if (existsSync(projectDir)) throw new Error(`Expected no root fixture override at ${projectDir}`);
+
+    const catalog = loadCatalog(defaultProject);
+    const project = listProjects().find(item => item.project === defaultProject);
+
+    expect(catalog.assets).toHaveLength(6);
+    expect(catalog.assets.map(asset => asset.asset_id)).toContain('demo-meta-short-form-upload-demo-post-static');
+    expect(project).toMatchObject({
+      asset_count: 6,
+      default_bucket: '',
+      default_region: '',
+      product: defaultProduct,
+      project: defaultProject,
+    });
+    expect(project?.catalogPath).toBe(join(repoRoot, 'fixtures', defaultProject, 'assets', 'catalog.json'));
+  });
+
+  it('lets a real root demo-project catalog override the public fixture', () => {
+    const projectDir = join(repoRoot, defaultProject);
+    const catalogFile = join(projectDir, 'assets', 'catalog.json');
+    if (existsSync(projectDir)) throw new Error(`Refusing to overwrite existing ${projectDir}`);
+    mkdirSync(join(projectDir, 'assets'), { recursive: true });
+    writeFileSync(catalogFile, `${JSON.stringify({
+      assets: [{
+        asset_id: 'real-root-demo-asset',
+        audience: 'operators',
+        campaign: 'root-catalog',
+        channel: 'linkedin',
+        content_type: 'image',
+        cta: 'Review the root catalog',
+        hook: 'Root catalog should win over fixture data.',
+        product: defaultProject,
+        project: defaultProject,
+        source: 'catalog',
+        status: 'approved',
+        title: 'Real root demo asset',
+        utm_content: 'real_root_demo_asset',
+      }],
+      default_bucket: 'real-root-bucket',
+      default_region: 'us-west-2',
+      product: defaultProject,
+      project: defaultProject,
+    }, null, 2)}\n`);
+
+    try {
+      const catalog = loadCatalog(defaultProject);
+      const project = listProjects().find(item => item.project === defaultProject);
+
+      expect(catalog.assets).toHaveLength(1);
+      expect(catalog.assets[0]?.asset_id).toBe('real-root-demo-asset');
+      expect(project).toMatchObject({
+        asset_count: 1,
+        catalogPath: catalogFile,
+        default_bucket: 'real-root-bucket',
+        default_region: 'us-west-2',
+      });
+    } finally {
+      rmSync(projectDir, { force: true, recursive: true });
+    }
+  });
+
   it('discovers product-backed catalogs as projects', () => {
     const projects = listProjects();
     const project = projects.find(item => item.project === defaultProject);
@@ -114,9 +177,11 @@ describe('asset core catalog listing', () => {
     });
   });
 
-  it('presigns public fallback assets with a local data URL without external scripts', () => {
+  it('presigns public fixture assets with a local data URL without external scripts', () => {
     const originalPath = process.env.PATH;
     const blockedPath = join(repoRoot, '.asset-scratch', 'vitest-empty-path');
+    const projectDir = join(repoRoot, defaultProject);
+    if (existsSync(projectDir)) throw new Error(`Expected no root fixture override at ${projectDir}`);
     rmSync(blockedPath, { force: true, recursive: true });
     mkdirSync(blockedPath, { recursive: true });
     process.env.PATH = blockedPath;
