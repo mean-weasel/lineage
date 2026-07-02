@@ -30,6 +30,7 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - name: Release dry run
         if: ${{ inputs.dry_run }}
         run: npm run release -- --tag "${{ inputs.tag }}" --dry-run
