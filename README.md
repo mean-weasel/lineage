@@ -20,7 +20,18 @@ lineage-dev --help
 lineage-dev --version
 ```
 
-Full `lineage start` and `lineage-dev start` command implementations are still pending a CLI task. Until those commands are implemented, run Lineage from a source checkout for local development.
+Both bins can also run the bundled production server:
+
+```bash
+lineage start
+lineage-dev start
+```
+
+By default, `lineage start` listens on `127.0.0.1:5197` and stores SQLite state in a stable Lineage runtime directory. `lineage-dev start` listens on `127.0.0.1:5198` and uses a separate development SQLite file. Override those defaults with `--port`, `--host`, `--db`, or `LINEAGE_HOME`:
+
+```bash
+lineage start --port 6123 --db ~/.lineage/lineage.sqlite
+```
 
 ## Local Development
 

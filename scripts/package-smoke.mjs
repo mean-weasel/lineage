@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 let tarball;
@@ -21,6 +22,48 @@ for (const file of requiredBuildFiles) {
     console.error('Run npm run build before npm run package:smoke.');
     process.exit(1);
   }
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => {
+        if (address && typeof address === 'object') resolve(address.port);
+        else reject(new Error('Unable to allocate a free port'));
+      });
+    });
+  });
+}
+
+async function waitForProjects(url) {
+  const deadline = Date.now() + 15_000;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const body = await response.json();
+        if (Array.isArray(body.projects) && body.projects.some(project => project.project === 'demo-project')) return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  throw lastError || new Error(`Timed out waiting for ${url}`);
+}
+
+async function stopServer(server) {
+  if (server.exitCode !== null || server.signalCode !== null) return;
+  server.kill('SIGTERM');
+  await Promise.race([
+    new Promise(resolve => server.once('exit', resolve)),
+    new Promise(resolve => setTimeout(resolve, 5_000)),
+  ]);
+  if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');
 }
 
 const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-package-smoke-'));
@@ -42,6 +85,21 @@ try {
   const binDir = join(tmpProject, 'node_modules', '.bin');
   execFileSync(join(binDir, 'lineage'), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
   execFileSync(join(binDir, 'lineage-dev'), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
+
+  for (const binName of ['lineage', 'lineage-dev']) {
+    const port = await freePort();
+    const dbPath = join(tmpProject, `${binName}-smoke.sqlite`);
+    const server = spawn(join(binDir, binName), ['start', '--host', '127.0.0.1', '--port', String(port), '--db', dbPath, '--json'], {
+      cwd: tmpProject,
+      env: { ...process.env, LINEAGE_HOME: join(tmpProject, `${binName}-home`) },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    try {
+      await waitForProjects(`http://127.0.0.1:${port}/api/projects`);
+    } finally {
+      await stopServer(server);
+    }
+  }
 
   console.log('package smoke passed');
 } finally {
