@@ -3,16 +3,16 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: npm dist-tag to publish
+      operation:
+        description: Release operation
         required: true
-        default: next
+        default: publish-next
         type: choice
         options:
-          - next
-          - latest
+          - publish-next
+          - promote-latest
       dry_run:
-        description: Run npm publish without uploading
+        description: Preview the release operation without changing npm
         required: true
         default: true
         type: boolean
@@ -31,11 +31,19 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Release dry run
-        if: ${{ inputs.dry_run }}
-        run: npm run release -- --tag "${{ inputs.tag }}" --dry-run
-      - name: Publish
-        if: ${{ !inputs.dry_run }}
-        run: npm run release -- --tag "${{ inputs.tag }}"
+      - name: Publish next dry run
+        if: ${{ inputs.dry_run && inputs.operation == 'publish-next' }}
+        run: npm run release -- --tag next --dry-run
+      - name: Publish next
+        if: ${{ !inputs.dry_run && inputs.operation == 'publish-next' }}
+        run: npm run release -- --tag next
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Promote latest dry run
+        if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
+        run: npm run release -- --promote-latest --dry-run
+      - name: Promote latest
+        if: ${{ !inputs.dry_run && inputs.operation == 'promote-latest' }}
+        run: npm run release -- --promote-latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
