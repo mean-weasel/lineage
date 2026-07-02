@@ -1,0 +1,117 @@
+.app-shell {
+  transition: grid-template-columns 240ms ease;
+}
+
+.app-shell:has(.sidebar.collapsed) {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.sidebar {
+  position: relative;
+  z-index: 18;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 180ms ease, padding 240ms ease, transform 240ms ease;
+}
+
+.sidebar.collapsed {
+  border-right-color: transparent;
+  overflow: visible;
+  padding-left: 0;
+  padding-right: 0;
+  transform: translateX(-18px);
+  z-index: 60;
+}
+
+.sidebar-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 50vh;
+  left: 244px;
+  z-index: 50;
+  width: 34px;
+  min-height: 34px;
+  border: 1px solid #bdd5dc;
+  border-radius: 8px;
+  background: #f4fafb;
+  color: #125d68;
+  padding: 0;
+  transform: translateY(-50%);
+  transition: left 240ms ease, transform 240ms ease;
+}
+
+.sidebar.collapsed .sidebar-collapse-toggle {
+  left: 12px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar.collapsed > :not(.sidebar-collapse-toggle) {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.mobile-filter-toggle {
+  display: none;
+}
+
+.sidebar-mobile-collapse {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    padding-bottom: 14px;
+  }
+
+  .sidebar .brand {
+    margin-bottom: 12px;
+  }
+
+  .mobile-filter-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f8fbfc;
+    color: #23313a;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .mobile-filter-toggle .open {
+    transform: rotate(180deg);
+  }
+
+  .mobile-filter-toggle svg {
+    transition: transform 180ms ease;
+  }
+
+  .sidebar-mobile-collapse {
+    display: grid;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      max-height 220ms ease,
+      opacity 160ms ease,
+      padding-top 220ms ease;
+  }
+
+  .sidebar-mobile-collapse[data-open="true"] {
+    max-height: 1300px;
+    opacity: 1;
+    padding-top: 14px;
+  }
+
+  .sidebar-mobile-collapse .side-section:last-child {
+    margin-bottom: 0;
+  }
+}

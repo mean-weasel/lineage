@@ -1,0 +1,22 @@
+.asset-live-inventory {
+  display: grid;
+  gap: 2px;
+  max-width: 290px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fafc;
+  padding: 7px 10px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.asset-live-inventory.on {
+  border-color: var(--accent);
+  background: #e9f7f8;
+}
+
+.asset-live-inventory small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+}

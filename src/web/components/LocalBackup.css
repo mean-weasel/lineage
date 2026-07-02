@@ -1,0 +1,118 @@
+.local-selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #bdd5dc;
+  border-radius: 8px;
+  background: #f2fafb;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.local-selection-toolbar div,
+.local-backup-list div {
+  display: grid;
+  gap: 2px;
+}
+
+.local-selection-toolbar strong,
+.local-backup-list strong {
+  color: #17313b;
+  font-size: 13px;
+}
+
+.local-selection-toolbar span,
+.local-backup-list span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.local-selection-toolbar button,
+.local-backup-drawer footer button,
+.local-backup-drawer header button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: #24343d;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.local-selection-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.local-selection-toolbar .icon-lite {
+  width: 34px;
+  justify-content: center;
+  padding: 0;
+}
+
+.local-backup-drawer {
+  display: grid;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.local-backup-drawer header,
+.local-backup-drawer footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 14px;
+}
+
+.local-backup-drawer footer {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.local-backup-drawer h2 {
+  font-size: 18px;
+}
+
+.local-backup-list,
+.local-backup-preview,
+.local-backup-warning {
+  display: grid;
+  gap: 8px;
+  margin: 14px;
+}
+
+.local-backup-list div,
+.local-backup-preview span {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f8fbfc;
+  padding: 9px 10px;
+}
+
+.local-backup-warning {
+  border: 1px solid #e2c1a2;
+  border-radius: 7px;
+  background: #fff8ee;
+  color: #6d451e;
+  padding: 10px 12px;
+}
+
+.local-backup-warning strong {
+  color: #593617;
+  font-size: 13px;
+}
+
+.local-backup-warning span {
+  font-size: 12px;
+  font-weight: 800;
+}

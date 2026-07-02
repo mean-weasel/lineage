@@ -1,0 +1,42 @@
+.drawer-backdrop.asset-detail-backdrop {
+  z-index: 55;
+}
+
+.asset-detail-drawer {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  width: min(440px, 100vw);
+  height: 100vh;
+  overflow: auto;
+  background: var(--surface);
+  box-shadow: -18px 0 44px rgba(18, 31, 45, 0.2);
+  padding: 18px;
+}
+
+.asset-detail-drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.asset-detail-drawer h2 {
+  font-size: 19px;
+}
+
+.asset-detail-drawer header p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.asset-detail-drawer .inspector {
+  border-left: 0;
+  background: transparent;
+  padding: 0;
+}

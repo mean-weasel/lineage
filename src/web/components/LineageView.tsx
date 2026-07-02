@@ -1,0 +1,394 @@
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type Edge, type EdgeChange, type ReactFlowInstance, useEdgesState, useNodesState } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import './LineageView.css';
+import './LineageFocus.css';
+import type { AssetReviewState, GrowthAsset, LineageBriefResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
+import { api } from '../api';
+import type { AssetFlowNode } from './LineageAssetNode';
+import { LineageCanvas } from './LineageCanvas';
+import { LineageContextMenu } from './LineageContextMenu';
+import { LineageDetailModal } from './LineageDetailModal';
+import { LineageNewWorkspaceModal } from './LineageNewWorkspaceModal';
+import { LineageSidePanel } from './LineageSidePanel';
+import { LineageSelectionStrip } from './LineageSelectionStrip';
+import { LineageToolbar } from './LineageToolbar';
+import { saveLineagePositions } from './lineageLayoutApi';
+import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
+import { lineageReviewConflict } from './lineageReviewConflict';
+import { layoutLineageTree, lineageGraphKey, toGraph } from './lineageGraph';
+import { useEscapeClear } from './useEscapeClear';
+import { useLineageWorkspaces } from './useLineageWorkspaces';
+import { useLineageViewportFit } from './useLineageViewportFit';
+export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, onToast }: {
+  asset?: GrowthAsset; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
+}) {
+  const [snapshot, setSnapshot] = useState<LineageSnapshot | null>(null);
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  const [childAssetId, setChildAssetId] = useState('');
+  const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
+  const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
+  const [selectionNote, setSelectionNote] = useState('');
+  const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
+  const [newLineageOpen, setNewLineageOpen] = useState(false);
+  const [sideOpen, setSideOpen] = useState(false);
+  const [sideMounted, setSideMounted] = useState(false);
+  const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<AssetFlowNode>([]);
+  const [flowEdges, setFlowEdges] = useEdgesState<Edge>([]);
+  const [flowApi, setFlowApi] = useState<ReactFlowInstance<AssetFlowNode, Edge> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [menuCloseSignal, setMenuCloseSignal] = useState(0);
+  const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
+  const latestNodes = snapshot?.nodes.filter(node => snapshot.latest.includes(node.asset_id)) || [];
+  const selectedNodes = snapshot?.selected.map(assetId => snapshot.nodes.find(node => node.asset_id === assetId)).filter((node): node is LineageNode => Boolean(node)) || [];
+  const selectedNode = selectedNodes[0];
+  const nextVariationLimit = 3;
+  const selectionFull = selectedNodes.length >= nextVariationLimit;
+  const staleSelectedNodes = selectedNodes.filter(node => !node.is_latest);
+  const rootNode = snapshot?.nodes.find(node => node.asset_id === snapshot.root_asset_id);
+  const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
+  const showCanvasStatus = Boolean(activeNodeId && activeNode);
+  const inspectingId = activeNode?.asset_id || 'none';
+  const nextBaseId = selectedNodes.length > 1 ? `${selectedNodes.length} selected` : selectedNode?.asset_id || 'none';
+  const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
+  const collapseTimer = useRef<number | null>(null);
+  const authoritativeEdges = useRef<Edge[]>([]);
+  const workspaceRootRef = useRef('');
+  const { fitGraph, markViewportInteraction } = useLineageViewportFit(flowApi, snapshot?.root_asset_id, sideOpen);
+  const closeTransientMenus = useCallback(() => {
+    setMenuCloseSignal(value => value + 1);
+    setNodeMenu(null);
+  }, []);
+  const clearFocus = useCallback(() => { setActiveNodeId(null); closeTransientMenus(); }, [closeTransientMenus]);
+  const resetLineage = useCallback(() => { setSnapshot(null); setActiveNodeId(null); setBrief(null); }, []);
+  const {
+    activateWorkspace,
+    activeWorkspace,
+    archiveWorkspace,
+    demoSeedStatus,
+    handleWorkspaceCreated,
+    refreshDemoSeedStatus,
+    refreshWorkspaces,
+    restoreDemoSeedMedia,
+    seedDemoWorkspace,
+    visibleWorkspaces,
+    workspaceLoading,
+    workspaceRootAssetId,
+  } = useLineageWorkspaces({ asset, onResetLineage: resetLineage, onSelectedAsset, onToast, project });
+  workspaceRootRef.current = workspaceRootAssetId;
+  useEffect(() => { void refreshDemoSeedStatus(); }, [refreshDemoSeedStatus]);
+  const refresh = useCallback(async (options: { quiet?: boolean; rootAssetId?: string } = {}) => {
+    const requestedRoot = options.rootAssetId || workspaceRootAssetId;
+    if (!requestedRoot) return;
+    if (!options.quiet) setLoading(true);
+    try {
+      const params = new URLSearchParams({ project });
+      const next = await api<LineageSnapshot>(`/api/lineage/${requestedRoot}?${params.toString()}`);
+      if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return;
+      setSnapshot(next);
+      if (!options.quiet) setBrief(null);
+      setActiveNodeId(current => (current && next.nodes.some(node => node.asset_id === current) ? current : next.active_asset_id));
+    } catch (error) {
+      if (!options.quiet) {
+        setSnapshot(null);
+        onToast('error', error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      if (!options.quiet) setLoading(false);
+    }
+  }, [onToast, project, workspaceRootAssetId]);
+  async function indexAndRefresh() {
+    setLoading(true);
+    try {
+      const result = await api<{ summary: LineageIndexSummary }>('/api/index/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project }),
+      });
+      onToast('ok', `Indexed ${result.summary.total} assets`);
+      await refreshWorkspaces();
+      await refresh();
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function seedDemoAndRefreshAssets() {
+    closeTransientMenus();
+    const seeded = await seedDemoWorkspace();
+    await refresh({ rootAssetId: seeded?.workspace?.root_asset_id || seeded?.root_asset_id });
+    await onAssetsChanged?.();
+  }
+  async function mutateLineage(path: string, body: Record<string, unknown>, message: string) {
+    try {
+      await api(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, ...body }),
+      });
+      onToast('ok', message);
+      await refresh();
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  function setSelected() { if (activeNode) void selectNextBase(activeNode, selectionNote); }
+  function saveRationale() { if (activeNode?.user_selected) void selectNextBase(activeNode, selectionNote); }
+  function selectNextBase(node: LineageNode, notes = node.selection_note || '') {
+    if (!node.user_selected && selectionFull) {
+      onToast('error', `Choose at most ${nextVariationLimit} assets for next variation`);
+      return;
+    }
+    void mutateLineage('/api/selection', {
+      assetId: node.asset_id,
+      rootAssetId: snapshot?.root_asset_id,
+      mode: node.user_selected ? 'remove' : 'add',
+      notes,
+      confirmWrite: true,
+    }, node.user_selected ? `Removed ${node.asset_id} from next variation` : `Using ${node.asset_id} for next variation`);
+  }
+  function replaceNextVariation(node: LineageNode, notes = node.selection_note || '') {
+    void mutateLineage('/api/selection', {
+      assetId: node.asset_id,
+      rootAssetId: snapshot?.root_asset_id,
+      mode: 'replace',
+      notes,
+      confirmWrite: true,
+    }, `Using only ${node.asset_id} for next variation`);
+  }
+  async function clearNextVariation(assetId?: string) {
+    if (!snapshot) return;
+    if (assetId) {
+      await mutateLineage('/api/selection', { assetId, rootAssetId: snapshot.root_asset_id, mode: 'remove', confirmWrite: true }, `Removed ${assetId} from next variation`);
+      return;
+    }
+    if (selectedNodes.length > 0) await mutateLineage('/api/selection', { rootAssetId: snapshot.root_asset_id, clear: true, confirmWrite: true }, 'Removed all assets from next variation');
+  }
+  function toggleSidePanel() {
+    if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
+    if (sideOpen) {
+      setSideOpen(false);
+      collapseTimer.current = window.setTimeout(() => setSideMounted(false), 260);
+      return;
+    }
+    setSideMounted(true);
+    window.requestAnimationFrame(() => setSideOpen(true));
+  }
+  async function markReview(reviewState: AssetReviewState, assetId = activeNode?.asset_id) {
+    if (!assetId) return;
+    const targetNode = snapshot?.nodes.find(node => node.asset_id === assetId);
+    const conflict = lineageReviewConflict(targetNode, reviewState);
+    if (conflict && !window.confirm(conflict.confirmation)) return;
+    if (conflict) await clearNextVariation(assetId);
+    void mutateLineage(`/api/reviews/${assetId}`, { reviewState, confirmWrite: true }, `Marked ${assetId} ${reviewState}`);
+  }
+  async function linkChild() {
+    if (!activeNode || !childAssetId.trim()) return;
+    await mutateLineage('/api/lineage/link', {
+      childAssetId: childAssetId.trim(),
+      confirmWrite: true,
+      parentAssetId: activeNode.asset_id,
+    }, `Linked ${childAssetId.trim()} from ${activeNode.asset_id}`);
+    setChildAssetId('');
+  }
+  async function removeNodeFromLineage(node: LineageNode) {
+    if (!snapshot) return;
+    if (node.asset_id === snapshot.root_asset_id) {
+      onToast('error', 'Root lineage node cannot be removed. Archive this workspace or start a new lineage instead.');
+      return;
+    }
+    const childCount = snapshot.edges.filter(edge => edge.parent_asset_id === node.asset_id).length;
+    const parentCount = snapshot.edges.filter(edge => edge.child_asset_id === node.asset_id).length;
+    const reparentCopy = childCount > 0 && parentCount > 0
+      ? ` Its ${childCount} child${childCount === 1 ? '' : 'ren'} will be reconnected to its parent${parentCount === 1 ? '' : 's'}.`
+      : '';
+    if (!window.confirm(`Remove "${node.title}" from this lineage? This keeps the asset file and S3 object intact.${reparentCopy}`)) return;
+    await mutateLineage('/api/lineage/remove-node', {
+      assetId: node.asset_id,
+      rootAssetId: snapshot.root_asset_id,
+      confirmWrite: true,
+    }, `Removed ${node.asset_id} from lineage`);
+    setNodeMenu(null);
+    setDetailNodeId(current => current === node.asset_id ? null : current);
+    setActiveNodeId(current => current === node.asset_id ? snapshot.root_asset_id : current);
+  }
+  async function saveNodePosition(node: AssetFlowNode) {
+    if (!snapshot) return;
+    try {
+      await saveLineagePositions(project, snapshot.root_asset_id, [{ assetId: node.id, x: node.position.x, y: node.position.y }]);
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  async function tidyGraph() {
+    if (!snapshot) return;
+    const positions = [...layoutLineageTree(snapshot)].map(([assetId, position]) => ({ assetId, ...position }));
+    setFlowNodes(current => current.map(node => ({
+      ...node,
+      position: positions.find(position => position.assetId === node.id) || node.position,
+    })));
+    try {
+      await saveLineagePositions(project, snapshot.root_asset_id, positions);
+      onToast('ok', `Tidied ${positions.length} lineage nodes`);
+      fitGraph(80);
+      await refresh();
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  async function refreshBrief() {
+    if (!snapshot) return;
+    try {
+      const params = new URLSearchParams({ project });
+      setBrief(await api<LineageBriefResponse>(`/api/lineage/${snapshot.root_asset_id}/brief?${params.toString()}`));
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  useEffect(() => {
+    void refreshWorkspaces();
+  }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!workspaceRootAssetId) resetLineage();
+  }, [resetLineage, workspaceRootAssetId]);
+
+  useEffect(() => {
+    if (!snapshot) return undefined;
+    const timer = window.setInterval(() => void refresh({ quiet: true }), 8000);
+    return () => window.clearInterval(timer);
+  }, [refresh, snapshot?.root_asset_id]);
+
+  const graph = useMemo(() => toGraph(snapshot, activeNodeId), [activeNodeId, snapshot]);
+  const graphKey = useMemo(() => lineageGraphKey(snapshot), [snapshot]);
+  authoritativeEdges.current = graph.edges;
+
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setFlowEdges(current => reconcileAuthoritativeEdgeChanges(changes, current, authoritativeEdges.current));
+  }, [setFlowEdges]);
+  const closeOnEscape = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape') closeTransientMenus();
+  }, [closeTransientMenus]);
+
+  useEffect(() => {
+    setSelectionNote(activeNode?.selection_note || '');
+  }, [activeNode?.asset_id, activeNode?.selection_note]);
+
+  useEffect(() => {
+    setFlowNodes(current => graph.nodes.map(node => ({
+      ...node,
+      position: current.find(existing => existing.id === node.id)?.position || node.position,
+    })));
+    setFlowEdges(graph.edges);
+  }, [graph.edges, graph.nodes, setFlowEdges, setFlowNodes]);
+
+  useEscapeClear(Boolean(activeNodeId), clearFocus);
+
+  useEffect(() => () => { if (collapseTimer.current) window.clearTimeout(collapseTimer.current); }, []);
+
+  useEffect(() => {
+    resetLineage();
+  }, [project, resetLineage]);
+  return (
+    <section className="lineage-view" onKeyDownCapture={closeOnEscape}>
+      <LineageToolbar
+        activeWorkspace={activeWorkspace}
+        closeSignal={menuCloseSignal}
+        latestCount={snapshot?.latest.length || 0}
+        loading={loading}
+        demoSeedStatus={demoSeedStatus}
+        nextVariationId={nextBaseId}
+        onArchiveWorkspace={() => void archiveWorkspace()}
+        onFitGraph={() => fitGraph()}
+        onIndexLocal={() => void indexAndRefresh()}
+        onNewLineage={() => setNewLineageOpen(true)}
+        onRefreshLineage={() => void refresh()}
+        onRefreshWorkspaces={() => void refreshWorkspaces()}
+        onRestoreDemoMedia={() => void restoreDemoSeedMedia()}
+        onSeedDemo={() => void seedDemoAndRefreshAssets()}
+        onSelectWorkspace={workspaceId => void activateWorkspace(workspaceId)}
+        onTidyGraph={() => void tidyGraph()}
+        onToggleNextPanel={toggleSidePanel}
+        sideOpen={sideOpen}
+        snapshot={snapshot}
+        workspaceLoading={workspaceLoading}
+        workspaceRootAssetId={workspaceRootAssetId}
+        workspaces={visibleWorkspaces}
+      />
+      {snapshot && (
+        <div className="lineage-scope-bar">
+          <strong>Root scope</strong>
+          <code>{rootNode?.title || snapshot.root_asset_id}</code>
+          <span>{snapshot.edges.length > 0 ? `${snapshot.edges.length} linked variation${snapshot.edges.length === 1 ? '' : 's'}` : 'No linked variations yet; pick another asset or link a child to grow this tree.'}</span>
+        </div>
+      )}
+      {snapshot && <LineageSelectionStrip clearSelection={() => void clearNextVariation()} limit={nextVariationLimit} openManager={toggleSidePanel} selectedCount={selectedNodes.length} staleCount={staleSelectedNodes.length} />}
+      <div className="lineage-workbench" data-testid="lineage-workbench">
+        <div className={`lineage-canvas ${activeNodeId ? 'focus-active' : ''}`}>
+          <LineageCanvas
+            activeNode={activeNode}
+            flowEdges={snapshot ? flowEdges : []}
+            flowNodes={snapshot ? flowNodes : []}
+            graphKey={graphKey}
+            inspectingId={inspectingId}
+            loading={loading}
+            onEdgesChange={handleEdgesChange}
+            onClearFocus={clearFocus}
+            onIndexNow={() => void indexAndRefresh()}
+            onNewLineage={() => setNewLineageOpen(true)}
+            onNodeActionMenu={(assetId, x, y) => setNodeMenu(assetId ? { assetId, x, y } : null)}
+            onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}
+            onNodeOpenDetail={setDetailNodeId}
+            onNodePosition={node => void saveNodePosition(node)}
+            onNodesChange={onNodesChange}
+            onReady={setFlowApi}
+            onSelectedAsset={onSelectedAsset}
+            onViewportInteraction={markViewportInteraction}
+            showCanvasStatus={showCanvasStatus}
+            workspaceRootAssetId={workspaceRootAssetId}
+          />
+        </div>
+        {sideMounted && snapshot && (
+          <LineageSidePanel
+            activeNode={activeNode}
+            brief={brief}
+            childAssetId={childAssetId}
+            clearNextVariation={clearNextVariation}
+            closePanel={toggleSidePanel}
+            latestNodes={latestNodes}
+            linkChild={linkChild}
+            markReview={markReview}
+            nextVariationLimit={nextVariationLimit}
+            noteDirty={noteDirty}
+            onSelectedAsset={onSelectedAsset}
+            onToast={onToast}
+            project={project}
+            refreshBrief={refreshBrief}
+            saveRationale={saveRationale}
+            replaceNextVariation={replaceNextVariation}
+            selectNextBase={selectNextBase}
+            selectedNode={selectedNode}
+            selectedNodes={selectedNodes}
+            selectionFull={selectionFull}
+            selectionNote={selectionNote}
+            setActiveNodeId={setActiveNodeId}
+            setChildAssetId={setChildAssetId}
+            setDetailNodeId={setDetailNodeId}
+            setSelected={setSelected}
+            setSelectionNote={setSelectionNote}
+            sideOpen={sideOpen}
+            snapshot={snapshot}
+          />
+        )}
+        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} node={menuNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClose={() => setNodeMenu(null)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
+      </div>
+      {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
+      <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
+    </section>
+  );
+}

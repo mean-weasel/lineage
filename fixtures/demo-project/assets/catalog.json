@@ -1,0 +1,172 @@
+{
+  "assets": [
+    {
+      "asset_id": "demo-meta-short-form-upload-demo-post-static",
+      "channel": "meta",
+      "s3": {
+        "bucket": "lineage-demo-assets",
+        "content_type": "image/png",
+        "key": "products/demo-project/campaigns/2026-06-public-demo/channels/meta/audiences/creators/statuses/working/types/image/assets/demo-meta-short-form-upload-demo-post-static/demo-meta-short-form-upload-demo-post-static.png",
+        "region": "us-east-1",
+        "size_bytes": 2048,
+        "updated_at": "2026-06-24T12:00:00.000Z",
+        "version_id": "public-demo-version"
+      },
+      "status": "working",
+      "title": "Meta short-form demo post static",
+      "audience": "creators",
+      "campaign": "2026-06-public-demo",
+      "content_type": "image",
+      "cta": "Save the idea",
+      "hook": "Public demo creative for local review.",
+      "product": "demo-project",
+      "project": "demo-project",
+      "source": "catalog",
+      "utm_content": "demo_meta_short_form_upload_demo_post_static"
+    },
+    {
+      "asset_id": "demo-linkedin-ledger-catalog-shared",
+      "channel": "linkedin",
+      "hook": "Shared ledger creative with catalog metadata.",
+      "s3": {
+        "bucket": "lineage-demo-assets",
+        "content_type": "image/png",
+        "key": "products/demo-project/campaigns/2026-06-public-demo/channels/linkedin/audiences/creators/statuses/working/types/image/assets/demo-linkedin-ledger-catalog-shared/demo-linkedin-ledger-catalog-shared.png",
+        "region": "us-east-1",
+        "size_bytes": 2048,
+        "updated_at": "2026-06-24T12:00:00.000Z",
+        "version_id": "public-demo-version"
+      },
+      "status": "working",
+      "title": "LinkedIn ledger catalog shared",
+      "audience": "creators",
+      "campaign": "2026-06-public-demo",
+      "content_type": "image",
+      "cta": "Save the idea",
+      "product": "demo-project",
+      "project": "demo-project",
+      "source": "catalog",
+      "utm_content": "demo_linkedin_ledger_catalog_shared"
+    },
+    {
+      "asset_id": "demo-linkedin-upload-demo-done-static-grounded-v2",
+      "channel": "linkedin",
+      "placements": [
+        {
+          "channel": "linkedin",
+          "notes": "Synthetic public scheduled placement.",
+          "scheduled_at": "2026-06-24T16:00:00-07:00",
+          "status": "scheduled",
+          "updated_at": "2026-06-24T12:30:00.000Z"
+        }
+      ],
+      "s3": {
+        "bucket": "lineage-demo-assets",
+        "content_type": "image/png",
+        "key": "products/demo-project/campaigns/2026-06-public-demo/channels/linkedin/audiences/creators/statuses/approved/types/image/assets/demo-linkedin-upload-demo-done-static-grounded-v2/demo-linkedin-upload-demo-done-static-grounded-v2.png",
+        "region": "us-east-1",
+        "size_bytes": 2048,
+        "updated_at": "2026-06-24T12:00:00.000Z",
+        "version_id": "public-demo-version"
+      },
+      "status": "approved",
+      "title": "LinkedIn upload demo scheduled static",
+      "audience": "creators",
+      "campaign": "2026-06-public-demo",
+      "content_type": "image",
+      "cta": "Save the idea",
+      "hook": "Public demo creative for local review.",
+      "product": "demo-project",
+      "project": "demo-project",
+      "source": "catalog",
+      "utm_content": "demo_linkedin_upload_demo_done_static_grounded_v2"
+    },
+    {
+      "asset_id": "demo-tiktok-upload-demo-export-vertical",
+      "channel": "tiktok",
+      "format": "vertical",
+      "hook": "Fast vertical demo export for content queue tests.",
+      "s3": {
+        "bucket": "lineage-demo-assets",
+        "content_type": "image/png",
+        "key": "products/demo-project/campaigns/2026-06-public-demo/channels/tiktok/audiences/creators/statuses/working/types/image/assets/demo-tiktok-upload-demo-export-vertical/demo-tiktok-upload-demo-export-vertical.png",
+        "region": "us-east-1",
+        "size_bytes": 2048,
+        "updated_at": "2026-06-24T12:00:00.000Z",
+        "version_id": "public-demo-version"
+      },
+      "status": "working",
+      "title": "TikTok upload demo export vertical",
+      "audience": "creators",
+      "campaign": "2026-06-public-demo",
+      "content_type": "image",
+      "cta": "Save the idea",
+      "product": "demo-project",
+      "project": "demo-project",
+      "source": "catalog",
+      "utm_content": "demo_tiktok_upload_demo_export_vertical"
+    },
+    {
+      "asset_id": "demo-youtube-short-demo-posted-cut",
+      "channel": "youtube",
+      "placements": [
+        {
+          "channel": "youtube",
+          "notes": "Synthetic public posted placement.",
+          "posted_at": "2026-06-25T16:00:00-07:00",
+          "status": "posted",
+          "updated_at": "2026-06-25T17:00:00.000Z"
+        }
+      ],
+      "s3": {
+        "bucket": "lineage-demo-assets",
+        "content_type": "image/png",
+        "key": "products/demo-project/campaigns/2026-06-public-demo/channels/youtube/audiences/creators/statuses/published/types/image/assets/demo-youtube-short-demo-posted-cut/demo-youtube-short-demo-posted-cut.png",
+        "region": "us-east-1",
+        "size_bytes": 2048,
+        "updated_at": "2026-06-24T12:00:00.000Z",
+        "version_id": "public-demo-version"
+      },
+      "status": "published",
+      "title": "YouTube short demo posted cut",
+      "audience": "creators",
+      "campaign": "2026-06-public-demo",
+      "content_type": "image",
+      "cta": "Save the idea",
+      "hook": "Public demo creative for local review.",
+      "product": "demo-project",
+      "project": "demo-project",
+      "source": "catalog",
+      "utm_content": "demo_youtube_short_demo_posted_cut"
+    },
+    {
+      "asset_id": "demo-x-twitter-carousel-demo-working-static",
+      "channel": "x-twitter",
+      "format": "static",
+      "s3": {
+        "bucket": "lineage-demo-assets",
+        "content_type": "image/png",
+        "key": "products/demo-project/campaigns/2026-06-public-demo/channels/x-twitter/audiences/creators/statuses/working/types/image/assets/demo-x-twitter-carousel-demo-working-static/demo-x-twitter-carousel-demo-working-static.png",
+        "region": "us-east-1",
+        "size_bytes": 2048,
+        "updated_at": "2026-06-24T12:00:00.000Z",
+        "version_id": "public-demo-version"
+      },
+      "status": "working",
+      "title": "X Twitter carousel demo working static",
+      "audience": "creators",
+      "campaign": "2026-06-public-demo",
+      "content_type": "image",
+      "cta": "Save the idea",
+      "hook": "Public demo creative for local review.",
+      "product": "demo-project",
+      "project": "demo-project",
+      "source": "catalog",
+      "utm_content": "demo_x_twitter_carousel_demo_working_static"
+    }
+  ],
+  "default_bucket": "",
+  "default_region": "",
+  "product": "demo-project",
+  "project": "demo-project"
+}

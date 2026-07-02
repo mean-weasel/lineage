@@ -1,0 +1,252 @@
+.ledger-view {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  padding: 16px;
+}
+
+.ledger-head h2 {
+  font-size: 18px;
+}
+
+.ledger-head p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ledger-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ledger-head-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ledger-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fbfc;
+  padding: 10px 16px;
+}
+
+.ledger-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ledger-summary strong {
+  color: #26343d;
+  font-size: 12px;
+}
+
+.ledger-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+}
+
+.ledger-filter-group {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ledger-filter-group span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ledger-filter-group select {
+  min-height: 36px;
+  border-color: #cbd9de;
+  background: #fff;
+  color: #29404a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ledger-list {
+  display: grid;
+  gap: 8px;
+  max-height: calc(100vh - 330px);
+  overflow: auto;
+  padding: 12px;
+}
+
+.ledger-record {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.ledger-record.expanded {
+  border-color: #a8cdd6;
+  background: #fff;
+}
+
+.ledger-record-main {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.65fr) minmax(240px, 1fr);
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 13px 14px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ledger-record-title strong,
+.ledger-record-title code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledger-record-title code {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ledger-record.selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ledger-record-meta,
+.ledger-record-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ledger-record-meta span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ledger-pill {
+  border: 1px solid #cbd9de;
+  border-radius: 999px;
+  background: #f7fbfc;
+  padding: 5px 8px;
+  color: #29404a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ledger-record.scheduled .ledger-pill,
+.ledger-record.selected .ledger-pill {
+  border-color: #9ccbbc;
+  background: #edf9f4;
+}
+
+.ledger-record.posted .ledger-pill,
+.ledger-record.approved .ledger-pill {
+  border-color: #bed3ea;
+  background: #f1f7ff;
+}
+
+.ledger-record-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr) auto;
+  gap: 14px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+  background: #fff;
+  padding: 12px 14px 14px;
+}
+
+.ledger-record-detail h3 {
+  margin: 0 0 8px;
+  color: #33414a;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.ledger-record-detail p {
+  margin: 0 0 5px;
+  color: #40515d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ledger-record-detail ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.ledger-record-detail li {
+  display: grid;
+  gap: 2px;
+  color: #40515d;
+  font-size: 12px;
+  list-style: none;
+}
+
+.ledger-record-detail li span {
+  overflow-wrap: anywhere;
+}
+
+.ledger-error,
+.ledger-empty {
+  margin: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .ledger-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ledger-head-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ledger-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-record-main,
+  .ledger-record-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

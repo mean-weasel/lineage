@@ -1,0 +1,123 @@
+.lineage-new-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  background: rgba(18, 28, 36, 0.42);
+  padding: 18px;
+}
+
+.lineage-new-modal {
+  display: grid;
+  gap: 14px;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 28px 80px rgba(14, 26, 34, 0.24);
+  padding: 16px;
+}
+
+.lineage-new-modal header,
+.lineage-new-modal footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.lineage-new-modal h3 {
+  font-size: 18px;
+}
+
+.lineage-new-modal p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.lineage-new-search,
+.lineage-new-field {
+  display: grid;
+  gap: 6px;
+}
+
+.lineage-new-search span,
+.lineage-new-field span {
+  color: #40515d;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lineage-new-search input,
+.lineage-new-field input,
+.lineage-new-field textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.lineage-new-field textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.lineage-new-results {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #d8e3e8;
+  border-radius: 8px;
+  background: #f8fbfc;
+  padding: 8px;
+}
+
+.lineage-new-results button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #d4dde3;
+  border-radius: 8px;
+  background: #fff;
+  color: #26343d;
+  padding: 10px;
+  text-align: left;
+}
+
+.lineage-new-results button.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(8, 127, 140, 0.12);
+}
+
+.lineage-new-results strong,
+.lineage-new-results code {
+  overflow-wrap: anywhere;
+}
+
+.lineage-new-results code,
+.lineage-new-results span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lineage-new-modal footer {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .lineage-new-modal footer {
+    display: grid;
+  }
+}

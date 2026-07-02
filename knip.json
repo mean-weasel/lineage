@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/server.ts",
+    "src/cli/lineage.ts",
+    "src/cli/lineage-dev.ts",
+    "scripts/*.mjs",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "tsconfig.build.json"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/**/*.{js,mjs,ts}",
+    "*.config.{js,mjs,ts}",
+    "tsconfig.build.json"
+  ],
+  "ignore": ["dist/**", "coverage/**", ".lineage-scratch/**"],
+  "ignoreIssues": {
+    "src/server/assetCore.ts": ["exports"],
+    "src/server/assetLedgerApi.ts": ["exports", "types"],
+    "src/server/assetReviews.ts": ["exports"],
+    "src/shared/appConstants.ts": ["exports"]
+  }
+}
