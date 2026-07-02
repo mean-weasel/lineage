@@ -39,7 +39,7 @@ function catalog(asset: GrowthAsset = baseAsset): AssetCatalog {
 
 function createDeps(overrides: Partial<StorageAdapterDependencies> = {}) {
   let currentCatalog = catalog();
-  const calls: Array<{ args: string[]; command?: string; kind: 'aws' | 'script' }> = [];
+  const calls: Array<{ args: string[]; kind: 'aws' }> = [];
   const deps: StorageAdapterDependencies = {
     assetById: (assetCatalog, assetId) => {
       const asset = assetCatalog.assets.find(item => item.asset_id === assetId);
@@ -53,10 +53,6 @@ function createDeps(overrides: Partial<StorageAdapterDependencies> = {}) {
     createError: (message, status) => Object.assign(new Error(message), { status }),
     defaultProject: 'adapter-project',
     loadCatalog: () => currentCatalog,
-    runAssetScript: (command, args) => {
-      calls.push({ args, command, kind: 'script' });
-      return { stdout: JSON.stringify({ command, ok: true }), stderr: '' };
-    },
     runAws: args => {
       calls.push({ args, kind: 'aws' });
       if (args[0] === 'sts') {
@@ -72,6 +68,7 @@ function createDeps(overrides: Partial<StorageAdapterDependencies> = {}) {
         stderr: '',
       };
     },
+    repoRoot,
     saveCatalog: (_project, nextCatalog) => {
       currentCatalog = nextCatalog;
       return currentCatalog;
@@ -121,45 +118,40 @@ describe('s3 storage adapter', () => {
     expect(failing.adapter.getIdentity()).toBeUndefined();
   });
 
-  it('delegates pull and presign to the asset script with direct arguments', () => {
-    const { adapter, calls } = createDeps({
-      runAssetScript: (command, args) => {
-        calls.push({ args, command, kind: 'script' });
-        return { stdout: command === 'presign' ? 'https://example.test/presigned\n' : '', stderr: '' };
-      },
-    });
+  it('previews and prepares catalog assets without external storage commands', () => {
+    const { adapter, calls } = createDeps();
 
-    expect(adapter.pullAsset('adapter-project', 'asset-001', '.asset-scratch/out')).toMatchObject({ ok: true, message: 'Pulled asset-001' });
-    expect(adapter.presignAsset('adapter-project', 'asset-001', 600)).toEqual({ assetId: 'asset-001', expiresIn: 600, url: 'https://example.test/presigned' });
-    expect(calls).toEqual([
-      { args: ['--project', 'adapter-project', '--asset-id', 'asset-001', '--out', '.asset-scratch/out'], command: 'pull', kind: 'script' },
-      { args: ['--project', 'adapter-project', '--asset-id', 'asset-001', '--expires-in', '600'], command: 'presign', kind: 'script' },
-    ]);
+    expect(adapter.pullAsset('adapter-project', 'asset-001', '.asset-scratch/out')).toMatchObject({
+      ok: true,
+      message: 'Prepared asset-001 for local review',
+      output: { assetId: 'asset-001', out: '.asset-scratch/out', storage: 'catalog-s3-metadata' },
+    });
+    const preview = adapter.presignAsset('adapter-project', 'asset-001', 600);
+
+    expect(preview).toMatchObject({ assetId: 'asset-001', expiresIn: 600 });
+    expect(preview.url).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(calls).toEqual([]);
   });
 
-  it('keeps promote confirmation and legacy command behavior', () => {
-    const { adapter, calls } = createDeps();
+  it('keeps promote confirmation and updates the catalog locally', () => {
+    const { adapter, calls, getCatalog } = createDeps();
 
     expect(() => adapter.promoteAsset('adapter-project', 'asset-001', false)).toThrow('Promote requires confirmWrite=true');
     expect(adapter.promoteAsset('adapter-project', 'asset-001', true)).toMatchObject({
       message: 'Promoted asset-001',
       ok: true,
-      output: { command: 'promote', ok: true },
     });
-    expect(calls).toContainEqual({
-      args: ['--project', 'adapter-project', '--asset-id', 'asset-001', '--confirm-write'],
-      command: 'promote',
-      kind: 'script',
-    });
+    expect(getCatalog().assets[0].status).toBe('published');
+    expect(calls).toEqual([]);
   });
 
-  it('validates upload fields and returns local file metadata around the legacy upload command', () => {
+  it('validates upload fields and records the upload in the local catalog', () => {
     const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-s3-adapter');
     const file = join(scratchDir, 'upload.png');
     rmSync(scratchDir, { force: true, recursive: true });
     mkdirSync(scratchDir, { recursive: true });
     writeFileSync(file, Buffer.from('adapter-upload'));
-    const { adapter, calls } = createDeps();
+    const { adapter, calls, getCatalog } = createDeps();
     const fields: UploadFields = {
       assetId: 'asset-001',
       audience: 'founders',
@@ -182,28 +174,32 @@ describe('s3 storage adapter', () => {
       const result = adapter.uploadAsset(file, fields);
 
       expect(result).toMatchObject({
-        message: 'Uploaded asset-001',
+        message: 'Recorded asset-001 locally',
         ok: true,
         output: {
           contentType: 'image/png',
           file: 'upload.png',
+          relativePath: join('uploads', 'adapter-project', 'asset-001', 'upload.png'),
           sizeBytes: Buffer.byteLength('adapter-upload'),
-          uploaded: { command: 'upload', ok: true },
         },
       });
       expect((result.output as { checksumSha256?: string }).checksumSha256).toHaveLength(64);
-      expect(calls).toContainEqual({
-        args: [
-          '--project', 'adapter-project', '--file', file, '--campaign', 'adapter-test', '--channel', 'linkedin', '--audience', 'founders',
-          '--status', 'working', '--type', 'image', '--asset-id', 'asset-001', '--title', 'Adapter upload', '--hook', 'Hook',
-          '--cta', 'Try it', '--utm-content', 'adapter_upload', '--confirm-write',
-          '--message-family', 'workflow', '--format', 'square', '--notes', 'adapter note',
-        ],
-        command: 'upload',
-        kind: 'script',
+      expect(getCatalog().assets[0]).toMatchObject({
+        asset_id: 'asset-001',
+        format: 'square',
+        local: {
+          content_type: 'image/png',
+          relative_path: join('uploads', 'adapter-project', 'asset-001', 'upload.png'),
+          size_bytes: Buffer.byteLength('adapter-upload'),
+        },
+        message_family: 'workflow',
+        notes: 'adapter note',
+        title: 'Adapter upload',
       });
+      expect(calls).toEqual([]);
     } finally {
       rmSync(scratchDir, { force: true, recursive: true });
+      rmSync(join(repoRoot, '.asset-scratch', 'uploads', 'adapter-project'), { force: true, recursive: true });
     }
   });
 

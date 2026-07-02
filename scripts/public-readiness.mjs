@@ -37,6 +37,7 @@ const privatePatterns = [
 
 const legacyPatterns = [
   ['Asset', ' Studio'],
+  ['Asset', 'Studio'],
   ['Growth Asset', ' Studio'],
   ['asset_studio', '.agent_handoff.v1'],
   ['studio', ':cli'],

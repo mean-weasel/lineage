@@ -204,6 +204,60 @@ describe('asset core catalog listing', () => {
     }
   });
 
+  it('presigns root catalog S3-metadata assets without external scripts', () => {
+    const originalPath = process.env.PATH;
+    const blockedPath = join(repoRoot, '.asset-scratch', 'vitest-empty-path-root-catalog');
+    const project = 'vitest-root-catalog-preview';
+    const projectDir = join(repoRoot, project);
+    const catalogFile = join(projectDir, 'assets', 'catalog.json');
+    rmSync(projectDir, { force: true, recursive: true });
+    rmSync(blockedPath, { force: true, recursive: true });
+    mkdirSync(join(projectDir, 'assets'), { recursive: true });
+    mkdirSync(blockedPath, { recursive: true });
+    writeFileSync(catalogFile, `${JSON.stringify({
+      assets: [{
+        asset_id: 'asset-001',
+        audience: 'reviewers',
+        campaign: 'package-review',
+        channel: 'linkedin',
+        content_type: 'image',
+        cta: 'Review package',
+        hook: 'A root catalog asset should preview without private scripts.',
+        product: project,
+        project,
+        s3: {
+          bucket: 'review-bucket',
+          key: 'products/vitest-root-catalog-preview/assets/asset-001/image.png',
+          region: 'us-east-1',
+        },
+        source: 'catalog',
+        status: 'working',
+        title: 'Review asset',
+        utm_content: 'review_asset',
+      }],
+      default_bucket: 'review-bucket',
+      default_region: 'us-east-1',
+      product: project,
+      project,
+    }, null, 2)}\n`);
+    process.env.PATH = blockedPath;
+
+    try {
+      const preview = presignAsset(project, 'asset-001', 456);
+      const encoded = preview.url.replace(/^data:image\/svg\+xml;base64,/, '');
+      const svg = Buffer.from(encoded, 'base64').toString('utf8');
+
+      expect(preview).toMatchObject({ assetId: 'asset-001', expiresIn: 456 });
+      expect(preview.url).toMatch(/^data:image\/svg\+xml;base64,/);
+      expect(svg).toContain('Lineage catalog preview');
+      expect(svg).toContain('No external storage requested');
+    } finally {
+      process.env.PATH = originalPath;
+      rmSync(projectDir, { force: true, recursive: true });
+      rmSync(blockedPath, { force: true, recursive: true });
+    }
+  });
+
   it('rejects missing public fallback assets without external scripts', () => {
     const originalPath = process.env.PATH;
     const blockedPath = join(repoRoot, '.asset-scratch', 'vitest-empty-path-missing');

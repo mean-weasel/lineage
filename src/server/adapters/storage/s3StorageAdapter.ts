@@ -1,5 +1,5 @@
-import { existsSync, statSync } from 'node:fs';
-import { basename } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { contentTypeFor, fileSha256 } from '../../localReview';
 import type { AssetCatalog, LiveS3Object, MutationResponse, PresignResponse } from '../../../shared/types';
 import type { StorageAdapter, StorageAdapterDependencies } from './types';
@@ -9,6 +9,21 @@ export function parseAssetIdFromS3Key(key: string): string | undefined {
   const index = key.indexOf(marker);
   if (index === -1) return undefined;
   return key.slice(index + marker.length).split('/')[0];
+}
+
+function previewDataUrl(asset: { asset_id: string; channel?: string; status?: string; title?: string }): string {
+  const title = asset.title || asset.asset_id;
+  const label = `${asset.channel || 'catalog'} / ${asset.status || 'working'}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><rect width="1200" height="675" fill="#f7f5ef"/><rect x="56" y="56" width="1088" height="563" rx="18" fill="#10201c"/><text x="96" y="145" fill="#9fe6c8" font-family="Arial, sans-serif" font-size="34" font-weight="700">Lineage catalog preview</text><text x="96" y="230" fill="#fff8e6" font-family="Arial, sans-serif" font-size="56" font-weight="700">${escapeSvgText(asset.asset_id)}</text><text x="96" y="330" fill="#d9e8df" font-family="Arial, sans-serif" font-size="34">${escapeSvgText(title)}</text><text x="96" y="500" fill="#9fb7ae" font-family="Arial, sans-serif" font-size="26">${escapeSvgText(label)}. No external storage requested.</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 export function createS3StorageAdapter(deps: StorageAdapterDependencies): StorageAdapter {
@@ -61,24 +76,37 @@ export function createS3StorageAdapter(deps: StorageAdapterDependencies): Storag
     },
 
     presignAsset(project, assetId, expiresIn = 900): PresignResponse {
-      const output = deps.runAssetScript('presign', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--expires-in', String(expiresIn)]);
-      return { assetId, expiresIn, url: output.stdout.trim() };
+      const catalog = deps.loadCatalog(project);
+      const asset = deps.assetById(catalog, assetId);
+      return { assetId, expiresIn, url: previewDataUrl(asset) };
     },
 
     promoteAsset(project, assetId, confirmWrite): MutationResponse {
       if (!confirmWrite) throw deps.createError('Promote requires confirmWrite=true');
-      const output = deps.runAssetScript('promote', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--confirm-write']);
+      const catalog = deps.loadCatalog(project);
+      const asset = deps.assetById(catalog, assetId);
+      asset.status = 'published';
+      deps.saveCatalog(project, catalog);
       return {
         ok: true,
         message: `Promoted ${assetId}`,
-        output: JSON.parse(output.stdout || '{}'),
-        catalog: deps.loadCatalog(project),
+        catalog,
       };
     },
 
     pullAsset(project, assetId, out = '.asset-scratch'): MutationResponse {
-      const output = deps.runAssetScript('pull', ['--project', deps.cleanProject(project), '--asset-id', assetId, '--out', out]);
-      return { ok: true, message: output.stdout.trim() || `Pulled ${assetId}` };
+      const catalog = deps.loadCatalog(project);
+      const asset = deps.assetById(catalog, assetId);
+      return {
+        ok: true,
+        message: `Prepared ${assetId} for local review`,
+        output: {
+          assetId: asset.asset_id,
+          out,
+          storage: asset.local ? 'local' : asset.s3 ? 'catalog-s3-metadata' : 'catalog',
+          note: 'Lineage public package does not pull cloud objects automatically.',
+        },
+      };
     },
 
     uploadAsset(file, fields): MutationResponse {
@@ -88,29 +116,56 @@ export function createS3StorageAdapter(deps: StorageAdapterDependencies): Storag
       if (!deps.supportedContentTypes.has(fields.type)) throw deps.createError(`Unsupported asset type: ${fields.type}`);
 
       const project = deps.cleanProject(fields.project || fields.product || deps.defaultProject);
-      const args = [
-        '--project', project, '--file', file, '--campaign', fields.campaign, '--channel', fields.channel, '--audience', fields.audience,
-        '--status', fields.status, '--type', fields.type, '--asset-id', fields.assetId, '--title', fields.title, '--hook', fields.hook,
-        '--cta', fields.cta, '--utm-content', fields.utmContent,
-        '--confirm-write',
-      ];
-      if (fields.messageFamily) args.push('--message-family', fields.messageFamily);
-      if (fields.format) args.push('--format', fields.format);
-      if (fields.notes) args.push('--notes', fields.notes);
-
-      const output = deps.runAssetScript('upload', args);
-      const uploaded = JSON.parse(output.stdout || '{}') as unknown;
+      const catalog = deps.loadCatalog(project);
+      const relativePath = join('uploads', project, fields.assetId, basename(file));
+      const absolutePath = join(deps.repoRoot, '.asset-scratch', relativePath);
+      mkdirSync(dirname(absolutePath), { recursive: true });
+      copyFileSync(file, absolutePath);
+      const stats = statSync(absolutePath);
+      const contentType = contentTypeFor(absolutePath);
+      const checksumSha256 = fileSha256(absolutePath);
+      const now = new Date().toISOString();
+      const nextAsset = {
+        asset_id: fields.assetId,
+        audience: fields.audience,
+        campaign: fields.campaign,
+        channel: fields.channel,
+        content_type: fields.type,
+        cta: fields.cta,
+        hook: fields.hook,
+        ...(fields.format ? { format: fields.format } : {}),
+        local: {
+          absolute_path: absolutePath,
+          checksum_sha256: checksumSha256,
+          content_type: contentType,
+          relative_path: relativePath,
+          size_bytes: stats.size,
+          updated_at: now,
+        },
+        ...(fields.messageFamily ? { message_family: fields.messageFamily } : {}),
+        ...(fields.notes ? { notes: fields.notes } : {}),
+        product: project,
+        project,
+        source: 'catalog' as const,
+        status: fields.status,
+        title: fields.title,
+        utm_content: fields.utmContent,
+      };
+      const existing = catalog.assets.findIndex(asset => asset.asset_id === fields.assetId);
+      if (existing >= 0) catalog.assets[existing] = { ...catalog.assets[existing], ...nextAsset };
+      else catalog.assets.push(nextAsset);
+      deps.saveCatalog(project, catalog);
       return {
         ok: true,
-        message: `Uploaded ${fields.assetId}`,
+        message: `Recorded ${fields.assetId} locally`,
         output: {
-          uploaded,
-          file: basename(file),
-          sizeBytes: statSync(file).size,
-          contentType: contentTypeFor(file),
-          checksumSha256: fileSha256(file),
+          file: basename(absolutePath),
+          relativePath,
+          sizeBytes: stats.size,
+          contentType,
+          checksumSha256,
         },
-        catalog: deps.loadCatalog(project),
+        catalog,
       };
     },
   };

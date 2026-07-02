@@ -62,19 +62,19 @@ interface CommandResult {
   stderr: string;
 }
 
-class AssetStudioError extends Error {
+class LineageAssetError extends Error {
   constructor(message: string, public status = 400) {
     super(message);
   }
 }
 
-export function isAssetStudioError(error: unknown): error is AssetStudioError {
-  return error instanceof AssetStudioError;
+export function isLineageAssetError(error: unknown): error is LineageAssetError {
+  return error instanceof LineageAssetError;
 }
 
 export function cleanProject(project = defaultProject): string {
   if (!projectNamePattern.test(project)) {
-    throw new AssetStudioError('Project must be lowercase kebab-case');
+    throw new LineageAssetError('Project must be lowercase kebab-case');
   }
   return project;
 }
@@ -249,11 +249,12 @@ export function loadCatalog(project = defaultProject): AssetCatalog {
     }
     return defaultFallbackCatalog();
   }
-  throw new AssetStudioError(`Missing catalog: ${path}`, 404);
+  throw new LineageAssetError(`Missing catalog: ${path}`, 404);
 }
 
 function saveCatalog(project: string, catalog: AssetCatalog): AssetCatalog {
   const normalized = normalizeCatalog(catalog, project);
+  mkdirSync(dirname(catalogPath(project)), { recursive: true });
   writeFileSync(catalogPath(project), `${JSON.stringify(normalized, null, 2)}\n`);
   return normalized;
 }
@@ -272,14 +273,10 @@ function run(command: string, args: string[]): CommandResult {
 
   if (result.status !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim();
-    throw new AssetStudioError(`${command} ${args.join(' ')} failed${detail ? `: ${detail}` : ''}`, 502);
+    throw new LineageAssetError(`${command} ${args.join(' ')} failed${detail ? `: ${detail}` : ''}`, 502);
   }
 
   return { stdout: result.stdout, stderr: result.stderr };
-}
-
-function runAssetScript(command: string, args: string[]): CommandResult {
-  return run('node', ['scripts/lineage-assets.mjs', command, ...args]);
 }
 
 function runAws(args: string[]): CommandResult {
@@ -294,7 +291,7 @@ export function listProjects(): ProjectSummary[] {
         const catalog = loadCatalog(entry.name);
         return [{ project: catalog.project, product: catalog.product, catalogPath: resolvedCatalogPath(entry.name), default_bucket: catalog.default_bucket, default_region: catalog.default_region, asset_count: catalog.assets.length }];
       } catch (error) {
-        if (error instanceof AssetStudioError && error.status === 404) return [];
+        if (error instanceof LineageAssetError && error.status === 404) return [];
         throw error;
       }
     })
@@ -309,18 +306,18 @@ export function listProjects(): ProjectSummary[] {
 
 function assetById(catalog: AssetCatalog, assetId: string): GrowthAsset {
   const asset = catalog.assets.find(item => item.asset_id === assetId);
-  if (!asset) throw new AssetStudioError(`Unknown asset: ${assetId}`, 404);
+  if (!asset) throw new LineageAssetError(`Unknown asset: ${assetId}`, 404);
   return asset;
 }
 
 const storageAdapter = createS3StorageAdapter({
   assetById,
   cleanProject,
-  createError: (message, status) => new AssetStudioError(message, status),
+  createError: (message, status) => new LineageAssetError(message, status),
   defaultProject,
   loadCatalog,
-  runAssetScript,
   runAws,
+  repoRoot,
   saveCatalog,
   supportedContentTypes: contentTypes,
 });
@@ -426,8 +423,8 @@ export function pullAsset(project: string, assetId: string, out = '.asset-scratc
 }
 
 function placementFromFields(fields: PlacementFields) {
-  if (!fields.channel) throw new AssetStudioError('Placement requires channel');
-  if (!placementStatuses.has(fields.status)) throw new AssetStudioError(`Unsupported placement status: ${fields.status}`);
+  if (!fields.channel) throw new LineageAssetError('Placement requires channel');
+  if (!placementStatuses.has(fields.status)) throw new LineageAssetError(`Unsupported placement status: ${fields.status}`);
   const now = new Date().toISOString();
   return {
     channel: fields.channel,
@@ -446,7 +443,7 @@ export function previewPlacement(project: string, fields: PlacementFields) {
 }
 
 export function updatePlacement(project: string, fields: PlacementFields): MutationResponse {
-  if (!fields.confirmWrite) throw new AssetStudioError('Placement updates require confirmWrite=true');
+  if (!fields.confirmWrite) throw new LineageAssetError('Placement updates require confirmWrite=true');
   const catalog = loadCatalog(project);
   const asset = assetById(catalog, fields.assetId);
   const placement = placementFromFields(fields);
@@ -471,7 +468,7 @@ export function localPreviewPath(relativePath: string): string {
   try {
     return resolveLocalPreviewPath(repoRoot, relativePath);
   } catch (error) {
-    throw new AssetStudioError(error instanceof Error ? error.message : 'Unknown local review asset', 404);
+    throw new LineageAssetError(error instanceof Error ? error.message : 'Unknown local review asset', 404);
   }
 }
 
@@ -480,7 +477,7 @@ export function promoteAsset(project: string, assetId: string, confirmWrite: boo
 }
 
 export function archiveAsset(project: string, assetId: string, confirmArchive: boolean): MutationResponse {
-  if (!confirmArchive) throw new AssetStudioError('Archive requires confirmArchive=true');
+  if (!confirmArchive) throw new LineageAssetError('Archive requires confirmArchive=true');
   const catalog = loadCatalog(project);
   const asset = assetById(catalog, assetId);
   asset.status = 'archived';

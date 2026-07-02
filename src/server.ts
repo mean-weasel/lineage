@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { archiveAsset, cleanupUploadedTemp, defaultProduct, deleteObjectGuarded, ensureUploadDir, isAssetStudioError, listAssets, listProjects, localPreviewPath, presignAsset, pullAsset, promoteAsset, repoRoot, uploadAsset, updatePlacement } from './server/assetCore';
+import { archiveAsset, cleanupUploadedTemp, defaultProduct, deleteObjectGuarded, ensureUploadDir, isLineageAssetError, listAssets, listProjects, localPreviewPath, presignAsset, pullAsset, promoteAsset, repoRoot, uploadAsset, updatePlacement } from './server/assetCore';
 import { isAssetLookupError, lookupAssets } from './server/assetLookup';
 import { getLineageChildren, getLineageNextAsset, getLineageSnapshot, indexLineageAssets, isLineageError, linkLineageAssets, updateAssetReview, updateLineageLayout, updateSelectedAsset } from './server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from './server/assetLineageHandoff';
@@ -361,7 +361,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     res.status(413).json({ error: `Upload exceeds ${Math.round(maxUploadBytes / 1024 / 1024)} MB` });
     return;
   }
-  if (isAssetStudioError(error)) {
+  if (isLineageAssetError(error)) {
     res.status(error.status).json({ error: error.message });
     return;
   }
