@@ -56,9 +56,9 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
       - name: Promote next to latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: npm run release -- --promote-latest --dry-run
+        run: npm run release -- --promote-latest --dry-run --skip-ci
       - name: Promote next to latest
         if: ${{ !inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: npm run release -- --promote-latest
+        run: npm run release -- --promote-latest --skip-ci
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

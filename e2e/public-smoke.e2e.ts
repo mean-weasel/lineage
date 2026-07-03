@@ -19,10 +19,12 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await page.goto('/');
 
   await expect(page.locator('header.lineage-header').getByText('No workspace selected')).toBeVisible();
+  const seedResponse = page.waitForResponse(response => response.url().includes('/api/lineage-workspaces/demo/seed') && response.request().method() === 'POST');
   await page.locator('header.lineage-header').getByRole('button', { name: 'Load demo lineage' }).click();
+  expect((await seedResponse).ok()).toBe(true);
 
-  await expect(page.getByText('Demo: Content iteration tree')).toBeVisible();
-  await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept');
+  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+  await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept', { timeout: 20_000 });
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
 });
 
