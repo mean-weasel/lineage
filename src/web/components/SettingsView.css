@@ -127,6 +127,33 @@
   margin-top: 16px;
 }
 
+.settings-release {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 10px;
+}
+
+.settings-release div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfe;
+  padding: 10px;
+}
+
+.settings-release dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.settings-release dd {
+  margin: 4px 0 0;
+  color: #26343d;
+  font-size: 15px;
+  font-weight: 850;
+}
+
 .settings-meta div {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -180,7 +207,8 @@
   }
 
   .settings-grid,
-  .settings-meta {
+  .settings-meta,
+  .settings-release {
     grid-template-columns: 1fr;
   }
 }

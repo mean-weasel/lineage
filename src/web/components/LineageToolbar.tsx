@@ -100,6 +100,9 @@ export function LineageToolbar({
           workspaces={workspaces}
         />
         <button className="primary-button" onClick={onNewLineage} type="button">New lineage</button>
+        {!activeWorkspace && (
+          <button className="secondary-button" disabled={workspaceLoading} onClick={() => runAndClose(onSeedDemo)} type="button">Load demo lineage</button>
+        )}
         <details className="lineage-demo-menu" onToggle={event => setDemoOpen(event.currentTarget.open)} open={demoOpen}>
           <summary onKeyDown={closeMenusOnEscape} tabIndex={0}>
             <span>Demo seed</span>

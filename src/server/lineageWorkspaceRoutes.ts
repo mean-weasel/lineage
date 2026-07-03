@@ -1,5 +1,8 @@
 import type express from 'express';
 import {
+  indexLineageAssets,
+} from './assetLineage';
+import {
   activateLineageWorkspace,
   archiveLineageWorkspace,
   createLineageWorkspace,
@@ -18,7 +21,9 @@ export function registerLineageWorkspaceRoutes(app: express.Express, projectFrom
   }));
 
   app.post('/api/lineage-workspaces', asyncRoute((req, res) => {
-    res.json(createLineageWorkspace(projectFrom(req), {
+    const project = projectFrom(req);
+    if (req.body.confirmWrite === true) indexLineageAssets(project);
+    res.json(createLineageWorkspace(project, {
       rootAssetId: String(req.body.rootAssetId || ''),
       title: typeof req.body.title === 'string' ? req.body.title : undefined,
       status: req.body.status === 'paused' || req.body.status === 'archived' ? req.body.status : 'active',

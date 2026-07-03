@@ -52,3 +52,10 @@
   width: 28px;
   padding: 0;
 }
+
+.lineage-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
