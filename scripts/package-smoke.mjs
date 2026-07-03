@@ -73,6 +73,12 @@ try {
   const [pack] = JSON.parse(packOutput);
   tarball = join(root, pack.filename);
   const packedFiles = new Set(pack.files.map(file => file.path));
+  const forbiddenPackedFiles = pack.files
+    .map(file => file.path)
+    .filter(file => file.startsWith('docs/') || file.includes('/.goalbuddy-board/') || file.startsWith('.goalbuddy-board/'));
+  if (forbiddenPackedFiles.length > 0) {
+    throw new Error(`Packed tarball includes local planning artifacts: ${forbiddenPackedFiles.join(', ')}`);
+  }
   for (const file of requiredBuildFiles) {
     if (!packedFiles.has(file)) {
       throw new Error(`Packed tarball is missing ${file}`);
