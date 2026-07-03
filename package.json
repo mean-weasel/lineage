@@ -35,7 +35,8 @@
     "release": "node scripts/release.mjs",
     "release:dry-run": "node scripts/release.mjs --dry-run",
     "release:next": "node scripts/release.mjs --tag next",
-    "release:latest": "node scripts/release.mjs --tag latest"
+    "release:latest": "node scripts/release.mjs --promote-latest",
+    "release:promote-latest": "node scripts/release.mjs --promote-latest"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

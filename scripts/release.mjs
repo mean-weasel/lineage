@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const promoteLatest = args.includes('--promote-latest');
 const skipCi = args.includes('--skip-ci');
 
 function readOption(name, fallback) {
@@ -24,6 +25,7 @@ if (!['latest', 'next'].includes(tag)) {
   console.error(`Unsupported npm dist-tag: ${tag}`);
   process.exit(1);
 }
+const fromTag = readOption('--from-tag', 'next');
 
 const packageInfo = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const packageLock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
@@ -45,7 +47,23 @@ if (!skipCi) {
   execFileSync('npm', ['run', 'prepare-release'], { cwd: root, stdio: 'inherit' });
 }
 
-const publishArgs = ['publish', '--access', 'public', '--tag', tag];
-if (dryRun) publishArgs.push('--dry-run');
-execFileSync('npm', publishArgs, { cwd: root, stdio: 'inherit' });
-console.log(`${dryRun ? 'Dry-run prepared' : 'Published'} ${packageInfo.name}@${packageInfo.version} with npm tag ${tag}`);
+if (promoteLatest) {
+  const spec = `${packageInfo.name}@${packageInfo.version}`;
+  if (dryRun) {
+    console.log(`Dry-run would promote ${spec} from npm tag ${fromTag} to latest`);
+    process.exit(0);
+  }
+
+  const distTags = JSON.parse(execFileSync('npm', ['view', packageInfo.name, 'dist-tags', '--json'], { cwd: root, encoding: 'utf8' }));
+  if (distTags[fromTag] !== packageInfo.version) {
+    console.error(`Refusing to promote: npm tag ${fromTag} points to ${distTags[fromTag] || '(missing)'}, expected ${packageInfo.version}`);
+    process.exit(1);
+  }
+  execFileSync('npm', ['dist-tag', 'add', spec, 'latest'], { cwd: root, stdio: 'inherit' });
+  console.log(`Promoted ${spec} to npm tag latest`);
+} else {
+  const publishArgs = ['publish', '--access', 'public', '--tag', tag];
+  if (dryRun) publishArgs.push('--dry-run');
+  execFileSync('npm', publishArgs, { cwd: root, stdio: 'inherit' });
+  console.log(`${dryRun ? 'Dry-run prepared' : 'Published'} ${packageInfo.name}@${packageInfo.version} with npm tag ${tag}`);
+}
