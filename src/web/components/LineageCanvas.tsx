@@ -12,6 +12,7 @@ export function LineageCanvas({
   graphKey,
   inspectingId,
   loading,
+  onSeedDemo,
   onEdgesChange,
   onIndexNow,
   onNewLineage,
@@ -33,6 +34,7 @@ export function LineageCanvas({
   graphKey: string;
   inspectingId: string;
   loading: boolean;
+  onSeedDemo: () => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onIndexNow: () => void;
   onNewLineage: () => void;
@@ -56,7 +58,10 @@ export function LineageCanvas({
         {workspaceRootAssetId ? (
           <button className="primary-button" disabled={loading} onClick={onIndexNow}>Index now</button>
         ) : (
-          <button className="primary-button" onClick={onNewLineage}>New lineage</button>
+          <div className="lineage-empty-actions">
+            <button className="primary-button" onClick={onNewLineage}>New lineage</button>
+            <button className="secondary-button" disabled={loading} onClick={onSeedDemo}>Load demo lineage</button>
+          </div>
         )}
       </div>
     );

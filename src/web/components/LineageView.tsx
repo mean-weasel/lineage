@@ -341,6 +341,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             onClearFocus={clearFocus}
             onIndexNow={() => void indexAndRefresh()}
             onNewLineage={() => setNewLineageOpen(true)}
+            onSeedDemo={() => void seedDemoAndRefreshAssets()}
             onNodeActionMenu={(assetId, x, y) => setNodeMenu(assetId ? { assetId, x, y } : null)}
             onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}
             onNodeOpenDetail={setDetailNodeId}

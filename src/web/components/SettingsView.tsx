@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle2, Cloud, ImagePlus, Loader2, RefreshCcw, Send 
 import { useEffect, useState } from 'react';
 import type { AdapterSetting, AdapterSettingsSnapshot, AdapterType } from '../../shared/adapterSettingsTypes';
 import { api } from '../api';
+import { lineageReleaseInfo } from '../releaseInfo';
 import './SettingsView.css';
 
 const iconFor: Record<AdapterType, typeof Cloud> = {
@@ -114,6 +115,19 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
         </button>
       </header>
       <div className="settings-sections">
+        <section aria-label="Release information" className="settings-section">
+          <h3>Release</h3>
+          <dl className="settings-release">
+            <div>
+              <dt>Version</dt>
+              <dd>{lineageReleaseInfo.version}</dd>
+            </div>
+            <div>
+              <dt>Channel</dt>
+              <dd>{lineageReleaseInfo.channel}</dd>
+            </div>
+          </dl>
+        </section>
         {sections.map(section => (
           <section aria-label={section.ariaLabel} className="settings-section" key={section.adapterType}>
             <h3>{titleFor[section.adapterType]}</h3>

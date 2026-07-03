@@ -14,3 +14,28 @@ test('loads the public demo project and app shell', async ({ page, request }) =>
   await page.goto('/');
   await expect(page.getByText('Lineage').first()).toBeVisible();
 });
+
+test('loads the demo lineage from first-run lineage controls', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.locator('header.lineage-header').getByText('No workspace selected')).toBeVisible();
+  await page.locator('header.lineage-header').getByRole('button', { name: 'Load demo lineage' }).click();
+
+  await expect(page.getByText('Demo: Content iteration tree')).toBeVisible();
+  await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept');
+  await expect(page.getByText('No workspace selected')).not.toBeVisible();
+});
+
+test('creates a lineage workspace from a catalog asset through the modal', async ({ page }) => {
+  await page.goto('/');
+
+  await page.locator('header.lineage-header .lineage-primary-controls > button.primary-button').click();
+  await expect(page.getByRole('form', { name: 'New lineage' })).toBeVisible();
+  await page.getByPlaceholder('Search by title, id, campaign, channel...').fill('meta short-form');
+  await page.getByRole('button', { name: /Meta short-form demo post static/ }).click();
+  await page.getByLabel('Name').fill('Catalog e2e lineage');
+  await page.getByRole('button', { name: 'Create lineage' }).click();
+
+  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Catalog e2e lineage');
+  await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
+});

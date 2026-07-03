@@ -1,7 +1,9 @@
+import express, { type Express } from 'express';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { defaultProject, repoRoot } from './assetCore';
+import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import { archiveDemoLineageWorkspace, seedDemoLineageWorkspace } from './assetLineageDemo';
 import {
@@ -13,6 +15,7 @@ import {
   listLineageWorkspaces,
   updateLineageWorkspace,
 } from './assetLineageWorkspaces';
+import { registerLineageWorkspaceRoutes } from './lineageWorkspaceRoutes';
 import { fileSha256 } from './localReview';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage-workspaces');
@@ -21,6 +24,7 @@ const demoProject = 'vitest-lineage-demo';
 const demoProjectDir = join(repoRoot, demoProject);
 const demoFilesDir = join(repoRoot, '.asset-scratch', 'lineage-demo', '2026-06-lineage-demo', demoProject);
 const defaultDemoFilesDir = join(repoRoot, '.asset-scratch', 'lineage-demo', '2026-06-lineage-demo', defaultProject);
+let server: ReturnType<Express['listen']> | null = null;
 
 function localId(file: string): string {
   return `local-${fileSha256(file).slice(0, 12)}`;
@@ -80,6 +84,32 @@ function seedDemoProjectCatalog() {
   }, null, 2));
 }
 
+function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {
+  const candidate = input.body?.project || input.query?.project;
+  return typeof candidate === 'string' ? candidate : defaultProject;
+}
+
+function asyncRoute(handler: (req: express.Request, res: express.Response) => Promise<void> | void): express.RequestHandler {
+  return (req, res, next) => { Promise.resolve(handler(req, res)).catch(next); };
+}
+
+function appWithLineageWorkspaceRoutes() {
+  const app = express();
+  app.use(express.json());
+  registerLineageWorkspaceRoutes(app, projectFrom, asyncRoute);
+  server = app.listen(0);
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+async function postJson<T>(baseUrl: string, path: string, body: Record<string, unknown>): Promise<{ body: T; status: number }> {
+  const response = await fetch(`${baseUrl}${path}`, {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+  return { body: await response.json() as T, status: response.status };
+}
+
 describe('lineage workspaces', () => {
   beforeEach(() => {
     process.env.LINEAGE_DB = dbFile;
@@ -88,9 +118,33 @@ describe('lineage workspaces', () => {
   });
 
   afterEach(() => {
+    server?.close();
+    server = null;
     rmSync(demoProjectDir, { force: true, recursive: true });
     rmSync(demoFilesDir, { force: true, recursive: true });
     rmSync(defaultDemoFilesDir, { force: true, recursive: true });
+  });
+
+  it('indexes catalog assets before creating a workspace through the HTTP route', async () => {
+    const catalogAsset = listAssets(defaultProject, { source: 'catalog', page: 1, pageSize: 1 }).assets[0];
+    const baseUrl = appWithLineageWorkspaceRoutes();
+
+    const created = await postJson<{ workspace?: { root_asset_id: string; title: string } }>(baseUrl, '/api/lineage-workspaces', {
+      confirmWrite: true,
+      project: defaultProject,
+      rootAssetId: catalogAsset.asset_id,
+      title: 'Catalog root workspace',
+    });
+
+    expect(created.status).toBe(200);
+    expect(created.body.workspace).toMatchObject({
+      root_asset_id: catalogAsset.asset_id,
+      title: 'Catalog root workspace',
+    });
+    expect(getLineageSnapshot(defaultProject, catalogAsset.asset_id).nodes[0]).toMatchObject({
+      asset_id: catalogAsset.asset_id,
+      source: 'catalog',
+    });
   });
 
   it('seeds workspace rows from existing root-scoped selections without rewriting them', () => {

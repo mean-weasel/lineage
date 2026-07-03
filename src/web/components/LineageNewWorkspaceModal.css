@@ -2,18 +2,20 @@
   position: fixed;
   inset: 0;
   z-index: 45;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(18, 28, 36, 0.42);
   padding: 18px;
 }
 
 .lineage-new-modal {
   display: grid;
-  gap: 14px;
+  grid-template-rows: auto auto minmax(140px, 1fr) auto auto auto;
+  gap: 12px;
   width: min(720px, 100%);
   max-height: calc(100vh - 36px);
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -74,8 +76,9 @@
 
 .lineage-new-results {
   display: grid;
+  align-content: start;
   gap: 8px;
-  max-height: 320px;
+  min-height: 0;
   overflow: auto;
   border: 1px solid #d8e3e8;
   border-radius: 8px;
