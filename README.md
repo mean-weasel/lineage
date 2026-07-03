@@ -50,11 +50,11 @@ Use `next` for dogfooding builds and `latest` for the stable public channel:
 ```bash
 npm run release:dry-run -- --tag next
 npm run release:next
-npm run release:dry-run -- --promote-latest
+npm run release:dry-run -- --tag latest
 npm run release:latest
 ```
 
-The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. `release:latest` promotes the already-published package version from the `next` tag to `latest` with `npm dist-tag add`; it does not republish an immutable npm version. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
+The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow using npm trusted publishing and provenance. The GitHub workflow publishes new dogfood versions to `next` and new stable versions to `latest`. `release:promote-latest` is kept for authenticated local/package-owner dist-tag maintenance, but the token-free trusted publishing path uses immutable publishes instead of mutating dist-tags.
 
 ## Demo Fixture
 

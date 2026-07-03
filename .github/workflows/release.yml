@@ -10,7 +10,7 @@ on:
         type: choice
         options:
           - publish-next
-          - promote-latest
+          - publish-latest
       dry_run:
         description: Preview the release operation without changing npm
         required: true
@@ -22,13 +22,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22.22.3'
           cache: npm
           registry-url: https://registry.npmjs.org
+      - name: Use current npm
+        run: |
+          npm install --global npm@latest
+          node --version
+          npm --version
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Publish next dry run
@@ -38,12 +44,12 @@ jobs:
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-next' }}
         run: npm run release -- --tag next
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Promote latest dry run
-        if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: npm run release -- --promote-latest --dry-run
-      - name: Promote latest
-        if: ${{ !inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: npm run release -- --promote-latest
+          NPM_CONFIG_PROVENANCE: true
+      - name: Publish latest dry run
+        if: ${{ inputs.dry_run && inputs.operation == 'publish-latest' }}
+        run: npm run release -- --tag latest --dry-run
+      - name: Publish latest
+        if: ${{ !inputs.dry_run && inputs.operation == 'publish-latest' }}
+        run: npm run release -- --tag latest
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
