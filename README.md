@@ -4,14 +4,21 @@ Lineage is a local-first workspace for reviewing creative assets, branching vari
 
 ## Package Channels
 
-Lineage is packaged as `@mean-weasel/lineage`. Use the stable npm tag when you want the current public package, and use the `next` tag when you intentionally want a development channel build:
+Lineage is packaged as `@mean-weasel/lineage`. Use `latest` for the stable dogfood or production install, and use `next` when you intentionally want the development or release-candidate channel:
 
 ```bash
-npm install -g @mean-weasel/lineage
+npm install -g @mean-weasel/lineage@latest
 npm install -g @mean-weasel/lineage@next
 ```
 
-The stable and development channels are intended to coexist conceptually, with `lineage` for stable installs and `lineage-dev` for development installs. The current public package includes the CLI bridge bins for help and version checks:
+The stable and development channels are intended to coexist conceptually:
+
+- `latest` is the version you should trust for day-to-day dogfooding.
+- `next` is the version to test before promotion.
+- `lineage` runs with stable runtime defaults.
+- `lineage-dev` runs with development runtime defaults.
+
+The package includes both CLI bridge bins for help and version checks:
 
 ```bash
 lineage --help
@@ -45,7 +52,13 @@ npm run ci
 
 ## Release Checks
 
-Use `next` for dogfooding builds and `latest` for the stable public channel:
+Use `next` for candidate builds and `latest` for the stable public channel. Check the current local, npm, and workflow state with:
+
+```bash
+npm run release:status
+```
+
+For local release validation:
 
 ```bash
 npm run release:dry-run -- --tag next
@@ -54,7 +67,15 @@ npm run release:dry-run -- --tag latest
 npm run release:latest
 ```
 
-The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow using npm trusted publishing and provenance. The GitHub workflow publishes new dogfood versions to `next` and new stable versions to `latest`. `release:promote-latest` is kept for authenticated local/package-owner dist-tag maintenance, but the token-free trusted publishing path uses immutable publishes instead of mutating dist-tags.
+The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
+
+Use the Release workflow operations this way:
+
+- `publish-next`: publish the current package version to npm with the `next` dist-tag using trusted publishing and provenance.
+- `promote-latest`: move the already-published `next` version to `latest` after dogfooding. This uses the repository `NPM_TOKEN` secret and refuses to promote unless npm's `next` tag points at the local package version.
+- `publish-latest`: publish the current package version directly to `latest` using trusted publishing and provenance, reserved for cases where the version should skip the `next` channel.
+
+The normal cadence is: bump version and changelog, merge to `main`, run `publish-next`, install or run `@mean-weasel/lineage@next`, dogfood it, then run `promote-latest`. After promotion, both npm tags point to the same version until the next development version is published to `next`.
 
 ## Demo Fixture
 
