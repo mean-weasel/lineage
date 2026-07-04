@@ -1,0 +1,27 @@
+{
+  "name": "@mean-weasel/lineage-plugin-installer",
+  "version": "0.1.0",
+  "description": "Version-locked Codex plugin installer for @mean-weasel/lineage.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/mean-weasel/lineage.git",
+    "directory": "packages/lineage-plugin-installer"
+  },
+  "homepage": "https://github.com/mean-weasel/lineage/tree/main/packages/lineage-plugin-installer#readme",
+  "bugs": {
+    "url": "https://github.com/mean-weasel/lineage/issues"
+  },
+  "bin": {
+    "lineage-plugin-installer": "bin/lineage-plugin-installer.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/*.mjs && node --check bin/*.mjs && node --check scripts/*.mjs"
+  },
+  "files": ["bin", "scripts", "src", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  }
+}
