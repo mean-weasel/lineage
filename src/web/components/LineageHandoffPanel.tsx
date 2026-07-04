@@ -16,7 +16,7 @@ export function LineageHandoffPanel({
   project: string;
   rootAssetId: string;
 }) {
-  const nextCommand = `npx lineage lineage next --project ${project} --root ${rootAssetId} --json`;
+  const nextCommand = brief?.handoff?.next_command || `npx @mean-weasel/lineage next --project ${project} --root ${rootAssetId} --json`;
   const nextBaseLabel = nextBase ? `${nextBase.title} (${nextBase.asset_id})` : 'No asset chosen; CLI will report candidates or fallback.';
   const baseItems = [
     { label: 'next command', text: nextCommand },

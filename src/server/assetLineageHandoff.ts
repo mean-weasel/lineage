@@ -1,6 +1,20 @@
 import type { LineageBriefResponse, LineageSelectedChildFields } from '../shared/types';
 import { getLineageNextAsset, LineageError, linkLineageAssets } from './assetLineage';
-import { nowIso } from './assetLineageDb';
+import { lineageDbPath, nowIso } from './assetLineageDb';
+
+const publicPackageCommand = 'npx @mean-weasel/lineage';
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function lineageCommand(command: string, project: string, rootAssetId: string): string {
+  return `${publicPackageCommand} ${command} --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --db ${shellQuote(lineageDbPath())} --json`;
+}
+
+function linkChildCommand(project: string, rootAssetId: string): string {
+  return `${publicPackageCommand} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --confirm-write --db ${shellQuote(lineageDbPath())} --json`;
+}
 
 export function getLineageBrief(project: string, rootAssetId?: string): LineageBriefResponse {
   const next = getLineageNextAsset(project, rootAssetId);
@@ -42,9 +56,9 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
       rationale,
     },
     handoff: {
-      next_command: `npx lineage lineage next --project ${project} --root ${next.root_asset_id} --json`,
-      inspect_command: asset ? `npx lineage lineage inspect --project ${project} --asset-id ${asset.asset_id} --json` : undefined,
-      link_child_command: asset ? `npx lineage lineage link-child --project ${project} --root ${next.root_asset_id} --child <asset-id> --confirm-write --json` : undefined,
+      next_command: lineageCommand('next', project, next.root_asset_id),
+      inspect_command: asset ? `${publicPackageCommand} inspect --project ${shellQuote(project)} --asset-id ${shellQuote(asset.asset_id)} --db ${shellQuote(lineageDbPath())} --json` : undefined,
+      link_child_command: asset ? linkChildCommand(project, next.root_asset_id) : undefined,
     },
     fetchedAt: nowIso(),
   };

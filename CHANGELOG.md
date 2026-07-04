@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Fix packaged Lineage handoff commands so copied `next`, `inspect`, and `link-child` commands run through the published package.
+- Add packaged CLI regression coverage for custom SQLite database handoffs.
+
 ## 0.1.1
 
 - Fix first-run demo lineage loading and catalog-root lineage workspace creation.
