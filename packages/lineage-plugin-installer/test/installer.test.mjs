@@ -19,9 +19,44 @@ import {
   sha256,
 } from "../src/installer.mjs";
 
+const cliPath = path.resolve("bin/lineage-plugin-installer.mjs");
+
 test("parseLineageVersion accepts JSON strings and CLI output", () => {
   assert.equal(parseLineageVersion('"0.1.2"'), "0.1.2");
   assert.equal(parseLineageVersion("lineage 0.1.2"), "0.1.2");
+});
+
+test("CLI prints installer package version", () => {
+  const result = spawnSync(process.execPath, [cliPath, "--version"], {
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "0.1.1");
+  assert.equal(result.stderr, "");
+});
+
+test("CLI preserves install --version as the Lineage compatibility selector", () => {
+  const result = spawnSync(process.execPath, [
+    cliPath,
+    "install",
+    "--plugin",
+    path.resolve("../../plugins/lineage-codex-plugin"),
+    "--version",
+    "0.1.2",
+    "--target-dir",
+    path.join(tmpdir(), "lineage-cli-version-selector-proof"),
+    "--dry-run",
+    "--json",
+  ], {
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.dryRun, true);
+  assert.equal(output.pluginVersion, "0.1.2");
+  assert.equal(output.lineageVersion, "0.1.2");
 });
 
 test("resolveLineageVersion uses explicit version before npm channel lookup", async () => {
