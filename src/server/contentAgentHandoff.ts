@@ -278,12 +278,12 @@ export function getLineageWorkspaceAgentHandoff(project: string): ContentAgentHa
         tool: 'lineage_cli',
       },
       commands: {
-        workspaceListCommand: `npx lineage lineage workspace list --project ${quotedProject} --json`,
-        workspaceInspectCommand: `npx lineage lineage workspace inspect --project ${quotedProject} --workspace ${quotedWorkspace} --json`,
-        workspaceActivateCommand: `npx lineage lineage workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write --json`,
-        lineageNextCommand: `npx lineage lineage next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        lineageBriefCommand: `npx lineage lineage brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        linkChildCommand: nextAssets.length > 0 ? `npx lineage lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --confirm-write --json` : '',
+        workspaceListCommand: `npx @mean-weasel/lineage workspace list --project ${quotedProject} --json`,
+        workspaceInspectCommand: `npx @mean-weasel/lineage workspace inspect --project ${quotedProject} --workspace ${quotedWorkspace} --json`,
+        workspaceActivateCommand: `npx @mean-weasel/lineage workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write --json`,
+        lineageNextCommand: `npx @mean-weasel/lineage next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
+        lineageBriefCommand: `npx @mean-weasel/lineage brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
+        linkChildCommand: nextAssets.length > 0 ? `npx @mean-weasel/lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --confirm-write --json` : '',
       },
       instructions: safeToStart
         ? 'Continue this lineage workspace from the selected next variation base or bases. Generate local variations, index them, and link chosen children back to the workspace root before any S3 backup or external posting.'

@@ -239,7 +239,14 @@ function escapeSvgText(value: string): string {
 export function loadCatalog(project = defaultProject): AssetCatalog {
   const path = catalogPath(project);
   if (existsSync(path)) {
-    return normalizeCatalog(JSON.parse(readFileSync(path, 'utf8')) as Partial<AssetCatalog>, project);
+    try {
+      return normalizeCatalog(JSON.parse(readFileSync(path, 'utf8')) as Partial<AssetCatalog>, project);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+        throw new LineageAssetError(`Missing catalog: ${path}`, 404);
+      }
+      throw error;
+    }
   }
   const clean = cleanProject(project);
   if (clean === defaultProject) {

@@ -1,12 +1,25 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { resolveStartOptions } from './lineageCli';
+import { defaultProject, repoRoot } from '../server/assetCore';
+import { indexLineageAssets } from '../server/assetLineage';
+import { resolveStartOptions, runLineageDataCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
+const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
+const cliDbFile = join(cliScratchDir, 'lineage-cli.sqlite');
+const fixtureRootAssetId = 'demo-meta-short-form-upload-demo-post-static';
+const fixtureChildAssetId = 'demo-linkedin-ledger-catalog-shared';
 
 afterEach(() => {
   process.env = { ...originalEnv };
 });
+
+function seedCliDb() {
+  rmSync(cliScratchDir, { force: true, recursive: true });
+  process.env.LINEAGE_DB = cliDbFile;
+  indexLineageAssets(defaultProject);
+}
 
 describe('lineage CLI start options', () => {
   it('uses stable channel defaults with an isolated runtime home', () => {
@@ -66,5 +79,69 @@ describe('lineage CLI start options', () => {
         ['--port', '70000']
       )
     ).toThrow('Invalid port: 70000');
+  });
+});
+
+describe('lineage CLI handoff commands', () => {
+  it('returns the next lineage base from the packaged CLI contract', () => {
+    seedCliDb();
+
+    const result = runLineageDataCommand('next', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--db', cliDbFile,
+      '--json',
+    ]) as { next_asset?: { asset_id: string } | null; root_asset_id: string };
+
+    expect(result.root_asset_id).toBe(fixtureRootAssetId);
+    expect(result.next_asset?.asset_id).toBe(fixtureRootAssetId);
+  });
+
+  it('inspects an indexed asset and supports the legacy doubled lineage namespace', () => {
+    seedCliDb();
+
+    const inspected = runLineageDataCommand('inspect', [
+      '--project', defaultProject,
+      '--asset-id', fixtureRootAssetId,
+      '--db', cliDbFile,
+      '--json',
+    ]) as { active_asset_id: string; nodes: Array<{ asset_id: string }> };
+    const legacyNext = runLineageDataCommand('next', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--db', cliDbFile,
+      '--json',
+    ]) as { root_asset_id: string };
+
+    expect(inspected.active_asset_id).toBe(fixtureRootAssetId);
+    expect(inspected.nodes.map(node => node.asset_id)).toContain(fixtureRootAssetId);
+    expect(legacyNext.root_asset_id).toBe(fixtureRootAssetId);
+  });
+
+  it('dry-runs link-child and rejects unknown children before writing', () => {
+    seedCliDb();
+
+    const dryRun = runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--db', cliDbFile,
+      '--json',
+    ]) as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string } };
+
+    expect(dryRun.dryRun).toBe(true);
+    expect(dryRun.edge).toMatchObject({
+      child_asset_id: fixtureChildAssetId,
+      parent_asset_id: fixtureRootAssetId,
+    });
+    expect(() =>
+      runLineageDataCommand('link-child', [
+        '--project', defaultProject,
+        '--root', fixtureRootAssetId,
+        '--child', 'missing-child',
+        '--db', cliDbFile,
+        '--json',
+      ])
+    ).toThrow('Unknown indexed asset: missing-child');
   });
 });

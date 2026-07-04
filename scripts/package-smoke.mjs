@@ -56,6 +56,12 @@ async function waitForProjects(url) {
   throw lastError || new Error(`Timed out waiting for ${url}`);
 }
 
+async function postJson(url) {
+  const response = await fetch(url, { method: 'POST' });
+  if (!response.ok) throw new Error(`POST ${url} failed with ${response.status}`);
+  return response.json();
+}
+
 async function stopServer(server) {
   if (server.exitCode !== null || server.signalCode !== null) return;
   server.kill('SIGTERM');
@@ -105,7 +111,28 @@ try {
     server.stdout?.on('data', chunk => { stdout += chunk.toString(); });
     server.stderr?.on('data', chunk => { stderr += chunk.toString(); });
     try {
-      await waitForProjects(`http://127.0.0.1:${port}/api/projects`);
+      const baseUrl = `http://127.0.0.1:${port}`;
+      await waitForProjects(`${baseUrl}/api/projects`);
+      await postJson(`${baseUrl}/api/index/local?project=demo-project`);
+
+      const rootAsset = 'demo-meta-short-form-upload-demo-post-static';
+      const childAsset = 'demo-linkedin-ledger-catalog-shared';
+      const next = JSON.parse(execFileSync(join(binDir, binName), ['next', '--project', 'demo-project', '--root', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
+      if (next.root_asset_id !== rootAsset || next.next_asset?.asset_id !== rootAsset) {
+        throw new Error(`${binName} next returned an unexpected lineage base`);
+      }
+      const inspect = JSON.parse(execFileSync(join(binDir, binName), ['inspect', '--project', 'demo-project', '--asset-id', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
+      if (inspect.active_asset_id !== rootAsset || !inspect.nodes?.some(node => node.asset_id === rootAsset)) {
+        throw new Error(`${binName} inspect did not return the requested asset`);
+      }
+      const link = JSON.parse(execFileSync(join(binDir, binName), ['link-child', '--project', 'demo-project', '--root', rootAsset, '--child', childAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
+      if (link.dryRun !== true || link.edge?.parent_asset_id !== rootAsset || link.edge?.child_asset_id !== childAsset) {
+        throw new Error(`${binName} link-child did not dry-run the expected edge`);
+      }
+      if (binName === 'lineage') {
+        const legacy = JSON.parse(execFileSync(join(binDir, binName), ['lineage', 'next', '--project', 'demo-project', '--root', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
+        if (legacy.root_asset_id !== rootAsset) throw new Error('legacy lineage namespace compatibility failed');
+      }
     } catch (error) {
       console.error(`${binName} stdout:\n${stdout.trim() || '(empty)'}`);
       console.error(`${binName} stderr:\n${stderr.trim() || '(empty)'}`);

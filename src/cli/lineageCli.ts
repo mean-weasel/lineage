@@ -3,6 +3,9 @@ import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { defaultProduct } from '../server/assetCore';
+import { getLineageNextAsset, getLineageSnapshot } from '../server/assetLineage';
+import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineageHandoff';
 
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev';
@@ -17,6 +20,16 @@ interface StartOptions {
   json: boolean;
   open: boolean;
   port: number;
+}
+
+interface DataCommandOptions {
+  assetId?: string;
+  childAssetId?: string;
+  confirmWrite: boolean;
+  dbPath?: string;
+  json: boolean;
+  project: string;
+  rootAssetId?: string;
 }
 
 const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
@@ -74,6 +87,10 @@ function printHelp(config: LineageCliConfig): void {
 
 Usage:
   ${config.binName} start [--port <port>] [--host <host>] [--db <path>] [--open] [--json]
+  ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
+  ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
+  ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} --help
   ${config.binName} --version
 
@@ -85,6 +102,84 @@ function openBrowser(url: string): void {
   const args = platform() === 'win32' ? ['/c', 'start', '', url] : [url];
   const opener = spawn(command, args, { detached: true, stdio: 'ignore' });
   opener.unref();
+}
+
+function positionalArgs(args: string[]): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg.startsWith('--')) {
+      if (!arg.includes('=') && args[index + 1] && !args[index + 1].startsWith('--')) index += 1;
+      continue;
+    }
+    values.push(arg);
+  }
+  return values;
+}
+
+function resolveDataCommandOptions(args: string[]): DataCommandOptions {
+  const positions = positionalArgs(args);
+  const options = {
+    assetId: readOption(args, '--asset-id') || positions[0],
+    childAssetId: readOption(args, '--child'),
+    confirmWrite: args.includes('--confirm-write'),
+    dbPath: readOption(args, '--db'),
+    json: args.includes('--json'),
+    project: readOption(args, '--project') || process.env.LINEAGE_DEFAULT_PRODUCT || defaultProduct,
+    rootAssetId: readOption(args, '--root'),
+  };
+  if (options.dbPath) process.env.LINEAGE_DB = options.dbPath;
+  return options;
+}
+
+export function runLineageDataCommand(command: string, args: string[]): unknown {
+  const options = resolveDataCommandOptions(args);
+  if (command === 'next') return getLineageNextAsset(options.project, options.rootAssetId || options.assetId);
+  if (command === 'brief') return getLineageBrief(options.project, options.rootAssetId || options.assetId);
+  if (command === 'inspect') {
+    if (!options.assetId) throw new Error('lineage inspect requires --asset-id');
+    return getLineageSnapshot(options.project, options.assetId);
+  }
+  if (command === 'link-child') {
+    if (!options.childAssetId) throw new Error('lineage link-child requires --child');
+    return linkSelectedLineageChild(options.project, {
+      childAssetId: options.childAssetId,
+      confirmWrite: options.confirmWrite,
+      rootAssetId: options.rootAssetId || options.assetId,
+    });
+  }
+  throw new Error(`Unknown command: ${command}`);
+}
+
+function printDataResult(command: string, result: unknown, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (command === 'next' && result && typeof result === 'object' && 'reason' in result) {
+    const next = result as { next_asset?: { asset_id: string; title: string } | null; reason: string; root_asset_id: string };
+    console.log(next.next_asset ? `${next.next_asset.asset_id}: ${next.next_asset.title}` : `No next asset: ${next.reason}`);
+    console.log(`Root: ${next.root_asset_id}`);
+    return;
+  }
+  if (command === 'brief' && result && typeof result === 'object' && 'brief' in result) {
+    const brief = result as { brief: { title: string; prompt: string } };
+    console.log(brief.brief.title);
+    console.log(brief.brief.prompt);
+    return;
+  }
+  if (command === 'inspect' && result && typeof result === 'object' && 'nodes' in result) {
+    const snapshot = result as { active_asset_id: string; edges: unknown[]; nodes: unknown[]; root_asset_id: string };
+    console.log(`${snapshot.root_asset_id}: ${snapshot.nodes.length} node(s), ${snapshot.edges.length} edge(s)`);
+    console.log(`Active: ${snapshot.active_asset_id}`);
+    return;
+  }
+  if (command === 'link-child' && result && typeof result === 'object') {
+    const link = result as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string }; message?: string };
+    console.log(link.message || `${link.dryRun ? 'Dry run: ' : ''}Link ${link.edge?.child_asset_id || 'child'} from ${link.edge?.parent_asset_id || 'parent'}`);
+    return;
+  }
+  console.log(String(result));
 }
 
 function start(config: LineageCliConfig, args: string[]): void {
@@ -153,10 +248,25 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     process.exit(0);
   }
 
-  const [command] = args;
+  const normalizedArgs = args[0] === 'lineage' ? args.slice(1) : args;
+  const [command] = normalizedArgs;
   if (command === 'start') {
-    start(config, args.slice(1));
+    start(config, normalizedArgs.slice(1));
     return;
+  }
+
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'link-child') {
+    const commandArgs = normalizedArgs.slice(1);
+    const json = commandArgs.includes('--json');
+    try {
+      printDataResult(command, runLineageDataCommand(command, commandArgs), json);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (json) console.error(JSON.stringify({ ok: false, command, error: message }, null, 2));
+      else console.error(`${config.binName}: ${message}`);
+      process.exit(1);
+    }
+    process.exit(0);
   }
 
   const json = args.includes('--json');

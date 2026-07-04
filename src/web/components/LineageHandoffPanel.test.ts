@@ -41,9 +41,9 @@ const brief = {
   },
   fetchedAt: '2026-06-27T00:00:00.000Z',
   handoff: {
-    inspect_command: 'npx lineage lineage inspect local-root',
-    link_child_command: 'npx lineage lineage link-child local-root',
-    next_command: 'npx lineage lineage next --project demo-project --root local-root --json',
+    inspect_command: 'npx @mean-weasel/lineage inspect --project demo-project --asset-id local-selected-base --db /tmp/lineage.sqlite --json',
+    link_child_command: 'npx @mean-weasel/lineage link-child --project demo-project --root local-root --child <asset-id> --confirm-write --db /tmp/lineage.sqlite --json',
+    next_command: 'npx @mean-weasel/lineage next --project demo-project --root local-root --db /tmp/lineage.sqlite --json',
   },
   latest: ['local-selected-base'],
   next_asset: nextBase,
@@ -83,7 +83,7 @@ describe('LineageHandoffPanel', () => {
 
     expect(text).toContain('Agent will evolve');
     expect(text).toContain('Chosen asset (local-selected-base)');
-    expect(text).toContain('npx lineage lineage next --project demo-project --root local-root --json');
+    expect(text).toContain('npx @mean-weasel/lineage next --project demo-project --root local-root --db /tmp/lineage.sqlite --json');
     expect(text).toContain('Generated brief');
     expect(text).toContain('Keep working from Chosen asset.');
   });
