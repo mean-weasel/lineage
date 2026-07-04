@@ -1,6 +1,15 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { installFromOptions } from "../src/installer.mjs";
+
+const rawArgs = process.argv.slice(2);
+
+if (rawArgs.length === 1 && ["--version", "-v"].includes(rawArgs[0])) {
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  console.log(packageJson.version);
+  process.exit(0);
+}
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,

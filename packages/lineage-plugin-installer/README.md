@@ -33,6 +33,12 @@ can be added.
 
 ## Install Modes
 
+Show the installed installer package version:
+
+```bash
+lineage-plugin-installer --version
+```
+
 Local plugin directory, useful while developing the plugin:
 
 ```bash
