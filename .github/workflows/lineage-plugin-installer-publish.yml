@@ -1,0 +1,98 @@
+name: Lineage Plugin Installer Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "npm dist-tag to publish"
+        required: true
+        default: "next"
+        type: choice
+        options:
+          - next
+          - latest
+      dry_run:
+        description: "Validate the package and run npm publish without uploading"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: lineage-plugin-installer-publish-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish Installer Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      NPM_TAG: ${{ inputs.tag }}
+      PACKAGE_DIR: packages/lineage-plugin-installer
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify publish tag
+        run: |
+          if [ "$NPM_TAG" != "next" ] && [ "$NPM_TAG" != "latest" ]; then
+            echo "::error::Unsupported npm tag: ${NPM_TAG}"
+            exit 1
+          fi
+
+      - name: Require public repository for provenance publish
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ "${{ github.event.repository.private }}" = "true" ]; then
+            echo "::error::npm provenance requires publishing from a public repository."
+            exit 1
+          fi
+
+      - name: Run installer tests
+        run: npm test --prefix "$PACKAGE_DIR"
+
+      - name: Run installer syntax checks
+        run: npm run check --prefix "$PACKAGE_DIR"
+
+      - name: Verify installer consumes current release artifact
+        run: |
+          node "$PACKAGE_DIR/bin/lineage-plugin-installer.mjs" install \
+            --channel latest \
+            --target-dir "$RUNNER_TEMP/lineage-plugin-target" \
+            --dry-run \
+            --json
+
+      - name: Dry-run installer package artifact
+        run: cd "$PACKAGE_DIR" && npm pack --dry-run --json
+
+      - name: Reject already-published package version
+        if: ${{ !inputs.dry_run }}
+        run: |
+          package_version="$(node -p "require('./${PACKAGE_DIR}/package.json').version")"
+          if npm view "@mean-weasel/lineage-plugin-installer@${package_version}" version --json >/tmp/lineage-plugin-installer-version.json 2>/dev/null; then
+            published_version="$(cat /tmp/lineage-plugin-installer-version.json)"
+            echo "::error::@mean-weasel/lineage-plugin-installer@${package_version} is already published as ${published_version}."
+            exit 1
+          fi
+
+      - name: Dry-run npm publish
+        if: ${{ inputs.dry_run }}
+        run: cd "$PACKAGE_DIR" && npm publish --access public --tag "$NPM_TAG" --dry-run
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        env:
+          NPM_CONFIG_PROVENANCE: true
+        run: cd "$PACKAGE_DIR" && npm publish --access public --tag "$NPM_TAG" --provenance

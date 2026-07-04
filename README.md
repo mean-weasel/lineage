@@ -40,6 +40,20 @@ By default, `lineage start` listens on `127.0.0.1:5197` and stores SQLite state 
 lineage start --port 6123 --db ~/.lineage/lineage.sqlite
 ```
 
+## Codex Plugin
+
+The versioned Codex plugin lives in `plugins/lineage-codex-plugin`. Install the
+plugin that matches the resolved `@mean-weasel/lineage` package version with:
+
+```bash
+npx @mean-weasel/lineage-plugin-installer install --channel latest
+```
+
+The installer verifies the plugin artifact checksum and rejects plugin manifests
+whose version or `lineage.version` does not exactly match the resolved Lineage
+package version. The plugin artifact and installer package are released from
+this public repository.
+
 ## Local Development
 
 ```bash

@@ -1,0 +1,70 @@
+name: Lineage Plugin Installer CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/lineage-plugin-installer.yml"
+      - ".github/workflows/lineage-plugin-installer-publish.yml"
+      - "packages/lineage-plugin-installer/**"
+      - "plugins/lineage-codex-plugin/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/lineage-plugin-installer.yml"
+      - ".github/workflows/lineage-plugin-installer-publish.yml"
+      - "packages/lineage-plugin-installer/**"
+      - "plugins/lineage-codex-plugin/**"
+
+concurrency:
+  group: lineage-plugin-installer-${{ github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lineage-plugin-installer:
+    name: Version-Locked Plugin Installer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Run installer tests
+        run: npm test --prefix packages/lineage-plugin-installer
+
+      - name: Run installer syntax checks
+        run: npm run check --prefix packages/lineage-plugin-installer
+
+      - name: Dry-run installer package artifact
+        run: cd packages/lineage-plugin-installer && npm pack --dry-run --json
+
+      - name: Dry-run matching plugin artifact
+        run: node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.2 --dry-run --json
+
+      - name: Reject mismatched plugin artifact version
+        run: |
+          if node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.1 --dry-run --json; then
+            echo "::error::Mismatched plugin artifact version was accepted."
+            exit 1
+          fi
+
+      - name: Reject stale command guidance
+        run: |
+          plugin_install_prefix="lineage plugin "
+          doubled_npx_prefix="npx lineage "
+          if grep -R -n -E "${plugin_install_prefix}install|${doubled_npx_prefix}lineage" \
+            plugins/lineage-codex-plugin \
+            packages/lineage-plugin-installer \
+            .github/workflows/lineage-plugin-installer.yml; then
+            echo "::error::Stale Lineage command guidance found."
+            exit 1
+          fi

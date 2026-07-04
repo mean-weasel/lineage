@@ -1,0 +1,122 @@
+name: Lineage Plugin Release Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact @mean-weasel/lineage version to match, for example 0.1.2"
+        required: true
+        type: string
+      dry_run:
+        description: "Build and verify artifacts without attaching them to a GitHub release"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: lineage-plugin-release-artifact-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release-artifact:
+    name: Build Version-Locked Plugin Artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      PLUGIN_VERSION: ${{ inputs.version }}
+      PLUGIN_DIR: plugins/lineage-codex-plugin
+      OUT_DIR: dist/lineage-plugin
+      TARGET_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Verify published Lineage package version exists
+        run: |
+          resolved="$(npm view "@mean-weasel/lineage@${PLUGIN_VERSION}" version --json | tr -d '"')"
+          if [ "$resolved" != "$PLUGIN_VERSION" ]; then
+            echo "::error::Expected @mean-weasel/lineage@${PLUGIN_VERSION}, got ${resolved}."
+            exit 1
+          fi
+
+      - name: Verify plugin manifest version contract
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const version = process.env.PLUGIN_VERSION;
+          const manifest = JSON.parse(readFileSync("plugins/lineage-codex-plugin/.codex-plugin/plugin.json", "utf8"));
+          const packageJson = JSON.parse(readFileSync("plugins/lineage-codex-plugin/package.json", "utf8"));
+          const failures = [];
+
+          if (manifest.version !== version) failures.push(`plugin manifest version ${manifest.version} != ${version}`);
+          if (manifest.lineage?.package !== "@mean-weasel/lineage") failures.push("plugin manifest lineage.package is not @mean-weasel/lineage");
+          if (manifest.lineage?.version !== version) failures.push(`plugin manifest lineage.version ${manifest.lineage?.version} != ${version}`);
+          if (packageJson.version !== version) failures.push(`plugin package version ${packageJson.version} != ${version}`);
+
+          if (failures.length > 0) {
+            for (const failure of failures) console.error(`::error::${failure}`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Run installer tests
+        run: npm test --prefix packages/lineage-plugin-installer
+
+      - name: Run installer syntax checks
+        run: npm run check --prefix packages/lineage-plugin-installer
+
+      - name: Build plugin artifact and checksum
+        run: |
+          node packages/lineage-plugin-installer/scripts/pack-plugin.mjs \
+            --plugin "$PLUGIN_DIR" \
+            --version "$PLUGIN_VERSION" \
+            --out-dir "$OUT_DIR" \
+            --json
+
+      - name: Verify installer consumes built artifact
+        run: |
+          node packages/lineage-plugin-installer/bin/lineage-plugin-installer.mjs install \
+            --version "$PLUGIN_VERSION" \
+            --artifact-file "$OUT_DIR/lineage-codex-plugin-${PLUGIN_VERSION}.tgz" \
+            --checksum-file "$OUT_DIR/lineage-codex-plugin-${PLUGIN_VERSION}.tgz.sha256" \
+            --target-dir "$RUNNER_TEMP/lineage-plugin-target" \
+            --dry-run \
+            --json
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: lineage-codex-plugin-${{ inputs.version }}
+          path: |
+            dist/lineage-plugin/lineage-codex-plugin-${{ inputs.version }}.tgz
+            dist/lineage-plugin/lineage-codex-plugin-${{ inputs.version }}.tgz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify target GitHub release exists
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "v${PLUGIN_VERSION}" --repo "$TARGET_REPO"
+
+      - name: Attach artifacts to existing GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${PLUGIN_VERSION}" \
+            "$OUT_DIR/lineage-codex-plugin-${PLUGIN_VERSION}.tgz" \
+            "$OUT_DIR/lineage-codex-plugin-${PLUGIN_VERSION}.tgz.sha256" \
+            --repo "$TARGET_REPO" \
+            --clobber

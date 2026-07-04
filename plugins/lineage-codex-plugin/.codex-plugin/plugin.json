@@ -1,0 +1,22 @@
+{
+  "name": "lineage-codex-plugin",
+  "version": "0.1.2",
+  "description": "Codex agent guidance for the public Lineage app and CLI package.",
+  "author": {
+    "name": "Mean Weasel"
+  },
+  "lineage": {
+    "package": "@mean-weasel/lineage",
+    "version": "0.1.2"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Lineage",
+    "shortDescription": "Agent guidance for operating Lineage from the public package.",
+    "longDescription": "Agent guidance for installing, starting, inspecting, and continuing work through the public Lineage app and CLI package.",
+    "developerName": "Mean Weasel",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": ["Help me operate Lineage safely from the packaged CLI."]
+  }
+}

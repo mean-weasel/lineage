@@ -1,0 +1,327 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { packPlugin } from "../scripts/pack-plugin.mjs";
+import {
+  assertChecksum,
+  assertPluginManifest,
+  installFromOptions,
+  installPluginArtifact,
+  installPluginDirectory,
+  parseChecksumText,
+  parseLineageVersion,
+  pluginArtifactFilename,
+  releaseArtifactUrls,
+  resolveLineageVersion,
+  sha256,
+} from "../src/installer.mjs";
+
+test("parseLineageVersion accepts JSON strings and CLI output", () => {
+  assert.equal(parseLineageVersion('"0.1.2"'), "0.1.2");
+  assert.equal(parseLineageVersion("lineage 0.1.2"), "0.1.2");
+});
+
+test("resolveLineageVersion uses explicit version before npm channel lookup", async () => {
+  const version = await resolveLineageVersion({
+    version: "0.1.2",
+    runCommand: async () => {
+      throw new Error("should not run npm");
+    },
+  });
+
+  assert.equal(version, "0.1.2");
+});
+
+test("resolveLineageVersion resolves npm dist-tag channels", async () => {
+  const calls = [];
+  const version = await resolveLineageVersion({
+    channel: "next",
+    runCommand: async (command, args) => {
+      calls.push([command, args]);
+      return { status: 0, stdout: '"0.1.3"', stderr: "" };
+    },
+  });
+
+  assert.equal(version, "0.1.3");
+  assert.deepEqual(calls, [["npm", ["view", "@mean-weasel/lineage@next", "version", "--json"]]]);
+});
+
+test("assertPluginManifest accepts exact package and plugin version match", () => {
+  const manifest = {
+    name: "lineage-codex-plugin",
+    version: "0.1.2",
+    lineage: { package: "@mean-weasel/lineage", version: "0.1.2" },
+  };
+
+  assert.equal(assertPluginManifest(manifest, "0.1.2"), manifest);
+});
+
+test("assertPluginManifest rejects plugin version mismatch", () => {
+  assert.throws(
+    () =>
+      assertPluginManifest(
+        {
+          name: "lineage-codex-plugin",
+          version: "0.1.1",
+          lineage: { package: "@mean-weasel/lineage", version: "0.1.2" },
+        },
+        "0.1.2",
+      ),
+    /Plugin version 0\.1\.1 does not match 0\.1\.2/,
+  );
+});
+
+test("assertPluginManifest rejects lineage compatibility mismatch", () => {
+  assert.throws(
+    () =>
+      assertPluginManifest(
+        {
+          name: "lineage-codex-plugin",
+          version: "0.1.2",
+          lineage: { package: "@mean-weasel/lineage", version: "0.1.1" },
+        },
+        "0.1.2",
+      ),
+    /Plugin lineage version 0\.1\.1 does not match 0\.1\.2/,
+  );
+});
+
+test("assertChecksum rejects corrupted artifact bytes", () => {
+  const bytes = Buffer.from("lineage plugin artifact");
+  assert.equal(assertChecksum(bytes, sha256(bytes)), sha256(bytes));
+  assert.throws(() => assertChecksum(Buffer.from("corrupt"), sha256(bytes)), /Checksum mismatch/);
+});
+
+test("parseChecksumText accepts sha256 files with filenames", () => {
+  const hash = "a".repeat(64);
+  assert.equal(parseChecksumText(`${hash}  lineage-codex-plugin-0.1.2.tgz\n`), hash);
+  assert.throws(() => parseChecksumText("not a checksum"), /does not contain a sha256 hash/);
+});
+
+test("releaseArtifactUrls derives GitHub release artifact URLs", () => {
+  assert.deepEqual(releaseArtifactUrls({ version: "0.1.2" }), {
+    artifactUrl:
+      "https://github.com/mean-weasel/lineage/releases/download/v0.1.2/lineage-codex-plugin-0.1.2.tgz",
+    checksumUrl:
+      "https://github.com/mean-weasel/lineage/releases/download/v0.1.2/lineage-codex-plugin-0.1.2.tgz.sha256",
+  });
+});
+
+test("installPluginDirectory verifies manifest and dry-run does not write", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-installer-"));
+  const pluginDir = path.join(temp, "plugin");
+  const targetRoot = path.join(temp, "target");
+
+  try {
+    await writePluginManifest(pluginDir, {
+      name: "lineage-codex-plugin",
+      version: "0.1.2",
+      lineage: { package: "@mean-weasel/lineage", version: "0.1.2" },
+    });
+
+    const result = await installPluginDirectory({
+      pluginDir,
+      targetRoot,
+      expectedVersion: "0.1.2",
+      dryRun: true,
+    });
+
+    assert.equal(result.dryRun, true);
+    assert.equal(result.destination, path.join(targetRoot, "lineage-codex-plugin"));
+    await assert.rejects(readFile(path.join(targetRoot, "lineage-codex-plugin", ".codex-plugin", "plugin.json")));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("installPluginDirectory copies a verified plugin to target directory", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-installer-"));
+  const pluginDir = path.join(temp, "plugin");
+  const targetRoot = path.join(temp, "target");
+
+  try {
+    await writePluginManifest(pluginDir, {
+      name: "lineage-codex-plugin",
+      version: "0.1.2",
+      lineage: { package: "@mean-weasel/lineage", version: "0.1.2" },
+    });
+
+    await installPluginDirectory({
+      pluginDir,
+      targetRoot,
+      expectedVersion: "0.1.2",
+    });
+
+    const copied = JSON.parse(
+      await readFile(path.join(targetRoot, "lineage-codex-plugin", ".codex-plugin", "plugin.json"), "utf8"),
+    );
+    assert.equal(copied.version, "0.1.2");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("packPlugin dry-run validates artifact contents without writing dist files", async () => {
+  const result = await packPlugin({
+    plugin: path.resolve("../../plugins/lineage-codex-plugin"),
+    version: "0.1.2",
+    outDir: path.resolve("dist-test-should-not-exist"),
+    dryRun: true,
+  });
+
+  assert.equal(result.dryRun, true);
+  assert.equal(result.artifactName, "lineage-codex-plugin-0.1.2.tgz");
+  assert.deepEqual(result.files, [
+    ".codex-plugin/plugin.json",
+    "README.md",
+    "package.json",
+    "skills/lineage-package-operator/SKILL.md",
+  ]);
+  await assert.rejects(readFile(path.resolve("dist-test-should-not-exist", "lineage-codex-plugin-0.1.2.tgz")));
+});
+
+test("installPluginArtifact verifies local release artifact and dry-runs install", async () => {
+  const fixture = await createPluginArtifactFixture();
+
+  try {
+    const result = await installPluginArtifact({
+      artifactFile: fixture.artifactPath,
+      checksumFile: fixture.checksumPath,
+      targetRoot: fixture.targetRoot,
+      expectedVersion: "0.1.2",
+      dryRun: true,
+    });
+
+    assert.equal(result.dryRun, true);
+    assert.equal(result.pluginVersion, "0.1.2");
+    assert.equal(result.lineageVersion, "0.1.2");
+    assert.equal(result.checksum, fixture.checksum);
+    assert.equal(result.artifact, fixture.artifactPath);
+    await assert.rejects(readFile(path.join(fixture.targetRoot, "lineage-codex-plugin", ".codex-plugin", "plugin.json")));
+  } finally {
+    await rm(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("installFromOptions can fetch a release artifact from resolved URLs", async () => {
+  const fixture = await createPluginArtifactFixture();
+  const urls = releaseArtifactUrls({
+    version: "0.1.2",
+    releaseBaseUrl: "https://example.test/releases/v0.1.2",
+  });
+
+  try {
+    const result = await installFromOptions({
+      version: "0.1.2",
+      releaseBaseUrl: "https://example.test/releases/v0.1.2",
+      targetRoot: fixture.targetRoot,
+      dryRun: true,
+      fetchBytes: async (url) => {
+        if (url === urls.artifactUrl) return readFile(fixture.artifactPath);
+        if (url === urls.checksumUrl) return readFile(fixture.checksumPath);
+        throw new Error(`unexpected url ${url}`);
+      },
+    });
+
+    assert.equal(result.artifact, urls.artifactUrl);
+    assert.equal(result.checksumSource, urls.checksumUrl);
+    assert.equal(result.pluginVersion, "0.1.2");
+  } finally {
+    await rm(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("installPluginArtifact rejects checksum mismatches before extraction", async () => {
+  const fixture = await createPluginArtifactFixture();
+  const badChecksumPath = path.join(fixture.temp, "bad.sha256");
+
+  try {
+    await writeFile(badChecksumPath, `${"b".repeat(64)}  ${path.basename(fixture.artifactPath)}\n`);
+    await assert.rejects(
+      installPluginArtifact({
+        artifactFile: fixture.artifactPath,
+        checksumFile: badChecksumPath,
+        targetRoot: fixture.targetRoot,
+        expectedVersion: "0.1.2",
+        dryRun: true,
+      }),
+      /Checksum mismatch/,
+    );
+  } finally {
+    await rm(fixture.temp, { recursive: true, force: true });
+  }
+});
+
+test("installPluginArtifact rejects unsafe tarball entries", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-artifact-unsafe-"));
+  const artifactPath = path.join(temp, pluginArtifactFilename("0.1.2"));
+  const checksumPath = `${artifactPath}.sha256`;
+  const targetRoot = path.join(temp, "target");
+
+  try {
+    const packageDir = path.join(temp, "unsafe", "package");
+    await writePluginManifest(packageDir, {
+      name: "lineage-codex-plugin",
+      version: "0.1.2",
+      lineage: { package: "@mean-weasel/lineage", version: "0.1.2" },
+    });
+    await mkdir(path.join(packageDir, "docs", "goals"), { recursive: true });
+    await writeFile(path.join(packageDir, "docs", "goals", "leak.md"), "should not ship\n");
+
+    const result = spawnSync("tar", ["-czf", artifactPath, "-C", path.join(temp, "unsafe"), "package"], {
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const checksum = sha256(await readFile(artifactPath));
+    await writeFile(checksumPath, `${checksum}  ${path.basename(artifactPath)}\n`);
+
+    await assert.rejects(
+      installPluginArtifact({
+        artifactFile: artifactPath,
+        checksumFile: checksumPath,
+        targetRoot,
+        expectedVersion: "0.1.2",
+        dryRun: true,
+      }),
+      /unsafe entries/,
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+async function writePluginManifest(pluginDir, manifest) {
+  const manifestDir = path.join(pluginDir, ".codex-plugin");
+  await writeFile(path.join(pluginDir, "README.md"), "fixture\n", { flag: "w" }).catch(async (error) => {
+    if (error.code !== "ENOENT") throw error;
+    await import("node:fs/promises").then(({ mkdir }) => mkdir(pluginDir, { recursive: true }));
+    await writeFile(path.join(pluginDir, "README.md"), "fixture\n");
+  });
+  await import("node:fs/promises").then(({ mkdir }) => mkdir(manifestDir, { recursive: true }));
+  await writeFile(path.join(manifestDir, "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+async function createPluginArtifactFixture() {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-artifact-"));
+  const outDir = path.join(temp, "dist");
+  const targetRoot = path.join(temp, "target");
+  const plugin = path.resolve("../../plugins/lineage-codex-plugin");
+  const result = await packPlugin({
+    plugin,
+    version: "0.1.2",
+    outDir,
+  });
+  const artifactPath = result.artifactPath;
+  const checksumPath = `${artifactPath}.sha256`;
+
+  return {
+    temp,
+    artifactPath,
+    checksumPath,
+    checksum: result.sha256,
+    targetRoot,
+  };
+}
