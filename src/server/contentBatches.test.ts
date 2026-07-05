@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
 import { lineageDb } from './assetLineageDb';
+import { createAgentClaim } from './agentClaims';
 import {
   attachContentPostAsset,
   createContentBatch,
@@ -48,6 +49,28 @@ function seedPost(postId = 'tiktok-upload-clean') {
   });
 }
 
+function claimPost(postId = 'tiktok-upload-clean', channel = 'tiktok'): string {
+  return createAgentClaim({
+    agentName: `test agent for ${postId}`,
+    channel,
+    project: defaultProject,
+    scopeType: 'content_post',
+    targetId: postId,
+    targetTitle: postId,
+  }).claim_token;
+}
+
+function claimChannel(channel = 'tiktok'): string {
+  return createAgentClaim({
+    agentName: `test channel agent for ${channel}`,
+    channel,
+    project: defaultProject,
+    scopeType: 'project_channel',
+    targetId: `${defaultProject}:channel:${channel}`,
+    targetTitle: `${channel} channel`,
+  }).claim_token;
+}
+
 describe('content batch ledger', () => {
   beforeEach(resetDb);
 
@@ -73,9 +96,11 @@ describe('content batch ledger', () => {
   it('creates batches and posts with attached assets', () => {
     seedBatch();
     seedPost();
+    const claimToken = claimPost();
 
     const attach = attachContentPostAsset(defaultProject, {
       assetId: 'demo-tiktok-upload-demo-export-vertical',
+      claimToken,
       confirmWrite: true,
       notes: 'Primary vertical static.',
       postId: 'tiktok-upload-clean',
@@ -101,14 +126,17 @@ describe('content batch ledger', () => {
   it('tracks post phases without changing asset placement state', () => {
     seedBatch();
     seedPost();
+    const claimToken = claimPost();
 
     const scheduled = updateContentPost(defaultProject, {
+      claimToken,
       confirmWrite: true,
       phase: 'scheduled',
       postId: 'tiktok-upload-clean',
       scheduledAt: '2026-06-26T16:00:00-07:00',
     });
     const posted = updateContentPost(defaultProject, {
+      claimToken,
       confirmWrite: true,
       phase: 'posted',
       postId: 'tiktok-upload-clean',
@@ -171,14 +199,17 @@ describe('content batch ledger', () => {
   it('detaches an asset from a post', () => {
     seedBatch();
     seedPost();
+    const claimToken = claimPost();
     attachContentPostAsset(defaultProject, {
       assetId: 'demo-tiktok-upload-demo-export-vertical',
+      claimToken,
       confirmWrite: true,
       postId: 'tiktok-upload-clean',
     });
 
     const detached = detachContentPostAsset(defaultProject, {
       assetId: 'demo-tiktok-upload-demo-export-vertical',
+      claimToken,
       confirmWrite: true,
       postId: 'tiktok-upload-clean',
     });
@@ -189,8 +220,10 @@ describe('content batch ledger', () => {
   it('tracks one selected content target per project with handoff commands', () => {
     seedBatch();
     seedPost();
+    const claimToken = claimPost();
     attachContentPostAsset(defaultProject, {
       assetId: 'demo-tiktok-upload-demo-export-vertical',
+      claimToken,
       confirmWrite: true,
       postId: 'tiktok-upload-clean',
     });
@@ -260,13 +293,14 @@ describe('content batch ledger', () => {
   it('derives content target readiness from post phase and assets', () => {
     seedBatch();
     seedPost();
+    const claimToken = claimPost();
     const draft = getContentBatch(defaultProject, 'demo-priority-june').posts[0]!;
-    attachContentPostAsset(defaultProject, { assetId: 'asset-1', confirmWrite: true, postId: 'tiktok-upload-clean' });
+    attachContentPostAsset(defaultProject, { assetId: 'asset-1', claimToken, confirmWrite: true, postId: 'tiktok-upload-clean' });
     const ready = getContentBatch(defaultProject, 'demo-priority-june').posts[0]!;
-    const review = updateContentPost(defaultProject, { confirmWrite: true, phase: 'review', postId: 'tiktok-upload-clean' }).post!;
-    const scheduled = updateContentPost(defaultProject, { confirmWrite: true, phase: 'scheduled', postId: 'tiktok-upload-clean' }).post!;
-    const posted = updateContentPost(defaultProject, { confirmWrite: true, phase: 'posted', postId: 'tiktok-upload-clean' }).post!;
-    const archived = updateContentPost(defaultProject, { confirmWrite: true, phase: 'archived', postId: 'tiktok-upload-clean' }).post!;
+    const review = updateContentPost(defaultProject, { claimToken, confirmWrite: true, phase: 'review', postId: 'tiktok-upload-clean' }).post!;
+    const scheduled = updateContentPost(defaultProject, { claimToken, confirmWrite: true, phase: 'scheduled', postId: 'tiktok-upload-clean' }).post!;
+    const posted = updateContentPost(defaultProject, { claimToken, confirmWrite: true, phase: 'posted', postId: 'tiktok-upload-clean' }).post!;
+    const archived = updateContentPost(defaultProject, { claimToken, confirmWrite: true, phase: 'archived', postId: 'tiktok-upload-clean' }).post!;
 
     expect(readinessForPost(draft)).toBe('needs_asset');
     expect(readinessForPost(ready)).toBe('draft_ready');
@@ -274,5 +308,74 @@ describe('content batch ledger', () => {
     expect(readinessForPost(scheduled)).toBe('scheduled');
     expect(readinessForPost(posted)).toBe('posted');
     expect(readinessForPost(archived)).toBe('skipped_or_archived');
+  });
+
+  it('requires a matching content post claim for asset attachment and phase movement', () => {
+    seedBatch();
+    seedPost();
+    const claimToken = claimPost();
+
+    expect(() =>
+      attachContentPostAsset(defaultProject, {
+        assetId: 'asset-1',
+        confirmWrite: true,
+        postId: 'tiktok-upload-clean',
+      })
+    ).toThrow('Mutating agent write requires a matching claim token.');
+    expect(() =>
+      updateContentPost(defaultProject, {
+        claimToken: 'claim_wrong.secret',
+        confirmWrite: true,
+        phase: 'review',
+        postId: 'tiktok-upload-clean',
+      })
+    ).toThrow('Unknown or invalid claim token.');
+    expect(updateContentPost(defaultProject, {
+      claimToken,
+      confirmWrite: true,
+      phase: 'review',
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ ok: true, post: { phase: 'review' } });
+  });
+
+  it('uses project channel claims as broad same-channel authority without blocking other channels', () => {
+    seedBatch();
+    seedPost();
+    createContentPost(defaultProject, {
+      batchId: 'demo-priority-june',
+      channel: 'linkedin',
+      confirmWrite: true,
+      phase: 'draft',
+      postId: 'linkedin-unclaimed',
+      title: 'LinkedIn unclaimed',
+    });
+    const claimToken = claimChannel('tiktok');
+
+    expect(() =>
+      attachContentPostAsset(defaultProject, {
+        assetId: 'asset-1',
+        confirmWrite: true,
+        postId: 'tiktok-upload-clean',
+      })
+    ).toThrow('Mutating agent write requires a matching claim token.');
+    expect(attachContentPostAsset(defaultProject, {
+      assetId: 'asset-1',
+      claimToken,
+      confirmWrite: true,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ ok: true, post: { id: 'tiktok-upload-clean' } });
+    expect(attachContentPostAsset(defaultProject, {
+      assetId: 'asset-2',
+      confirmWrite: true,
+      postId: 'linkedin-unclaimed',
+    })).toMatchObject({ ok: true, post: { id: 'linkedin-unclaimed' } });
+    expect(() =>
+      updateContentPost(defaultProject, {
+        claimToken,
+        confirmWrite: true,
+        phase: 'review',
+        postId: 'linkedin-unclaimed',
+      })
+    ).toThrow('Claim channel tiktok does not match linkedin.');
   });
 });

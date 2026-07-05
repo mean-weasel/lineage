@@ -3,7 +3,7 @@ import { type Edge, type EdgeChange, type ReactFlowInstance, useEdgesState, useN
 import '@xyflow/react/dist/style.css';
 import './LineageView.css';
 import './LineageFocus.css';
-import type { AssetReviewState, GrowthAsset, LineageBriefResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
+import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageBriefResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
 import { api } from '../api';
 import type { AssetFlowNode } from './LineageAssetNode';
 import { LineageCanvas } from './LineageCanvas';
@@ -28,6 +28,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [childAssetId, setChildAssetId] = useState('');
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
+  const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
@@ -83,9 +84,13 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     if (!options.quiet) setLoading(true);
     try {
       const params = new URLSearchParams({ project });
-      const next = await api<LineageSnapshot>(`/api/lineage/${requestedRoot}?${params.toString()}`);
+      const [next, nextClaims] = await Promise.all([
+        api<LineageSnapshot>(`/api/lineage/${requestedRoot}?${params.toString()}`),
+        api<AgentClaimsResponse>(`/api/agent-claims?${params.toString()}`),
+      ]);
       if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return;
       setSnapshot(next);
+      setClaims(nextClaims.claims);
       if (!options.quiet) setBrief(null);
       setActiveNodeId(current => (current && next.nodes.some(node => node.asset_id === current) ? current : next.active_asset_id));
     } catch (error) {
@@ -246,6 +251,19 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       onToast('error', error instanceof Error ? error.message : String(error));
     }
   }
+  async function controlClaim(action: 'release-stale' | 'revoke' | 'transfer', claim: AgentClaimSummary, body: { confirmWrite: true; reason?: string; toAgentName?: string }) {
+    try {
+      await api(`/api/agent-claims/${claim.id}/${action}`, {
+        body: JSON.stringify({ project, ...body }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      onToast('ok', `Updated claim ${claim.id}`);
+      await refresh({ quiet: true });
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
   useEffect(() => {
     void refreshWorkspaces();
   }, [refreshWorkspaces]);
@@ -386,10 +404,19 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             snapshot={snapshot}
           />
         )}
-        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} node={menuNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClose={() => setNodeMenu(null)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
+        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClose={() => setNodeMenu(null)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
       </div>
       {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
       <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
     </section>
   );
+}
+
+function lineageWorkspaceClaims(claims: AgentClaimSummary[], project: string, rootAssetId: string): AgentClaimSummary[] {
+  const targetId = `${project}:lineage-workspace:${rootAssetId}`;
+  return claims.filter(claim => {
+    if (claim.project !== project || claim.status !== 'active' || claim.derived_state === 'expired') return false;
+    if (claim.scope_type === 'lineage_workspace') return claim.target_id === targetId;
+    return claim.scope_type === 'project_channel';
+  });
 }

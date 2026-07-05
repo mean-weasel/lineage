@@ -48,7 +48,7 @@ function walkLocalReviewFiles(dir: string, files: string[] = []): string[] {
     throw error;
   }
   for (const entry of entries) {
-    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'studio-uploads') continue;
+    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'studio-uploads' || entry.name === 'playwright-results' || entry.name === 'lineage-demo') continue;
     if (process.env.NODE_ENV !== 'test' && /^vitest-/.test(entry.name)) continue;
     const path = join(dir, entry.name);
     if (entry.isDirectory()) walkLocalReviewFiles(path, files);

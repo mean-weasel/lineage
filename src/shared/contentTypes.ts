@@ -376,6 +376,7 @@ export interface ContentPostUpdateFields {
   notes?: string;
   sourcePath?: string;
   confirmWrite: boolean;
+  claimToken?: string;
 }
 
 export interface ContentPostAssetFields {
@@ -384,4 +385,5 @@ export interface ContentPostAssetFields {
   role?: string;
   notes?: string;
   confirmWrite: boolean;
+  claimToken?: string;
 }

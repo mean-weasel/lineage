@@ -159,6 +159,37 @@ describe('asset core catalog listing', () => {
     }
   });
 
+  it('ignores generated demo and Playwright artifacts when listing local review assets', () => {
+    const localDir = join(repoRoot, '.asset-scratch', 'vitest-local-review-visible');
+    const playwrightDir = join(repoRoot, '.asset-scratch', 'playwright-results', 'trace-resources');
+    const demoDir = join(repoRoot, '.asset-scratch', 'lineage-demo', '2026-06-lineage-demo', defaultProject, 'linkedin');
+    const localFile = join(localDir, 'demo-linkedin-visible.png');
+    const playwrightFile = join(playwrightDir, 'trace-demo-root.svg');
+    const demoFile = join(demoDir, 'demo-root.svg');
+    rmSync(localDir, { force: true, recursive: true });
+    rmSync(playwrightDir, { force: true, recursive: true });
+    rmSync(demoDir, { force: true, recursive: true });
+    mkdirSync(localDir, { recursive: true });
+    mkdirSync(playwrightDir, { recursive: true });
+    mkdirSync(demoDir, { recursive: true });
+    writeFileSync(localFile, Buffer.from('visible-local-review'));
+    writeFileSync(playwrightFile, Buffer.from('<svg>trace artifact</svg>'));
+    writeFileSync(demoFile, Buffer.from('<svg>demo root</svg>'));
+
+    try {
+      const snapshot = listAssets(defaultProduct, { page: 1, pageSize: 100, source: 'local' });
+      const relativePaths = snapshot.assets.map(asset => asset.local?.relative_path).filter(Boolean);
+
+      expect(relativePaths).toContain('vitest-local-review-visible/demo-linkedin-visible.png');
+      expect(relativePaths).not.toContain('playwright-results/trace-resources/trace-demo-root.svg');
+      expect(relativePaths).not.toContain('lineage-demo/2026-06-lineage-demo/demo-project/linkedin/demo-root.svg');
+    } finally {
+      rmSync(localDir, { force: true, recursive: true });
+      rmSync(playwrightDir, { force: true, recursive: true });
+      rmSync(demoDir, { force: true, recursive: true });
+    }
+  });
+
   it('previews placement metadata without mutating the catalog', () => {
     const firstAsset = listAssets(defaultProject, { page: 1, pageSize: 1 }).assets[0];
     const preview = previewPlacement(defaultProject, {

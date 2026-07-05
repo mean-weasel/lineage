@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
+import { createAgentClaim } from './agentClaims';
 import { fileSha256 } from './localReview';
 import { attachContentPostAsset, createContentBatch, createContentPost, updateContentPost } from './contentBatches';
 import { contentBatchRouter } from './contentBatchRoutes';
@@ -14,10 +15,12 @@ import type { ContentOpsQueueLaneId, ContentOpsQueueSnapshot } from '../shared/t
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-content-ops-queue');
 const dbFile = join(scratchDir, 'content-ops-queue.sqlite');
 let server: ReturnType<Express['listen']> | null = null;
+let postClaimTokens: Record<string, string> = {};
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
   process.env.LINEAGE_DB = dbFile;
+  postClaimTokens = {};
 }
 
 function appWithContentRoutes() {
@@ -36,6 +39,18 @@ function seedLocalAsset(): string {
   mkdirSync(scratchDir, { recursive: true });
   writeFileSync(file, Buffer.from('content-ops-queue-local'));
   return `local-${fileSha256(file).slice(0, 12)}`;
+}
+
+function claimPost(postId: string): string {
+  postClaimTokens[postId] ||= createAgentClaim({
+    agentName: `queue test agent for ${postId}`,
+    channel: 'tiktok',
+    project: defaultProject,
+    scopeType: 'content_post',
+    targetId: postId,
+    targetTitle: postId,
+  }).claim_token;
+  return postClaimTokens[postId];
 }
 
 function seedQueuePosts() {
@@ -64,13 +79,14 @@ function seedQueuePosts() {
       title: postId,
     });
   }
-  attachContentPostAsset(defaultProject, { assetId: localAssetId, confirmWrite: true, postId: 'ready-local-post' });
+  attachContentPostAsset(defaultProject, { assetId: localAssetId, claimToken: claimPost('ready-local-post'), confirmWrite: true, postId: 'ready-local-post' });
   attachContentPostAsset(defaultProject, {
     assetId: 'demo-tiktok-upload-demo-export-vertical',
+    claimToken: claimPost('review-s3-post'),
     confirmWrite: true,
     postId: 'review-s3-post',
   });
-  attachContentPostAsset(defaultProject, { assetId: 'missing-queue-asset', confirmWrite: true, postId: 'scheduled-unresolved-post' });
+  attachContentPostAsset(defaultProject, { assetId: 'missing-queue-asset', claimToken: claimPost('scheduled-unresolved-post'), confirmWrite: true, postId: 'scheduled-unresolved-post' });
   setContentTarget(defaultProject, { confirmWrite: true, notes: 'Next review handoff', postId: 'review-s3-post' });
 }
 
@@ -141,7 +157,7 @@ describe('content ops queue', () => {
 
   it('updates queue lanes as post phases change', () => {
     seedQueuePosts();
-    updateContentPost(defaultProject, { confirmWrite: true, phase: 'review', postId: 'ready-local-post' });
+    updateContentPost(defaultProject, { claimToken: claimPost('ready-local-post'), confirmWrite: true, phase: 'review', postId: 'ready-local-post' });
     const queue = getContentOpsQueue(defaultProject);
 
     expect(lane(queue, 'draft_ready').total).toBe(0);
@@ -185,6 +201,7 @@ describe('content ops queue', () => {
   it('keeps a scheduled selected target separate from next actionable work', () => {
     seedQueuePosts();
     updateContentPost(defaultProject, {
+      claimToken: claimPost('review-s3-post'),
       confirmWrite: true,
       phase: 'scheduled',
       postId: 'review-s3-post',

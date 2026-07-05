@@ -11,6 +11,14 @@ function snippetBetween(start: string, end: string): string {
 }
 
 describe('Lineage navigation behavior', () => {
+  it('includes the read-only Agents view in secondary navigation', () => {
+    const navSource = readFileSync(join(process.cwd(), 'src/web/components/Topbar.navigation.ts'), 'utf8');
+    const sidebarSource = readFileSync(join(process.cwd(), 'src/web/components/Sidebar.tsx'), 'utf8');
+
+    expect(navSource).toContain("{ label: 'Agents', view: 'agents' }");
+    expect(sidebarSource).toContain("setView('agents')");
+  });
+
   it('keeps Review asset inspection in the current view instead of redirecting to Assets', () => {
     const reviewSnippet = snippetBetween('<ReviewQueue', 'project={project}');
 

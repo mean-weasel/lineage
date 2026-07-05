@@ -1,6 +1,8 @@
 import type { LineageBriefResponse, LineageSelectedChildFields } from '../shared/types';
+import { AgentClaimError, validateAgentClaimForWrite } from './agentClaims';
 import { getLineageNextAsset, LineageError, linkLineageAssets } from './assetLineage';
 import { lineageDbPath, nowIso } from './assetLineageDb';
+import { lineageWorkspaceId } from './assetLineageWorkspaces';
 
 const publicPackageCommand = 'npx @mean-weasel/lineage';
 
@@ -67,9 +69,23 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
 export function linkSelectedLineageChild(project: string, fields: LineageSelectedChildFields) {
   const next = getLineageNextAsset(project, fields.rootAssetId);
   if (!next.next_asset) throw new LineageError('Cannot link child until a next base is selected or unambiguous');
+  if (fields.confirmWrite) {
+    const validation = validateAgentClaimForWrite({
+      channel: next.next_asset.channel,
+      claimToken: fields.claimToken,
+      confirmWrite: fields.confirmWrite,
+      dangerLevel: 'enforce',
+      project,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(project, next.root_asset_id),
+      writeKind: 'link_child',
+    });
+    if (!validation.ok) throw new AgentClaimError(validation.message, validation.code === 'claim_required' ? 401 : 403, validation.code, validation.conflicts);
+  }
   const result = linkLineageAssets(project, {
     childAssetId: fields.childAssetId,
     confirmWrite: fields.confirmWrite,
+    claimToken: fields.claimToken,
     parentAssetId: next.next_asset.asset_id,
   });
   return {

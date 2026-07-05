@@ -1,5 +1,15 @@
 import type { LineageBriefResponse, LineageNode } from '../../shared/types';
+import { api } from '../api';
 import { copyToClipboard } from '../clipboard';
+
+interface AgentClaimCreateResponse {
+  claim: {
+    id: string;
+    target_id: string;
+    expires_at: string;
+  };
+  claim_token: string;
+}
 
 export function LineageHandoffPanel({
   brief,
@@ -29,11 +39,34 @@ export function LineageHandoffPanel({
   ].filter((item): item is { label: string; text: string } => Boolean(item));
   const fullBrief = briefItems.map(item => `${item.label}:\n${item.text}`).join('\n\n');
   const copyLabel = (label: string) => label === 'variation source' ? 'Copy source' : label === 'agent brief' ? 'Copy prompt' : label === 'link-child command' ? 'Copy link command' : 'Copy command';
+  const claimTargetId = lineageWorkspaceClaimTargetId(project, rootAssetId);
 
   async function copy(text: string, label: string) {
     try {
       await copyToClipboard(text);
       onToast('ok', `Copied ${label}`);
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function copyClaimAwareHandoff() {
+    try {
+      const claim = await api<AgentClaimCreateResponse>('/api/agent-claims', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentName: 'Copied Lineage handoff',
+          channel: nextBase?.channel,
+          project,
+          scopeType: 'lineage_workspace',
+          targetId: claimTargetId,
+          targetTitle: nextBase ? `${nextBase.title} lineage` : `Lineage workspace ${rootAssetId}`,
+          ttl: '20m',
+        }),
+      });
+      await copyToClipboard(claimAwareHandoffPacket(claim.claim_token, nextCommand, brief, fullBrief));
+      onToast('ok', `Copied claim-aware handoff for ${claim.claim.id}`);
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -61,6 +94,9 @@ export function LineageHandoffPanel({
             <button aria-label="Copy full generated brief" onClick={() => void copy(fullBrief, 'full brief')}>Copy all</button>
           </div>
           <p>Use this bundle when asking an agent to continue from the chosen asset.</p>
+          <button aria-label="Copy claim-aware handoff" className="lineage-claim-handoff-button" onClick={() => copyClaimAwareHandoff()}>
+            Copy claim handoff
+          </button>
           <details>
             <summary>Commands and prompt</summary>
             {briefItems.map(item => (
@@ -77,4 +113,36 @@ export function LineageHandoffPanel({
       </button>
     </section>
   );
+}
+
+function lineageWorkspaceClaimTargetId(project: string, rootAssetId: string): string {
+  return `${project}:lineage-workspace:${rootAssetId}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function dbFlagFromCommand(command: string): string {
+  const match = /\s--db\s+('[^']*(?:'\\''[^']*)*'|"[^"]*"|\S+)/.exec(command);
+  return match ? ` --db ${match[1]}` : '';
+}
+
+function withClaimToken(command: string): string {
+  if (command.includes('--claim-token')) return command;
+  if (/\s--json$/.test(command)) return command.replace(/\s--json$/, ' --claim-token "$LINEAGE_CLAIM_TOKEN" --json');
+  return `${command} --claim-token "$LINEAGE_CLAIM_TOKEN"`;
+}
+
+function claimAwareHandoffPacket(claimToken: string, nextCommand: string, brief: LineageBriefResponse | null, fullBrief: string): string {
+  const dbFlag = dbFlagFromCommand(brief?.handoff?.link_child_command || brief?.handoff?.next_command || nextCommand);
+  const heartbeatCommand = `npx @mean-weasel/lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN"${dbFlag} --json`;
+  return [
+    `export LINEAGE_CLAIM_TOKEN=${shellQuote(claimToken)}`,
+    heartbeatCommand,
+    nextCommand,
+    brief?.handoff?.inspect_command,
+    brief?.handoff?.link_child_command ? withClaimToken(brief.handoff.link_child_command) : undefined,
+    fullBrief ? `Agent brief:\n${fullBrief}` : undefined,
+  ].filter((line): line is string => Boolean(line)).join('\n\n');
 }

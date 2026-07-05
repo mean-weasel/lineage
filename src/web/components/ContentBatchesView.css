@@ -174,6 +174,62 @@
   font-weight: 900;
 }
 
+.target-claim-occupancy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid #b8d5c2;
+  border-radius: 999px;
+  background: #f1fbf4;
+  padding: 5px 8px;
+  color: #245435 !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+}
+
+.target-claim-occupancy svg {
+  flex: 0 0 auto;
+}
+
+.target-claim-occupancy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-claim-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  white-space: normal !important;
+}
+
+.target-claim-actions button {
+  min-height: 24px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.target-claim-occupancy.idle {
+  border-color: #d8c58f;
+  background: #fff8df;
+  color: #66500f !important;
+}
+
+.target-claim-occupancy.stale {
+  border-color: #e1b2a9;
+  background: #fff1ee;
+  color: #7b3428 !important;
+}
+
 .target-actions button {
   min-height: 32px;
   border: 1px solid #cbd9de;

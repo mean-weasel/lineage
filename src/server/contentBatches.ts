@@ -1,4 +1,5 @@
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
+import { AgentClaimError, listAgentClaims, validateAgentClaimForWrite } from './agentClaims';
 import { contentPostHandoff, readinessForPost } from './contentPostHandoff';
 import type {
   ContentBatch,
@@ -217,6 +218,32 @@ function findContentPost(database: DatabaseSync, project: string, postId: string
   return postFromRow(row, assetsForPost(database, project, postId));
 }
 
+function requireContentPostClaim(project: string, post: ContentPost, claimToken: string | undefined, writeKind: string): void {
+  if (!claimToken && !hasActiveContentPostClaim(project, post)) return;
+  const validation = validateAgentClaimForWrite({
+    channel: post.channel,
+    claimToken,
+    confirmWrite: true,
+    dangerLevel: 'enforce',
+    project,
+    scopeType: 'content_post',
+    targetId: post.id,
+    writeKind,
+  });
+  if (!validation.ok) {
+    const status = validation.code === 'claim_required' || validation.code === 'claim_token_invalid' ? 401 : 409;
+    throw new AgentClaimError(validation.message, status, validation.code, validation.conflicts);
+  }
+}
+
+function hasActiveContentPostClaim(project: string, post: ContentPost): boolean {
+  return listAgentClaims(project).claims.some(claim => {
+    if (claim.project !== project || claim.status !== 'active' || claim.derived_state === 'expired') return false;
+    if (claim.scope_type === 'content_post') return claim.target_id === post.id;
+    return claim.scope_type === 'project_channel' && (!claim.channel || claim.channel === post.channel);
+  });
+}
+
 export function listContentPosts(project: string, filters: { batchId?: string; channel?: string; phase?: string } = {}) {
   const database = lineageDb();
   try {
@@ -243,6 +270,7 @@ export function updateContentPost(project: string, fields: ContentPostUpdateFiel
   const timestamp = nowIso();
   try {
     const current = findContentPost(database, project, postId);
+    if (fields.phase) requireContentPostClaim(project, current, fields.claimToken, 'content_post_phase');
     if (fields.batchId) {
       const batch = database.prepare('select id from content_batches where project_id = ? and id = ?').get(project, fields.batchId);
       if (!batch) throw new ContentBatchError(`Unknown content batch: ${fields.batchId}`, 404);
@@ -281,7 +309,8 @@ export function attachContentPostAsset(project: string, fields: ContentPostAsset
   const database = lineageDb();
   const timestamp = nowIso();
   try {
-    findContentPost(database, project, postId);
+    const current = findContentPost(database, project, postId);
+    requireContentPostClaim(project, current, fields.claimToken, 'content_post_attach_asset');
     database.prepare(`
       insert into content_post_assets (id, project_id, post_id, asset_id, role, notes, attached_at)
       values (?, ?, ?, ?, ?, ?, ?)
@@ -300,6 +329,8 @@ export function detachContentPostAsset(project: string, fields: ContentPostAsset
   if (!fields.confirmWrite) return { ok: true, dryRun: true, message: `Would detach ${assetId} from ${postId}`, preview: { postId, assetId, role } };
   const database = lineageDb();
   try {
+    const current = findContentPost(database, project, postId);
+    requireContentPostClaim(project, current, fields.claimToken, 'content_post_detach_asset');
     database.prepare('delete from content_post_assets where project_id = ? and post_id = ? and asset_id = ? and role = ?').run(project, postId, assetId, role);
     return { ok: true, message: `Detached ${assetId} from ${postId}`, post: findContentPost(database, project, postId) };
   } finally {

@@ -40,6 +40,40 @@ By default, `lineage start` listens on `127.0.0.1:5197` and stores SQLite state 
 lineage start --port 6123 --db ~/.lineage/lineage.sqlite
 ```
 
+## Agent Claims
+
+Mutating agent writes use target-scoped claim tokens. Read-only inspection stays
+available without a claim, but confirmed writes such as lineage `link-child` and
+claimed content post attach/phase actions require a matching token when a target
+is already claimed.
+
+Create a claim and copy the raw token at creation time:
+
+```bash
+lineage agent claim --project demo-project --scope lineage_workspace --target demo-project:lineage-workspace:<root-asset-id> --target-title "TikTok hook lineage" --agent-name "Codex thread 123" --ttl 20m --json
+export LINEAGE_CLAIM_TOKEN='claim_abc.secret_xyz'
+```
+
+Keep the claim fresh and pass it to mutating commands:
+
+```bash
+lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --json
+lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --json
+```
+
+The app-created claim-aware handoff packet includes the same token export,
+heartbeat, inspect, and write commands. Raw claim tokens are not shown in the
+read-only Agents view.
+
+Use `project_channel` only for rare work that intentionally owns an entire
+project/channel lane. Prefer `lineage_workspace` or `content_post` claims for
+normal target-scoped agent work:
+
+```bash
+lineage agent claim --project demo-project --scope project_channel --target demo-project:channel:tiktok --channel tiktok --agent-name "Channel owner" --ttl 20m --json
+```
+
 ## Codex Plugin
 
 The versioned Codex plugin lives in `plugins/lineage-codex-plugin`. Install the

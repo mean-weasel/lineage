@@ -25,6 +25,13 @@ function boolBody(req: Request, key: string): boolean {
   return (req.body as Record<string, unknown>)[key] === true;
 }
 
+function claimTokenFromRequest(req: Request): string | undefined {
+  const header = req.header('X-Lineage-Claim-Token');
+  if (header) return header;
+  const value = (req.body as Record<string, unknown>).claimToken;
+  return typeof value === 'string' ? value : undefined;
+}
+
 function bodyProjectShape(req: Request): { body?: Record<string, unknown>; query?: Record<string, unknown> } {
   return { body: req.body as Record<string, unknown>, query: req.query };
 }
@@ -113,6 +120,7 @@ export function contentBatchRouter(projectFrom: ProjectResolver): Router {
       campaign: stringBody(req, 'campaign'),
       channel: stringBody(req, 'channel'),
       confirmWrite: boolBody(req, 'confirmWrite'),
+      claimToken: claimTokenFromRequest(req),
       cta: stringBody(req, 'cta'),
       notes: stringBody(req, 'notes'),
       phase: stringBody(req, 'phase') as ContentPostPhase | undefined,
@@ -129,6 +137,7 @@ export function contentBatchRouter(projectFrom: ProjectResolver): Router {
     res.json(attachContentPostAsset(projectFrom(bodyProjectShape(req)), {
       assetId: stringBody(req, 'assetId') || '',
       confirmWrite: boolBody(req, 'confirmWrite'),
+      claimToken: claimTokenFromRequest(req),
       notes: stringBody(req, 'notes'),
       postId: req.params.postId,
       role: stringBody(req, 'role'),
@@ -139,6 +148,7 @@ export function contentBatchRouter(projectFrom: ProjectResolver): Router {
     res.json(detachContentPostAsset(projectFrom(bodyProjectShape(req)), {
       assetId: stringBody(req, 'assetId') || '',
       confirmWrite: boolBody(req, 'confirmWrite'),
+      claimToken: claimTokenFromRequest(req),
       postId: req.params.postId,
       role: stringBody(req, 'role'),
     }));

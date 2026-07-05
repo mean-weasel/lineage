@@ -4,6 +4,7 @@ import { api } from './api';
 import { normalizePlacementValues, postMutation } from './assetMutations';
 import { AssetDetailDrawer } from './components/AssetDetailDrawer';
 import { AssetBoard } from './components/AssetBoard';
+import { AgentsView } from './components/AgentsView';
 import { ContentBatchesView } from './components/ContentBatchesView';
 import { CopiedTextFallback } from './components/CopiedTextFallback';
 import { CurrentWorkTarget } from './components/CurrentWorkTargetPanel';
@@ -295,6 +296,8 @@ export function App() {
             project={project}
             selectedAsset={selected}
           />
+        ) : view === 'agents' ? (
+          <AgentsView project={project} />
         ) : view === 'backup' ? (
           <LocalBackupQueue
             assets={assets}

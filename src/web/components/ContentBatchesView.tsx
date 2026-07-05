@@ -1,6 +1,6 @@
 import { Clipboard, FileDown, Plus, RefreshCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { AssetLibrarySnapshot, ContentBatchDetail, ContentBatchSnapshot, ContentOpsQueueSnapshot, ContentPost, ContentPostPhase, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
+import type { AgentClaimSummary, AgentClaimsResponse, AssetLibrarySnapshot, ContentBatchDetail, ContentBatchSnapshot, ContentOpsQueueSnapshot, ContentPost, ContentPostPhase, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
 import { formatDate } from '../../shared/format';
 import { api } from '../api';
 import { ContentAssetCandidates } from './ContentAssetCandidates';
@@ -47,6 +47,7 @@ export function ContentBatchesView({
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [targetSnapshot, setTargetSnapshot] = useState<ContentTargetSnapshot | null>(null);
   const [queueSnapshot, setQueueSnapshot] = useState<ContentOpsQueueSnapshot | null>(null);
+  const [agentClaims, setAgentClaims] = useState<AgentClaimSummary[]>([]);
 
   const batches = snapshot?.batches || [];
   const selectedBatch = useMemo(() => batches.find(batch => batch.id === selectedBatchId) || batches[0], [batches, selectedBatchId]);
@@ -74,14 +75,17 @@ export function ContentBatchesView({
     setLoading(true);
     setError(null);
     try {
-      const [next, target, queue] = await Promise.all([
-        api<ContentBatchSnapshot>(`/api/content/batches?${new URLSearchParams({ project })}`),
-        api<ContentTargetSnapshot>(`/api/content/target?${new URLSearchParams({ project })}`),
-        api<ContentOpsQueueSnapshot>(`/api/content/queue?${new URLSearchParams({ project })}`),
+      const params = new URLSearchParams({ project });
+      const [next, target, queue, claims] = await Promise.all([
+        api<ContentBatchSnapshot>(`/api/content/batches?${params}`),
+        api<ContentTargetSnapshot>(`/api/content/target?${params}`),
+        api<ContentOpsQueueSnapshot>(`/api/content/queue?${params}`),
+        api<AgentClaimsResponse>(`/api/agent-claims?${params}`),
       ]);
       setSnapshot(next);
       setTargetSnapshot(target);
       setQueueSnapshot(queue);
+      setAgentClaims(claims.claims);
       const batchId = nextBatchId || next.batches[0]?.id || '';
       setSelectedBatchId(batchId);
       setDetail(batchId ? await api<ContentBatchDetail>(`/api/content/batches/${batchId}?${new URLSearchParams({ project })}`) : null);
@@ -265,7 +269,7 @@ export function ContentBatchesView({
           {detail ? (
             <>
               <BatchHeader detail={detail} onCopy={onCopy} />
-              <ContentTargetPanel onClear={clearTarget} onCopy={onCopy} pending={Boolean(pending)} target={targetSnapshot} />
+              <ContentTargetPanel agentClaims={agentClaims} onClear={clearTarget} onCopy={onCopy} pending={Boolean(pending)} target={targetSnapshot} />
               <ContentOpsQueuePanel onCopy={onCopy} onFocusPost={focusQueuePost} queue={queueSnapshot} />
               <CreatePostForm form={postForm} pending={Boolean(pending)} setForm={setPostForm} submit={createPost} />
               <ContentPostFilters

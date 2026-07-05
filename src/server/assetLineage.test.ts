@@ -16,6 +16,8 @@ import {
   updateSelectedAsset,
 } from './assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from './assetLineageHandoff';
+import { createAgentClaim } from './agentClaims';
+import { lineageWorkspaceId } from './assetLineageWorkspaces';
 
 const require = createRequire(import.meta.url);
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage');
@@ -387,8 +389,15 @@ describe('asset lineage index', () => {
     });
     expect(dryRun).toMatchObject({ dryRun: true, parent_asset_id: files.childId });
 
+    const claim = createAgentClaim({
+      agentName: 'Lineage unit test agent',
+      project: defaultProject,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(defaultProject, files.parentId),
+    });
     linkSelectedLineageChild(defaultProject, {
       childAssetId: files.variationId,
+      claimToken: claim.claim_token,
       confirmWrite: true,
       rootAssetId: files.parentId,
     });

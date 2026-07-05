@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
-import type { ContentOpsQueueSnapshot, ContentTargetSnapshot } from '../../shared/types';
+import type { AgentClaimSummary, ContentOpsQueueSnapshot, ContentTargetSnapshot } from '../../shared/types';
 import { ContentOpsQueuePanel } from './ContentOpsQueuePanel';
 import { ContentTargetPanel } from './ContentTargetPanel';
 
@@ -10,6 +10,14 @@ function collectButtons(node: ReactNode): ReactElement[] {
   const element = node as ReactElement<{ children?: ReactNode; type?: string }>;
   const children = collectButtons(element.props?.children);
   return element.type === 'button' ? [element, ...children] : children;
+}
+
+function flattenText(node: ReactNode): string {
+  if (!node || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(flattenText).join('');
+  const element = node as ReactElement<{ children?: ReactNode }>;
+  return flattenText(element.props?.children);
 }
 
 function buttonText(button: ReactElement): string {
@@ -97,6 +105,34 @@ const queueSnapshot = {
   },
 } satisfies ContentOpsQueueSnapshot;
 
+const targetClaims = [{
+  agent_kind: 'codex',
+  agent_name: 'Ada',
+  created_at: '2026-06-26T00:00:00.000Z',
+  derived_state: 'active',
+  expires_at: '2026-06-26T00:20:00.000Z',
+  heartbeat_age_seconds: 12,
+  heartbeat_at: '2026-06-26T00:00:12.000Z',
+  id: 'claim_content',
+  project: 'demo-project',
+  scope_type: 'content_post',
+  status: 'active',
+  target_id: 'post-1',
+}] satisfies AgentClaimSummary[];
+
+const staleTargetClaims = [{
+  ...targetClaims[0],
+  agent_name: 'Stale Ada',
+  derived_state: 'stale',
+  heartbeat_age_seconds: 960,
+  id: 'claim_stale_content',
+}] satisfies AgentClaimSummary[];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 describe('content agent commands', () => {
   it('copies the selected target command and free-form prompt from the target panel', () => {
     const copied: string[] = [];
@@ -127,5 +163,65 @@ describe('content agent commands', () => {
     clickButton(panel, 'Copy agent next');
 
     expect(copied).toContain('npx lineage agent next --project demo-project');
+  });
+
+  it('shows selected content post occupancy without raw claim tokens', () => {
+    const panel = ContentTargetPanel({
+      agentClaims: targetClaims,
+      onClear: async () => undefined,
+      onCopy: async () => undefined,
+      pending: false,
+      target: targetSnapshot,
+    });
+    const text = flattenText(panel);
+
+    expect(text).toContain('Claimed by Ada');
+    expect(text).not.toContain('claim_content.secret');
+  });
+
+  it('requires explicit confirmation before content target release, transfer, and revoke controls call claim routes', () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    const confirm = vi.fn(() => true);
+    const prompt = vi.fn(() => 'handoff to teammate');
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('window', { confirm, prompt });
+    const panel = ContentTargetPanel({
+      agentClaims: staleTargetClaims,
+      onClear: async () => undefined,
+      onCopy: async () => undefined,
+      pending: false,
+      target: targetSnapshot,
+    });
+
+    clickButton(panel, 'Release stale');
+    clickButton(panel, 'Transfer');
+    clickButton(panel, 'Revoke');
+
+    expect(confirm).toHaveBeenCalledTimes(3);
+    expect(prompt).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+      '/api/agent-claims/claim_stale_content/release-stale',
+      '/api/agent-claims/claim_stale_content/transfer',
+      '/api/agent-claims/claim_stale_content/revoke',
+    ]);
+    expect(fetchMock.mock.calls.map(call => JSON.parse(String((call[1] as RequestInit).body)))).toEqual([
+      {
+        confirmWrite: true,
+        project: 'demo-project',
+        reason: 'Released stale content_post claim claim_stale_content from the content target panel.',
+      },
+      {
+        confirmWrite: true,
+        project: 'demo-project',
+        reason: 'Transferred from content target panel.',
+        toAgentName: 'handoff to teammate',
+      },
+      {
+        confirmWrite: true,
+        project: 'demo-project',
+        reason: 'handoff to teammate',
+      },
+    ]);
+    expect(fetchMock.mock.calls.every(call => (call[1] as RequestInit).method === 'POST')).toBe(true);
   });
 });

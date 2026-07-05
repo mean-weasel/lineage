@@ -343,6 +343,40 @@ export interface LineageBriefResponse {
 export type { GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider } from './generationTypes';
 export type { LineageWorkspace, LineageWorkspaceActor, LineageWorkspaceFields, LineageWorkspaceSnapshot, LineageWorkspaceStatus, LineageWorkspaceUpdateFields } from './lineageWorkspaceTypes';
 
+type AgentClaimScopeType = 'lineage_workspace' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
+type AgentClaimStatus = 'active' | 'expired' | 'released' | 'revoked' | 'transferred';
+type AgentClaimDerivedState = 'active' | 'idle' | 'stale' | 'expired';
+
+export interface AgentClaimSummary {
+  id: string;
+  project: string;
+  channel?: string;
+  scope_type: AgentClaimScopeType;
+  target_id: string;
+  target_title?: string;
+  agent_id?: string;
+  agent_name: string;
+  agent_kind: string;
+  thread_id?: string;
+  status: AgentClaimStatus;
+  created_at: string;
+  heartbeat_at: string;
+  expires_at: string;
+  released_at?: string;
+  revoked_at?: string;
+  revoked_by?: string;
+  override_reason?: string;
+  metadata?: Record<string, unknown>;
+  heartbeat_age_seconds: number;
+  derived_state: AgentClaimDerivedState;
+}
+
+export interface AgentClaimsResponse {
+  ok: true;
+  claims: AgentClaimSummary[];
+  fetchedAt: string;
+}
+
 export interface LineageLayoutFields {
   rootAssetId: string;
   positions: Array<{ assetId: string; x: number; y: number }>;
@@ -350,11 +384,11 @@ export interface LineageLayoutFields {
 }
 
 export interface LineageSelectedChildFields {
-  rootAssetId?: string; childAssetId: string; confirmWrite: boolean;
+  rootAssetId?: string; childAssetId: string; confirmWrite: boolean; claimToken?: string;
 }
 
 export interface LineageLinkFields {
-  parentAssetId: string; childAssetId: string; confirmWrite: boolean;
+  parentAssetId: string; childAssetId: string; confirmWrite: boolean; claimToken?: string;
 }
 
 export interface LineageRemoveNodeFields {

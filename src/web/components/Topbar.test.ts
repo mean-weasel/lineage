@@ -8,8 +8,8 @@ describe('Topbar navigation groups', () => {
     expect(primaryViews.map(item => item.view)).toEqual(['lineage', 'review', 'assets', 'settings']);
   });
 
-  it('keeps Ledger, Content, and Backup reachable as secondary views', () => {
-    expect(secondaryViews.map(item => item.view)).toEqual(['ledger', 'content', 'backup']);
+  it('keeps Ledger, Content, Agents, and Backup reachable as secondary views', () => {
+    expect(secondaryViews.map(item => item.view)).toEqual(['ledger', 'content', 'agents', 'backup']);
   });
 
   it('keeps live cloud inventory out of the global topbar', () => {
