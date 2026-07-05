@@ -34,7 +34,7 @@ lineage start
 lineage-dev start
 ```
 
-By default, `lineage start` listens on `127.0.0.1:5197` and stores SQLite state in a stable Lineage runtime directory. `lineage-dev start` listens on `127.0.0.1:5198` and uses a separate development SQLite file. Override those defaults with `--port`, `--host`, `--db`, or `LINEAGE_HOME`:
+By default, `lineage start` listens on `lineage.localhost:5197` and stores SQLite state in a stable Lineage runtime directory. `lineage-dev start` listens on `lineage-dev.localhost:5198` and uses a separate development SQLite file. Override those defaults with `--port`, `--host`, `--db`, or `LINEAGE_HOME`:
 
 ```bash
 lineage start --port 6123 --db ~/.lineage/lineage.sqlite
@@ -113,6 +113,20 @@ The normal cadence is: bump version and changelog, merge to `main`, run `publish
 Source checkouts and installed packages include a synthetic public demo catalog at `fixtures/demo-project/assets/catalog.json`. When `demo-project/assets/catalog.json` does not exist in the repo root, Lineage uses that fixture so the demo project can load without private storage or customer data.
 
 If you create a real `demo-project/assets/catalog.json`, that root project catalog overrides the packaged fixture. The fixture keeps S3-shaped metadata for realistic catalog structure, but default previews are generated local SVG data URLs and do not call storage.
+
+Lineage also includes a lightweight Swissifier rich-demo manifest at `fixtures/demo-project/lineage/swissifier-rich-demo.json`. The manifest stores only synthetic metadata, checksums, graph edges, layout positions, and selected next-variation bases. It does not include generated PNG media or any local SQLite state.
+
+To hydrate the Swissifier demo with real images, use the Demo seed menu's Swissifier `Download media` control. Lineage downloads `swissifier-rich-demo-v1.tar.gz` from the [v0.1.2 GitHub release](https://github.com/mean-weasel/lineage/releases/tag/v0.1.2), verifies the archive checksum, safely unpacks the PNGs into local scratch storage, and then verifies each PNG checksum before loading the rich demo.
+
+For manual verification or offline restore, the expected archive checksum is:
+
+```sh
+shasum -a 256 swissifier-rich-demo-v1.tar.gz
+```
+
+`24edc5307d0932ddc8a151c6a8c1001a08c45075e3ae198082038c44519be0de`
+
+The previous manual path remains available: unpack the media pack yourself, set `LINEAGE_SWISSIFIER_MEDIA_DIR` to that folder, then use the Demo seed menu to restore media and load Swissifier.
 
 ## Data And Privacy
 

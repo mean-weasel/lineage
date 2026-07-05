@@ -28,11 +28,11 @@ describe('lineage CLI start options', () => {
     delete process.env.HOST;
     delete process.env.LINEAGE_DB;
 
-    const options = resolveStartOptions({ binName: 'lineage', channel: 'stable', defaultPort: 5197, displayName: 'Lineage' }, []);
+    const options = resolveStartOptions({ binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' }, []);
 
     expect(options).toMatchObject({
       dbPath: join('/tmp/lineage-home', 'lineage.sqlite'),
-      host: '127.0.0.1',
+      host: 'lineage.localhost',
       json: false,
       open: false,
       port: 5197,
@@ -42,10 +42,11 @@ describe('lineage CLI start options', () => {
   it('keeps the development channel on a separate default port and database', () => {
     process.env.LINEAGE_HOME = '/tmp/lineage-dev-home';
 
-    const options = resolveStartOptions({ binName: 'lineage-dev', channel: 'development', defaultPort: 5198, displayName: 'Lineage Dev' }, ['--json']);
+    const options = resolveStartOptions({ binName: 'lineage-dev', channel: 'development', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' }, ['--json']);
 
     expect(options).toMatchObject({
       dbPath: join('/tmp/lineage-dev-home', 'lineage-dev.sqlite'),
+      host: 'lineage-dev.localhost',
       json: true,
       port: 5198,
     });
@@ -53,7 +54,7 @@ describe('lineage CLI start options', () => {
 
   it('accepts explicit host, port, database, and open flags', () => {
     const options = resolveStartOptions(
-      { binName: 'lineage', channel: 'stable', defaultPort: 5197, displayName: 'Lineage' },
+      { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
       ['--host', '0.0.0.0', '--port=6123', '--db', '/tmp/custom.sqlite', '--open']
     );
 
@@ -68,14 +69,14 @@ describe('lineage CLI start options', () => {
   it('rejects invalid ports before spawning a server', () => {
     expect(() =>
       resolveStartOptions(
-        { binName: 'lineage', channel: 'stable', defaultPort: 5197, displayName: 'Lineage' },
+        { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
         ['--port', 'not-a-port']
       )
     ).toThrow('Invalid port: not-a-port');
 
     expect(() =>
       resolveStartOptions(
-        { binName: 'lineage', channel: 'stable', defaultPort: 5197, displayName: 'Lineage' },
+        { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
         ['--port', '70000']
       )
     ).toThrow('Invalid port: 70000');

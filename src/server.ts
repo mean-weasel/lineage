@@ -24,7 +24,7 @@ import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes'
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
 const app = express();
 const port = Number(process.env.PORT || 5173);
-const host = process.env.HOST || '127.0.0.1';
+const host = process.env.HOST || 'lineage.localhost';
 const isProduction = process.env.NODE_ENV === 'production';
 const maxUploadBytes = Number(process.env.LINEAGE_MAX_UPLOAD_MB || 200) * 1024 * 1024;
 const upload = multer({ dest: ensureUploadDir(), limits: { fileSize: maxUploadBytes } });
