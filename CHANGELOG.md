@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- Add a managed Swissifier rich-demo media download flow that verifies the release archive and restored PNG checksums before loading the demo.
+- Add durable local startup helpers and default Lineage CLI hosts for `lineage.localhost` and `lineage-dev.localhost`.
+- Ship the lightweight Swissifier fixture manifest while keeping generated demo media outside git and package contents.
+
 ## 0.1.2
 
 - Fix packaged Lineage handoff commands so copied `next`, `inspect`, and `link-child` commands run through the published package.
