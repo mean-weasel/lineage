@@ -1,11 +1,23 @@
 import express, { type Express } from 'express';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
-import { archiveDemoLineageWorkspace, seedDemoLineageWorkspace } from './assetLineageDemo';
+import {
+  archiveDemoLineageWorkspace,
+  demoSeedMediaStatus,
+  downloadSwissifierRichDemoMedia,
+  restoreDemoSeedMedia,
+  restoreSwissifierRichDemoMedia,
+  seedDemoLineageWorkspace,
+  seedSwissifierRichDemoWorkspace,
+  swissifierRichDemoMediaStatus,
+} from './assetLineageDemo';
 import {
   activateLineageWorkspace,
   archiveLineageWorkspace,
@@ -99,6 +111,42 @@ function appWithLineageWorkspaceRoutes() {
   registerLineageWorkspaceRoutes(app, projectFrom, asyncRoute);
   server = app.listen(0);
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+function bufferServer(body: Buffer, status = 200) {
+  server = createServer((_req, res) => {
+    res.statusCode = status;
+    res.setHeader('content-length', String(body.length));
+    res.end(body);
+  }).listen(0);
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}/swissifier-rich-demo-v1.tar.gz`;
+}
+
+function sha256(body: Buffer | string): string {
+  return createHash('sha256').update(body).digest('hex');
+}
+
+function tarGz(entries: Array<{ name: string; body: Buffer; typeflag?: string }>) {
+  const chunks: Buffer[] = [];
+  for (const entry of entries) {
+    const header = Buffer.alloc(512);
+    header.write(entry.name, 0, 100, 'utf8');
+    header.write('0000644\0', 100, 8, 'ascii');
+    header.write('0000000\0', 108, 8, 'ascii');
+    header.write('0000000\0', 116, 8, 'ascii');
+    header.write(`${entry.body.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
+    header.write('00000000000\0', 136, 12, 'ascii');
+    header.fill(' ', 148, 156);
+    header.write(entry.typeflag || '0', 156, 1, 'ascii');
+    header.write('ustar\0', 257, 6, 'ascii');
+    const checksum = [...header].reduce((sum, value) => sum + value, 0);
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+    chunks.push(header, entry.body);
+    const padding = (512 - (entry.body.length % 512)) % 512;
+    if (padding) chunks.push(Buffer.alloc(padding));
+  }
+  chunks.push(Buffer.alloc(1024));
+  return gzipSync(Buffer.concat(chunks));
 }
 
 async function postJson<T>(baseUrl: string, path: string, body: Record<string, unknown>): Promise<{ body: T; status: number }> {
@@ -293,5 +341,160 @@ describe('lineage workspaces', () => {
     const archived = archiveDemoLineageWorkspace(defaultProject, true);
     expect(archived.archived.workspace).toMatchObject({ status: 'archived' });
     expect(existsSync(defaultDemoFilesDir)).toBe(false);
+  });
+
+  it('reports and restores missing generated demo media', () => {
+    const seeded = seedDemoLineageWorkspace(defaultProject, { confirmWrite: true });
+    expect(demoSeedMediaStatus(defaultProject)).toMatchObject({
+      present: 10,
+      total: 10,
+      missing: [],
+    });
+
+    rmSync(defaultDemoFilesDir, { force: true, recursive: true });
+    expect(demoSeedMediaStatus(defaultProject)).toMatchObject({
+      present: 0,
+      total: 10,
+    });
+
+    const dryRun = restoreDemoSeedMedia(defaultProject, { confirmWrite: false });
+    expect(dryRun).toMatchObject({ dryRun: true, restored: 0, would_restore: 10 });
+    expect(existsSync(defaultDemoFilesDir)).toBe(false);
+
+    const restored = restoreDemoSeedMedia(defaultProject, { confirmWrite: true });
+    const snapshot = getLineageSnapshot(defaultProject, seeded.root_asset_id);
+
+    expect(restored).toMatchObject({ dryRun: false, restored: 10 });
+    expect(demoSeedMediaStatus(defaultProject)).toMatchObject({
+      present: 10,
+      total: 10,
+      missing: [],
+    });
+    expect(snapshot.nodes.every(node => node.preview_url?.includes('/api/assets/local-preview?'))).toBe(true);
+
+    archiveDemoLineageWorkspace(defaultProject, true);
+  });
+
+  it('seeds the manifest-backed Swissifier rich demo without bundling media', () => {
+    const dryRun = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: false });
+    expect(dryRun).toMatchObject({
+      demo_id: 'swissifier-rich-demo',
+      dryRun: true,
+      root_asset_id: 'local-5748fb8ba6df',
+    });
+
+    const seeded = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+    const snapshot = getLineageSnapshot(defaultProject, seeded.root_asset_id);
+    const next = getLineageNextAsset(defaultProject, seeded.root_asset_id);
+    const workspaces = listLineageWorkspaces(defaultProject);
+
+    expect(seeded.workspace).toMatchObject({
+      created_by: 'system',
+      status: 'active',
+      title: 'Swissifier rich demo',
+    });
+    expect(snapshot.nodes).toHaveLength(14);
+    expect(snapshot.edges).toHaveLength(13);
+    expect(snapshot.selected).toEqual(['local-27050bc5c393', 'local-6d06bdbd9f56']);
+    expect(snapshot.nodes.find(node => node.asset_id === seeded.root_asset_id)).toMatchObject({
+      channel: 'linkedin',
+      local_path: 'rich-demo-drafts/swissifier-v1/swissifier-linkedin-root-v1.png',
+      position: { x: 40, y: 894 },
+    });
+    expect(snapshot.nodes.every(node => node.local_path?.startsWith('rich-demo-drafts/swissifier-v1/'))).toBe(true);
+    expect(next.strategy).toBe('selected');
+    expect(next.selection_mode).toBe('multiple');
+    expect(workspaces.active_workspace).toMatchObject({
+      root_asset_id: seeded.root_asset_id,
+      title: 'Swissifier rich demo',
+    });
+    expect(seeded.media_status).toMatchObject({
+      demo_id: 'swissifier-rich-demo',
+      total: 14,
+    });
+  });
+
+  it('reports Swissifier media status and requires an optional source to restore it', () => {
+    const previousSource = process.env.LINEAGE_SWISSIFIER_MEDIA_DIR;
+    delete process.env.LINEAGE_SWISSIFIER_MEDIA_DIR;
+    try {
+      const status = swissifierRichDemoMediaStatus(defaultProject);
+      expect(status).toMatchObject({
+        download_available: true,
+        download_file: 'swissifier-rich-demo-v1.tar.gz',
+        download_sha256: '24edc5307d0932ddc8a151c6a8c1001a08c45075e3ae198082038c44519be0de',
+        demo_id: 'swissifier-rich-demo',
+        total: 14,
+      });
+      expect(status.present + status.missing.length + status.invalid.length).toBe(status.total);
+
+      const restored = restoreSwissifierRichDemoMedia(defaultProject, { confirmWrite: true });
+      expect(restored).toMatchObject({
+        demo_id: 'swissifier-rich-demo',
+        restored: 0,
+        source_env: 'LINEAGE_SWISSIFIER_MEDIA_DIR',
+        source_required: true,
+      });
+    } finally {
+      if (previousSource === undefined) delete process.env.LINEAGE_SWISSIFIER_MEDIA_DIR;
+      else process.env.LINEAGE_SWISSIFIER_MEDIA_DIR = previousSource;
+    }
+  });
+
+  it('verifies the Swissifier media download checksum before restore work', async () => {
+    const body = Buffer.from('not a tarball, but enough for dry-run checksum proof');
+    const url = bufferServer(body);
+
+    const downloaded = await downloadSwissifierRichDemoMedia(defaultProject, {
+      confirmWrite: false,
+      expectedSha256: sha256(body),
+      sourceUrl: url,
+    });
+
+    expect(downloaded).toMatchObject({
+      archive_sha256: sha256(body),
+      demo_id: 'swissifier-rich-demo',
+      download_available: true,
+      dryRun: true,
+      restored: 0,
+      total: 14,
+      would_restore: 14,
+    });
+  });
+
+  it('rejects Swissifier media downloads with mismatched archive checksums', async () => {
+    const body = Buffer.from('wrong archive body');
+    const url = bufferServer(body);
+
+    await expect(downloadSwissifierRichDemoMedia(defaultProject, {
+      confirmWrite: true,
+      expectedSha256: '0'.repeat(64),
+      sourceUrl: url,
+    })).rejects.toThrow('checksum mismatch');
+  });
+
+  it('rejects Swissifier media archives with unsafe paths before writing files', async () => {
+    const archive = tarGz([{ name: '../swissifier-linkedin-root-v1.png', body: Buffer.from('unsafe') }]);
+    const url = bufferServer(archive);
+
+    await expect(downloadSwissifierRichDemoMedia(defaultProject, {
+      confirmWrite: true,
+      expectedSha256: sha256(archive),
+      sourceUrl: url,
+    })).rejects.toThrow('Unsafe Swissifier media archive path');
+  });
+
+  it('ignores known archive metadata before validating expected media files', async () => {
+    const archive = tarGz([
+      { name: './._.', body: Buffer.from('appledouble') },
+      { name: 'PaxHeader/currentdir', body: Buffer.from('path=./\n'), typeflag: 'x' },
+    ]);
+    const url = bufferServer(archive);
+
+    await expect(downloadSwissifierRichDemoMedia(defaultProject, {
+      confirmWrite: true,
+      expectedSha256: sha256(archive),
+      sourceUrl: url,
+    })).rejects.toThrow('missing 14 expected files');
   });
 });

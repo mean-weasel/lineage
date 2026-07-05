@@ -66,11 +66,15 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     activeWorkspace,
     archiveWorkspace,
     demoSeedStatus,
+    downloadSwissifierDemoMedia,
     handleWorkspaceCreated,
     refreshDemoSeedStatus,
     refreshWorkspaces,
     restoreDemoSeedMedia,
+    restoreSwissifierDemoMedia,
     seedDemoWorkspace,
+    seedSwissifierDemoWorkspace,
+    swissifierDemoStatus,
     visibleWorkspaces,
     workspaceLoading,
     workspaceRootAssetId,
@@ -117,8 +121,16 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   async function seedDemoAndRefreshAssets() {
     closeTransientMenus();
     const seeded = await seedDemoWorkspace();
-    await refresh({ rootAssetId: seeded?.workspace?.root_asset_id || seeded?.root_asset_id });
     await onAssetsChanged?.();
+    const refreshed = await seedDemoWorkspace({ quiet: true });
+    await refresh({ rootAssetId: refreshed?.workspace?.root_asset_id || refreshed?.root_asset_id || seeded?.workspace?.root_asset_id || seeded?.root_asset_id });
+  }
+  async function seedSwissifierAndRefreshAssets() {
+    closeTransientMenus();
+    const seeded = await seedSwissifierDemoWorkspace();
+    await onAssetsChanged?.();
+    const refreshed = await seedSwissifierDemoWorkspace({ quiet: true });
+    await refresh({ rootAssetId: refreshed?.workspace?.root_asset_id || refreshed?.root_asset_id || seeded?.workspace?.root_asset_id || seeded?.root_asset_id });
   }
   async function mutateLineage(path: string, body: Record<string, unknown>, message: string) {
     try {
@@ -310,12 +322,16 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         onRefreshLineage={() => void refresh()}
         onRefreshWorkspaces={() => void refreshWorkspaces()}
         onRestoreDemoMedia={() => void restoreDemoSeedMedia()}
+        onRestoreSwissifierMedia={() => void restoreSwissifierDemoMedia()}
+        onDownloadSwissifierMedia={() => void downloadSwissifierDemoMedia()}
         onSeedDemo={() => void seedDemoAndRefreshAssets()}
+        onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
         onSelectWorkspace={workspaceId => void activateWorkspace(workspaceId)}
         onTidyGraph={() => void tidyGraph()}
         onToggleNextPanel={toggleSidePanel}
         sideOpen={sideOpen}
         snapshot={snapshot}
+        swissifierDemoStatus={swissifierDemoStatus}
         workspaceLoading={workspaceLoading}
         workspaceRootAssetId={workspaceRootAssetId}
         workspaces={visibleWorkspaces}

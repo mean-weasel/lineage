@@ -12,18 +12,22 @@ export function LineageToolbar({
   loading,
   nextVariationId,
   onArchiveWorkspace,
+  onDownloadSwissifierMedia,
   onFitGraph,
   onIndexLocal,
   onNewLineage,
   onRefreshLineage,
   onRefreshWorkspaces,
   onRestoreDemoMedia,
+  onRestoreSwissifierMedia,
   onSeedDemo,
+  onSeedSwissifierDemo,
   onSelectWorkspace,
   onTidyGraph,
   onToggleNextPanel,
   sideOpen,
   snapshot,
+  swissifierDemoStatus,
   workspaceLoading,
   workspaceRootAssetId,
   workspaces,
@@ -35,23 +39,30 @@ export function LineageToolbar({
   loading: boolean;
   nextVariationId: string;
   onArchiveWorkspace: () => void;
+  onDownloadSwissifierMedia: () => void;
   onFitGraph: () => void;
   onIndexLocal: () => void;
   onNewLineage: () => void;
   onRefreshLineage: () => void;
   onRefreshWorkspaces: () => void;
   onRestoreDemoMedia: () => void;
+  onRestoreSwissifierMedia: () => void;
   onSeedDemo: () => void;
+  onSeedSwissifierDemo: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onTidyGraph: () => void;
   onToggleNextPanel: () => void;
   sideOpen: boolean;
   snapshot: LineageSnapshot | null;
+  swissifierDemoStatus: DemoSeedMediaStatus | null;
   workspaceLoading: boolean;
   workspaceRootAssetId: string;
   workspaces: LineageWorkspace[];
 }) {
   const mediaLabel = demoSeedStatus ? `${demoSeedStatus.present}/${demoSeedStatus.total} media files` : 'Checking media';
+  const swissifierMediaLabel = swissifierDemoStatus ? `${swissifierDemoStatus.present}/${swissifierDemoStatus.total} media files` : 'Checking media';
+  const swissifierReady = Boolean(swissifierDemoStatus && swissifierDemoStatus.present === swissifierDemoStatus.total);
+  const swissifierCanDownload = Boolean(swissifierDemoStatus?.download_available && !swissifierReady);
   const [demoOpen, setDemoOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
 
@@ -115,6 +126,13 @@ export function LineageToolbar({
             </p>
             <button disabled={workspaceLoading || demoSeedStatus?.present === demoSeedStatus?.total} onClick={onRestoreDemoMedia} type="button">Restore media</button>
             <button disabled={workspaceLoading} onClick={() => runAndClose(onSeedDemo)} type="button">Load demo lineage</button>
+            <p>
+              <strong>Swissifier rich demo</strong>
+              <span>{swissifierMediaLabel}</span>
+            </p>
+            <button disabled={workspaceLoading || !swissifierCanDownload} onClick={onDownloadSwissifierMedia} type="button">Download media</button>
+            <button disabled={workspaceLoading || swissifierReady} onClick={onRestoreSwissifierMedia} type="button">Restore media</button>
+            <button disabled={workspaceLoading} onClick={() => runAndClose(onSeedSwissifierDemo)} type="button">Load Swissifier</button>
             <button disabled={workspaceLoading || !activeWorkspace} onClick={() => runAndClose(onArchiveWorkspace)} type="button">Archive current lineage</button>
           </div>
         </details>

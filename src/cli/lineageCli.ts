@@ -10,6 +10,7 @@ import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineag
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev';
   channel: 'stable' | 'development';
+  defaultHost: string;
   defaultPort: number;
   displayName: string;
 }
@@ -75,7 +76,7 @@ export function resolveStartOptions(config: LineageCliConfig, args: string[]): S
   }
   return {
     dbPath: readOption(args, '--db') || process.env.LINEAGE_DB || join(runtimeDir, `${config.binName}.sqlite`),
-    host: readOption(args, '--host') || process.env.HOST || '127.0.0.1',
+    host: readOption(args, '--host') || process.env.HOST || config.defaultHost,
     json: args.includes('--json'),
     open: args.includes('--open'),
     port,

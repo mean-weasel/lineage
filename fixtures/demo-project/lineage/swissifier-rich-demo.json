@@ -1,0 +1,194 @@
+{
+  "id": "swissifier-rich-demo",
+  "title": "Swissifier rich demo",
+  "notes": "Rich demo seed rooted on the first generated Swissifier LinkedIn creative. Keep media local until the external demo pack is finalized.",
+  "campaign": "local-review",
+  "audience": "local-review",
+  "media": {
+    "target_dir": "rich-demo-drafts/swissifier-v1",
+    "source_env": "LINEAGE_SWISSIFIER_MEDIA_DIR",
+    "source_hint": "Set LINEAGE_SWISSIFIER_MEDIA_DIR to an unpacked Swissifier media pack containing these PNG filenames, then restore media from the demo seed menu.",
+    "download": {
+      "file": "swissifier-rich-demo-v1.tar.gz",
+      "url": "https://github.com/mean-weasel/lineage/releases/download/v0.1.2/swissifier-rich-demo-v1.tar.gz",
+      "sha256": "24edc5307d0932ddc8a151c6a8c1001a08c45075e3ae198082038c44519be0de",
+      "size_bytes": 31910759
+    }
+  },
+  "root_asset_id": "local-5748fb8ba6df",
+  "selected_asset_ids": [
+    "local-27050bc5c393",
+    "local-6d06bdbd9f56"
+  ],
+  "assets": [
+    {
+      "asset_id": "local-5748fb8ba6df",
+      "file": "swissifier-linkedin-root-v1.png",
+      "title": "swissifier linkedin root v1",
+      "channel": "linkedin",
+      "status": "planned",
+      "checksum_sha256": "5748fb8ba6dffea448a0eabf2c361d95958a8b54a3ad5d8e0d499381b820b36b",
+      "size_bytes": 1952203,
+      "content_type": "image/png",
+      "position": { "x": 40, "y": 894 }
+    },
+    {
+      "asset_id": "local-befe299c503d",
+      "file": "swissifier-vertical-poster-v1.png",
+      "title": "swissifier vertical poster v1",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "befe299c503db4d4b117122ead698a36045c6da052bf9ce66447df7829393a32",
+      "size_bytes": 1882281,
+      "content_type": "image/png",
+      "position": { "x": 362, "y": 1382 }
+    },
+    {
+      "asset_id": "local-2e102785131f",
+      "file": "swissifier-vertical-drill-v1.png",
+      "title": "swissifier vertical drill v1",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "2e102785131ffd61ea27791083df9060d4ad9d352a81cd8a61c0af7fcf4e0da4",
+      "size_bytes": 2060360,
+      "content_type": "image/png",
+      "position": { "x": 362, "y": 894 }
+    },
+    {
+      "asset_id": "local-27050bc5c393",
+      "file": "swissifier-vertical-before-after-v1.png",
+      "title": "swissifier vertical before after v1",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "27050bc5c3931685ef06b6704a9591104ddd25e5192ce5c76a1f69fe18c668b0",
+      "size_bytes": 1973896,
+      "content_type": "image/png",
+      "position": { "x": 362, "y": 284 }
+    },
+    {
+      "asset_id": "local-cce63eed23a3",
+      "file": "swissifier-poster-bauhaus-grid-v2.png",
+      "title": "swissifier poster bauhaus grid v2",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "cce63eed23a32ebf9c63a5002ffb2e866a9c4352c9f7b3a56f2465636c572774",
+      "size_bytes": 1930146,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 1504 }
+    },
+    {
+      "asset_id": "local-425b87091830",
+      "file": "swissifier-poster-pastel-circles-v2.png",
+      "title": "swissifier poster pastel circles v2",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "425b8709183035defba616b9cc241967fc3fa4f4d592c6aa45160e1204d4fb0f",
+      "size_bytes": 2051988,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 1260 }
+    },
+    {
+      "asset_id": "local-50301c939ad8",
+      "file": "swissifier-drill-color-grid-v2.png",
+      "title": "swissifier drill color grid v2",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "50301c939ad895a868dfcee7d6d9fff59fb055bfbf51ef5c882e5efa675bfcac",
+      "size_bytes": 1945371,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 1016 }
+    },
+    {
+      "asset_id": "local-6d06bdbd9f56",
+      "file": "swissifier-drill-mint-diagonal-v2.png",
+      "title": "swissifier drill mint diagonal v2",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "6d06bdbd9f565f659423b7057c919461106c9775a6dac5c01de6c5b68e3c85d7",
+      "size_bytes": 2047125,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 772 }
+    },
+    {
+      "asset_id": "local-d49cb3a68453",
+      "file": "swissifier-before-after-space-poster-v3.png",
+      "title": "swissifier before after space poster v3",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "d49cb3a68453b5a2ecc5f6997f8406311158a40e7694eb107b6a0a478cf1ebb3",
+      "size_bytes": 3057286,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 40 }
+    },
+    {
+      "asset_id": "local-111fceddec13",
+      "file": "swissifier-before-after-cosmic-portal-v3.png",
+      "title": "swissifier before after cosmic portal v3",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "111fceddec1324278f9a1e3e6ad37c85d0798556059ccc04fa23db194e903936",
+      "size_bytes": 2717457,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 528 }
+    },
+    {
+      "asset_id": "local-5f51b8356e70",
+      "file": "swissifier-before-after-alien-lab-v3.png",
+      "title": "swissifier before after alien lab v3",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "5f51b8356e70d4518b8d87d41e43ceeb441b447fe98e7992f0e95a1d5113c335",
+      "size_bytes": 2875831,
+      "content_type": "image/png",
+      "position": { "x": 684, "y": 284 }
+    },
+    {
+      "asset_id": "local-463b433de01a",
+      "file": "swissifier-drill-cosmic-blueprint-v3.png",
+      "title": "swissifier drill cosmic blueprint v3",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "463b433de01a0fe5205c1c0ae3bb501d343e80ccc8bbae5bb184ed28c88d4a52",
+      "size_bytes": 2695281,
+      "content_type": "image/png",
+      "position": { "x": 1006, "y": 528 }
+    },
+    {
+      "asset_id": "local-4f2733e9ff40",
+      "file": "swissifier-drill-asteroid-tool-v3.png",
+      "title": "swissifier drill asteroid tool v3",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "4f2733e9ff40f08b20901d58139518629d9756c7d64c6c88a4dcd6fd292593a7",
+      "size_bytes": 2645925,
+      "content_type": "image/png",
+      "position": { "x": 1006, "y": 1016 }
+    },
+    {
+      "asset_id": "local-0f885a18d5ce",
+      "file": "swissifier-drill-blacklight-v3.png",
+      "title": "swissifier drill blacklight v3",
+      "channel": "local",
+      "status": "planned",
+      "checksum_sha256": "0f885a18d5ce692c437eea40e6b8a31758e2bb28b413a45b09d05d629988bb09",
+      "size_bytes": 2386474,
+      "content_type": "image/png",
+      "position": { "x": 1006, "y": 772 }
+    }
+  ],
+  "edges": [
+    { "parent": "local-5748fb8ba6df", "child": "local-befe299c503d" },
+    { "parent": "local-5748fb8ba6df", "child": "local-2e102785131f" },
+    { "parent": "local-5748fb8ba6df", "child": "local-27050bc5c393" },
+    { "parent": "local-befe299c503d", "child": "local-cce63eed23a3" },
+    { "parent": "local-befe299c503d", "child": "local-425b87091830" },
+    { "parent": "local-2e102785131f", "child": "local-50301c939ad8" },
+    { "parent": "local-2e102785131f", "child": "local-6d06bdbd9f56" },
+    { "parent": "local-27050bc5c393", "child": "local-111fceddec13" },
+    { "parent": "local-27050bc5c393", "child": "local-5f51b8356e70" },
+    { "parent": "local-27050bc5c393", "child": "local-d49cb3a68453" },
+    { "parent": "local-6d06bdbd9f56", "child": "local-4f2733e9ff40" },
+    { "parent": "local-6d06bdbd9f56", "child": "local-0f885a18d5ce" },
+    { "parent": "local-6d06bdbd9f56", "child": "local-463b433de01a" }
+  ]
+}

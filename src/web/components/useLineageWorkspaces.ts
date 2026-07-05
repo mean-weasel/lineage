@@ -4,12 +4,22 @@ import { api } from '../api';
 import { lineageWorkspaceRootAssetId } from './lineageWorkspacePickerModel';
 
 export interface DemoSeedMediaStatus {
+  demo_id?: string;
+  download_available?: boolean;
+  download_file?: string;
+  download_sha256?: string;
+  download_url?: string;
   fixture_present: number;
   fixture_total: number;
+  invalid?: string[];
   media_root: string;
+  media_target?: string;
   missing: string[];
   ok: boolean;
   present: number;
+  source_env?: string;
+  source_hint?: string;
+  source_required?: boolean;
   total: number;
 }
 
@@ -28,6 +38,7 @@ export function useLineageWorkspaces({
 }) {
   const [workspaceSnapshot, setWorkspaceSnapshot] = useState<LineageWorkspaceSnapshot | null>(null);
   const [demoSeedStatus, setDemoSeedStatus] = useState<DemoSeedMediaStatus | null>(null);
+  const [swissifierDemoStatus, setSwissifierDemoStatus] = useState<DemoSeedMediaStatus | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const visibleWorkspaces = (workspaceSnapshot?.workspaces || []).filter(workspace => workspace.status !== 'archived');
   const activeWorkspace = workspaceSnapshot?.active_workspace || visibleWorkspaces[0] || null;
@@ -48,8 +59,12 @@ export function useLineageWorkspaces({
   const refreshDemoSeedStatus = useCallback(async () => {
     try {
       const params = new URLSearchParams({ project });
-      const result = await api<{ status: DemoSeedMediaStatus }>(`/api/lineage-workspaces/demo/media?${params.toString()}`);
-      setDemoSeedStatus(result.status);
+      const [demo, swissifier] = await Promise.all([
+        api<{ status: DemoSeedMediaStatus }>(`/api/lineage-workspaces/demo/media?${params.toString()}`),
+        api<{ status: DemoSeedMediaStatus }>(`/api/lineage-workspaces/demo/swissifier/media?${params.toString()}`),
+      ]);
+      setDemoSeedStatus(demo.status);
+      setSwissifierDemoStatus(swissifier.status);
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -75,7 +90,7 @@ export function useLineageWorkspaces({
     }
   }
 
-  async function seedDemoWorkspace() {
+  async function seedDemoWorkspace(options: { quiet?: boolean } = {}) {
     setWorkspaceLoading(true);
     try {
       const result = await api<{ workspace?: LineageWorkspace; root_asset_id: string }>('/api/lineage-workspaces/demo/seed', {
@@ -87,7 +102,29 @@ export function useLineageWorkspaces({
       await refreshWorkspaces();
       await refreshDemoSeedStatus();
       onSelectedAsset(result.workspace?.root_asset_id || result.root_asset_id);
-      onToast('ok', 'Seeded demo lineage workspace');
+      if (!options.quiet) onToast('ok', 'Seeded demo lineage workspace');
+      return result;
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+      return null;
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function seedSwissifierDemoWorkspace(options: { quiet?: boolean } = {}) {
+    setWorkspaceLoading(true);
+    try {
+      const result = await api<{ workspace?: LineageWorkspace; root_asset_id: string }>('/api/lineage-workspaces/demo/swissifier/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, confirmWrite: true }),
+      });
+      onResetLineage();
+      await refreshWorkspaces();
+      await refreshDemoSeedStatus();
+      onSelectedAsset(result.workspace?.root_asset_id || result.root_asset_id);
+      if (!options.quiet) onToast('ok', 'Seeded Swissifier demo lineage');
       return result;
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
@@ -107,6 +144,48 @@ export function useLineageWorkspaces({
       });
       await refreshDemoSeedStatus();
       onToast('ok', `Restored ${result.result.restored || 0} demo media file${result.result.restored === 1 ? '' : 's'}`);
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function restoreSwissifierDemoMedia() {
+    setWorkspaceLoading(true);
+    try {
+      const result = await api<{ result: { restored?: number; source_required?: boolean; source_env?: string } }>('/api/lineage-workspaces/demo/swissifier/media/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, confirmWrite: true }),
+      });
+      await refreshDemoSeedStatus();
+      if (result.result.source_required) {
+        onToast('error', `Set ${result.result.source_env || 'LINEAGE_SWISSIFIER_MEDIA_DIR'} to restore Swissifier media`);
+      } else {
+        onToast('ok', `Restored ${result.result.restored || 0} Swissifier media file${result.result.restored === 1 ? '' : 's'}`);
+      }
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function downloadSwissifierDemoMedia() {
+    setWorkspaceLoading(true);
+    try {
+      const result = await api<{ result: { restored?: number; download_available?: boolean } }>('/api/lineage-workspaces/demo/swissifier/media/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, confirmWrite: true }),
+      });
+      await refreshDemoSeedStatus();
+      if (!result.result.download_available) {
+        onToast('error', 'Swissifier media download is not configured');
+      } else {
+        onToast('ok', `Downloaded ${result.result.restored || 0} Swissifier media file${result.result.restored === 1 ? '' : 's'}`);
+      }
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     } finally {
@@ -153,11 +232,15 @@ export function useLineageWorkspaces({
     activeWorkspace,
     archiveWorkspace,
     demoSeedStatus,
+    downloadSwissifierDemoMedia,
     handleWorkspaceCreated,
     refreshDemoSeedStatus,
     refreshWorkspaces,
     restoreDemoSeedMedia,
+    restoreSwissifierDemoMedia,
     seedDemoWorkspace,
+    seedSwissifierDemoWorkspace,
+    swissifierDemoStatus,
     visibleWorkspaces,
     workspaceLoading,
     workspaceRootAssetId,

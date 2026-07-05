@@ -10,7 +10,16 @@ import {
   listLineageWorkspaces,
   updateLineageWorkspace,
 } from './assetLineageWorkspaces';
-import { archiveDemoLineageWorkspace, demoSeedMediaStatus, restoreDemoSeedMedia, seedDemoLineageWorkspace } from './assetLineageDemo';
+import {
+  archiveDemoLineageWorkspace,
+  demoSeedMediaStatus,
+  downloadSwissifierRichDemoMedia,
+  restoreDemoSeedMedia,
+  restoreSwissifierRichDemoMedia,
+  seedDemoLineageWorkspace,
+  seedSwissifierRichDemoWorkspace,
+  swissifierRichDemoMediaStatus,
+} from './assetLineageDemo';
 
 type ProjectFrom = (input: { body?: Record<string, unknown>; query?: Record<string, unknown> }) => string;
 type AsyncRoute = (handler: (req: express.Request, res: express.Response) => Promise<void> | void) => express.RequestHandler;
@@ -45,12 +54,42 @@ export function registerLineageWorkspaceRoutes(app: express.Express, projectFrom
     res.json(archiveDemoLineageWorkspace(projectFrom(req), req.body.confirmWrite === true));
   }));
 
-  app.get('/api/lineage-workspaces/demo/media', asyncRoute((_req, res) => {
-    res.json({ ok: true, status: demoSeedMediaStatus() });
+  app.post('/api/lineage-workspaces/demo/swissifier/seed', asyncRoute((req, res) => {
+    res.json(seedSwissifierRichDemoWorkspace(projectFrom(req), {
+      activate: req.body.activate !== false,
+      confirmWrite: req.body.confirmWrite === true,
+    }));
+  }));
+
+  app.get('/api/lineage-workspaces/demo/media', asyncRoute((req, res) => {
+    res.json({ ok: true, status: demoSeedMediaStatus(projectFrom(req)) });
+  }));
+
+  app.get('/api/lineage-workspaces/demo/swissifier/media', asyncRoute((req, res) => {
+    res.json({ ok: true, status: swissifierRichDemoMediaStatus(projectFrom(req)) });
   }));
 
   app.post('/api/lineage-workspaces/demo/media/restore', asyncRoute((req, res) => {
-    res.json({ ok: true, result: restoreDemoSeedMedia({ confirmWrite: req.body.confirmWrite === true }) });
+    res.json({ ok: true, result: restoreDemoSeedMedia(projectFrom(req), { confirmWrite: req.body.confirmWrite === true }) });
+  }));
+
+  app.post('/api/lineage-workspaces/demo/swissifier/media/restore', asyncRoute((req, res) => {
+    res.json({
+      ok: true,
+      result: restoreSwissifierRichDemoMedia(projectFrom(req), {
+        confirmWrite: req.body.confirmWrite === true,
+        sourceDir: typeof req.body.sourceDir === 'string' ? req.body.sourceDir : undefined,
+      }),
+    });
+  }));
+
+  app.post('/api/lineage-workspaces/demo/swissifier/media/download', asyncRoute(async (req, res) => {
+    res.json({
+      ok: true,
+      result: await downloadSwissifierRichDemoMedia(projectFrom(req), {
+        confirmWrite: req.body.confirmWrite === true,
+      }),
+    });
   }));
 
   app.get('/api/lineage-workspaces/:workspaceId', asyncRoute((req, res) => {
