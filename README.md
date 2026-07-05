@@ -64,6 +64,23 @@ npm run ci
 
 `npm run dev` starts the local development server from source. `npm run ci` runs the full local verification gate.
 
+## Command Shortcuts
+
+The root `Makefile` provides memorable wrappers for common setup, startup, and
+verification commands. Run `make` or `make help` to list the available targets.
+
+```bash
+make install-prod
+make install-plugin-prod
+make start-prod
+make check
+make smoke
+```
+
+The Makefile is only a convenience layer. npm scripts, the packaged CLIs, and
+GitHub release workflows remain the source of truth for build, test, and release
+behavior.
+
 ## Release Checks
 
 Use `next` for candidate builds and `latest` for the stable public channel. Check the current local, npm, and workflow state with:
