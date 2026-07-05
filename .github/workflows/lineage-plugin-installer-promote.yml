@@ -1,0 +1,121 @@
+name: Lineage Plugin Installer Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "npm dist-tag to move"
+        required: true
+        default: "latest"
+        type: choice
+        options:
+          - latest
+          - next
+      version:
+        description: "Published installer version to promote; defaults to packages/lineage-plugin-installer/package.json"
+        required: false
+        type: string
+      dry_run:
+        description: "Preview the dist-tag change without modifying npm"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: lineage-plugin-installer-promote-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Promote Installer Dist Tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      NPM_TAG: ${{ inputs.tag }}
+      INPUT_VERSION: ${{ inputs.version }}
+      PACKAGE_DIR: packages/lineage-plugin-installer
+      PACKAGE_NAME: "@mean-weasel/lineage-plugin-installer"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify promote inputs
+        run: |
+          if [ "$NPM_TAG" != "next" ] && [ "$NPM_TAG" != "latest" ]; then
+            echo "::error::Unsupported npm tag: ${NPM_TAG}"
+            exit 1
+          fi
+
+      - name: Resolve installer version
+        run: |
+          package_name="$(node -p "require('./${PACKAGE_DIR}/package.json').name")"
+          package_version="$(node -p "require('./${PACKAGE_DIR}/package.json').version")"
+          package_access="$(node -p "require('./${PACKAGE_DIR}/package.json').publishConfig?.access || ''")"
+          requested_version="${INPUT_VERSION:-$package_version}"
+
+          if [ "$package_name" != "$PACKAGE_NAME" ]; then
+            echo "::error::Unexpected package name: ${package_name}"
+            exit 1
+          fi
+          if [ "$package_access" != "public" ]; then
+            echo "::error::publishConfig.access must be public."
+            exit 1
+          fi
+          if ! printf '%s' "$requested_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::Invalid package version: ${requested_version}"
+            exit 1
+          fi
+
+          echo "PROMOTE_VERSION=${requested_version}" >> "$GITHUB_ENV"
+          echo "Resolved ${PACKAGE_NAME}@${requested_version} for npm tag ${NPM_TAG}."
+
+      - name: Verify installer version is published
+        run: |
+          resolved="$(npm view "${PACKAGE_NAME}@${PROMOTE_VERSION}" version --json | tr -d '"')"
+          if [ "$resolved" != "$PROMOTE_VERSION" ]; then
+            echo "::error::Expected published ${PACKAGE_NAME}@${PROMOTE_VERSION}, got ${resolved}."
+            exit 1
+          fi
+
+      - name: Verify latest promotion source tag
+        if: ${{ inputs.tag == 'latest' }}
+        run: |
+          next_version="$(npm view "$PACKAGE_NAME" dist-tags.next --json | tr -d '"')"
+          if [ "$next_version" != "$PROMOTE_VERSION" ]; then
+            echo "::error::Refusing latest promotion: npm tag next points to ${next_version:-<missing>}, expected ${PROMOTE_VERSION}."
+            exit 1
+          fi
+
+      - name: Show current dist tags
+        run: npm view "$PACKAGE_NAME" dist-tags --json
+
+      - name: Dry-run promote installer dist tag
+        if: ${{ inputs.dry_run }}
+        run: echo "Dry-run would run npm dist-tag add ${PACKAGE_NAME}@${PROMOTE_VERSION} ${NPM_TAG}"
+
+      - name: Promote installer dist tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm dist-tag add "${PACKAGE_NAME}@${PROMOTE_VERSION}" "$NPM_TAG"
+
+      - name: Verify promoted dist tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          promoted="$(npm view "$PACKAGE_NAME" "dist-tags.${NPM_TAG}" --json | tr -d '"')"
+          if [ "$promoted" != "$PROMOTE_VERSION" ]; then
+            echo "::error::npm tag ${NPM_TAG} points to ${promoted:-<missing>}, expected ${PROMOTE_VERSION}."
+            exit 1
+          fi
+          npm view "$PACKAGE_NAME" dist-tags --json

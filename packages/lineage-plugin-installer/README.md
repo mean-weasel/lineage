@@ -12,7 +12,8 @@ The installer verifies the plugin manifest before writing anything:
 
 ## Publishing
 
-The package is published manually from GitHub Actions with npm provenance:
+The package is published manually from GitHub Actions with npm provenance.
+Publish a new package version with:
 
 ```bash
 gh workflow run lineage-plugin-installer-publish.yml \
@@ -21,15 +22,25 @@ gh workflow run lineage-plugin-installer-publish.yml \
   -f dry_run=true
 ```
 
+Move an existing published version between npm dist-tags with:
+
+```bash
+gh workflow run lineage-plugin-installer-promote.yml \
+  --repo mean-weasel/lineage \
+  -f tag=latest \
+  -f dry_run=true
+```
+
 The publish workflow defaults to dry-run mode. A real publish requires:
 
-- npm trusted publishing for `@mean-weasel/lineage-plugin-installer` to trust
-  this repository and the `.github/workflows/lineage-plugin-installer-publish.yml`
-  workflow
+- the repository `NPM_TOKEN` secret for token-backed publishing with provenance
+- the `.github/workflows/lineage-plugin-installer-publish.yml` workflow
 
-If the package does not exist yet, npm's current trusted-publishing setup may
-require an initial owner-controlled package publish before the trusted publisher
-can be added.
+The promote workflow also defaults to dry-run mode. A real promotion uses the
+same `NPM_TOKEN` secret, verifies the requested version is already published,
+and refuses to move `latest` unless npm's `next` tag already points at that
+version. Omit `version` to promote the installer version from
+`packages/lineage-plugin-installer/package.json`.
 
 ## Install Modes
 
