@@ -118,6 +118,8 @@ Lineage also includes a lightweight Swissifier rich-demo manifest at `fixtures/d
 
 To hydrate the Swissifier demo with real images, use the Demo seed menu's Swissifier `Download media` control. Lineage downloads `swissifier-rich-demo-v1.tar.gz` from the [v0.1.2 GitHub release](https://github.com/mean-weasel/lineage/releases/tag/v0.1.2), verifies the archive checksum, safely unpacks the PNGs into local scratch storage, and then verifies each PNG checksum before loading the rich demo.
 
+Future rich-demo media packs should follow the same split: commit only the lightweight manifest changes, attach the generated media archive to the GitHub release for the app version that first references that archive, then pin the public release URL, archive size, and SHA-256 in the manifest. If a later app release reuses an unchanged media pack, keep the manifest pointed at the original release asset instead of duplicating the archive.
+
 For manual verification or offline restore, the expected archive checksum is:
 
 ```sh

@@ -1,7 +1,7 @@
 {
   "id": "swissifier-rich-demo",
   "title": "Swissifier rich demo",
-  "notes": "Rich demo seed rooted on the first generated Swissifier LinkedIn creative. Keep media local until the external demo pack is finalized.",
+  "notes": "Rich demo seed rooted on the first generated Swissifier LinkedIn creative. Generated PNG media is restored from the pinned optional release pack.",
   "campaign": "local-review",
   "audience": "local-review",
   "media": {
