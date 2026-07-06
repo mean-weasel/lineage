@@ -16,7 +16,7 @@ import { LineageToolbar } from './LineageToolbar';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
 import { lineageReviewConflict } from './lineageReviewConflict';
-import { layoutLineageTree, lineageGraphKey, toGraph } from './lineageGraph';
+import { layoutLineageTree, lineageGraphKey, toGraph, type LineageGraphDirection } from './lineageGraph';
 import { useEscapeClear } from './useEscapeClear';
 import { useLineageWorkspaces } from './useLineageWorkspaces';
 import { useLineageViewportFit } from './useLineageViewportFit';
@@ -29,6 +29,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
+  const [graphDirection, setGraphDirection] = useState<LineageGraphDirection>('LR');
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
@@ -54,6 +55,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
   const collapseTimer = useRef<number | null>(null);
   const authoritativeEdges = useRef<Edge[]>([]);
+  const renderedGraphKey = useRef('');
   const workspaceRootRef = useRef('');
   const { fitGraph, markViewportInteraction } = useLineageViewportFit(flowApi, snapshot?.root_asset_id, sideOpen);
   const closeTransientMenus = useCallback(() => {
@@ -240,7 +242,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   }
   async function tidyGraph() {
     if (!snapshot) return;
-    const positions = [...layoutLineageTree(snapshot)].map(([assetId, position]) => ({ assetId, ...position }));
+    const positions = [...layoutLineageTree(snapshot, graphDirection)].map(([assetId, position]) => ({ assetId, ...position }));
+    applySnapshotPositions(positions);
     setFlowNodes(current => current.map(node => ({
       ...node,
       position: positions.find(position => position.assetId === node.id) || node.position,
@@ -253,6 +256,34 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
+  }
+  async function orientGraph(direction: LineageGraphDirection) {
+    if (!snapshot) return;
+    const positions = [...layoutLineageTree(snapshot, direction)].map(([assetId, position]) => ({ assetId, ...position }));
+    applySnapshotPositions(positions);
+    setGraphDirection(direction);
+    setFlowNodes(current => current.map(node => ({
+      ...node,
+      position: positions.find(position => position.assetId === node.id) || node.position,
+    })));
+    try {
+      await saveLineagePositions(project, snapshot.root_asset_id, positions);
+      onToast('ok', `Rotated lineage graph ${graphDirectionLabel(direction).toLowerCase()}`);
+      fitGraph(80);
+      await refresh();
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  function applySnapshotPositions(positions: Array<{ assetId: string; x: number; y: number }>) {
+    const positionMap = new Map(positions.map(position => [position.assetId, { x: position.x, y: position.y }]));
+    setSnapshot(current => current ? {
+      ...current,
+      nodes: current.nodes.map(node => ({
+        ...node,
+        position: positionMap.get(node.asset_id) || node.position,
+      })),
+    } : current);
   }
   async function refreshBrief() {
     if (!snapshot) return;
@@ -294,8 +325,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     return () => window.clearInterval(timer);
   }, [refresh, snapshot?.root_asset_id]);
 
-  const graph = useMemo(() => toGraph(snapshot, activeNodeId), [activeNodeId, snapshot]);
-  const graphKey = useMemo(() => lineageGraphKey(snapshot), [snapshot]);
+  const graph = useMemo(() => toGraph(snapshot, activeNodeId, graphDirection), [activeNodeId, graphDirection, snapshot]);
+  const graphKey = useMemo(() => lineageGraphKey(snapshot, graphDirection), [graphDirection, snapshot]);
   authoritativeEdges.current = graph.edges;
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
@@ -310,12 +341,14 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   }, [activeNode?.asset_id, activeNode?.selection_note]);
 
   useEffect(() => {
+    const resetPositions = renderedGraphKey.current !== graphKey;
+    renderedGraphKey.current = graphKey;
     setFlowNodes(current => graph.nodes.map(node => ({
       ...node,
-      position: current.find(existing => existing.id === node.id)?.position || node.position,
+      position: resetPositions ? node.position : current.find(existing => existing.id === node.id)?.position || node.position,
     })));
     setFlowEdges(graph.edges);
-  }, [graph.edges, graph.nodes, setFlowEdges, setFlowNodes]);
+  }, [graph.edges, graph.nodes, graphKey, setFlowEdges, setFlowNodes]);
 
   useEscapeClear(Boolean(activeNodeId), clearFocus);
 
@@ -331,11 +364,13 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         closeSignal={menuCloseSignal}
         latestCount={snapshot?.latest.length || 0}
         loading={loading}
+        graphDirection={graphDirection}
         demoSeedStatus={demoSeedStatus}
         nextVariationId={nextBaseId}
         onArchiveWorkspace={() => void archiveWorkspace()}
         onFitGraph={() => fitGraph()}
         onIndexLocal={() => void indexAndRefresh()}
+        onGraphDirection={direction => void orientGraph(direction)}
         onNewLineage={() => setNewLineageOpen(true)}
         onRefreshLineage={() => void refresh()}
         onRefreshWorkspaces={() => void refreshWorkspaces()}
@@ -435,4 +470,13 @@ function lineageWorkspaceClaims(claims: AgentClaimSummary[], project: string, ro
     if (claim.scope_type === 'lineage_workspace') return claim.target_id === targetId;
     return claim.scope_type === 'project_channel';
   });
+}
+
+function graphDirectionLabel(direction: LineageGraphDirection): string {
+  return {
+    BT: 'bottom to top',
+    LR: 'left to right',
+    RL: 'right to left',
+    TB: 'top to bottom',
+  }[direction];
 }

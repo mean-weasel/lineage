@@ -9,6 +9,8 @@ type AssetNodeData = LineageNode & {
   focusRole: LineageFocusRole;
   onOpenDetail?: (assetId: string) => void;
   root: boolean;
+  sourcePosition: Position;
+  targetPosition: Position;
 } & Record<string, unknown>;
 export type AssetFlowNode = Node<AssetNodeData, 'assetNode'>;
 
@@ -24,8 +26,8 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
       }}
       title="Click to inspect; double-click to open detail; drag to reposition"
     >
-      <Handle className="lineage-handle" isConnectable={false} position={Position.Left} type="target" />
-      <Handle className="lineage-handle" isConnectable={false} position={Position.Right} type="source" />
+      <Handle className="lineage-handle" isConnectable={false} position={data.targetPosition} type="target" />
+      <Handle className="lineage-handle" isConnectable={false} position={data.sourcePosition} type="source" />
       <span aria-hidden="true" className="lineage-node-action">Details</span>
       <div className="lineage-thumb">
         {data.preview_url && (data.media_type === 'image' || data.media_type === 'gif') ? (

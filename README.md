@@ -54,6 +54,12 @@ lineage agent claim --project demo-project --scope lineage_workspace --target de
 export LINEAGE_CLAIM_TOKEN='claim_abc.secret_xyz'
 ```
 
+Agents can inspect the current lineage graph without a claim:
+
+```bash
+lineage agent graph --project demo-project --root <root-asset-id> --json
+```
+
 Keep the claim fresh and pass it to mutating commands:
 
 ```bash

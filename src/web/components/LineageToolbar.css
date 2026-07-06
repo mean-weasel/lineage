@@ -37,6 +37,28 @@
   font-size: 13px;
 }
 
+.lineage-direction-control {
+  flex: 0 0 154px;
+  gap: 3px;
+}
+
+.lineage-direction-control span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lineage-direction-control select {
+  min-height: 34px;
+  border-color: #bdd5dc;
+  background: #fff;
+  color: #26343d;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .lineage-overflow {
   position: relative;
 }
@@ -144,5 +166,9 @@
 
   .lineage-next-summary {
     min-width: 0;
+  }
+
+  .lineage-direction-control {
+    flex-basis: 100%;
   }
 }

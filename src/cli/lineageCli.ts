@@ -107,6 +107,7 @@ Usage:
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
+  ${config.binName} agent graph --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} agent status [--project <project>] [--json]
   ${config.binName} agent inspect --claim <claim-id> [--project <project>] [--json]
   ${config.binName} agent heartbeat --claim-token <claim-id.secret> [--json]
@@ -229,6 +230,11 @@ export function runLineageAgentCommand(command: string, args: string[]): unknown
     });
   }
   if (command === 'status') return listAgentClaims(project);
+  if (command === 'graph') {
+    const rootAssetId = readOption(args, '--root') || readOption(args, '--asset-id') || positionalArgs(args)[0];
+    if (!rootAssetId) throw new Error('lineage agent graph requires --root');
+    return getLineageSnapshot(project, rootAssetId);
+  }
   if (command === 'inspect') {
     if (!claimId) throw new Error('lineage agent inspect requires --claim');
     return inspectAgentClaim(claimId, project);
@@ -286,7 +292,46 @@ function printAgentResult(command: string, result: unknown, json: boolean): void
     console.log(`${inspected.claim?.id || 'claim'} ${inspected.claim?.status || 'unknown'} ${inspected.claim?.target_id || ''}`.trim());
     return;
   }
+  if (command === 'graph' && result && typeof result === 'object' && 'nodes' in result) {
+    console.log(formatAgentGraphDigest(result as AgentGraphDigestSnapshot));
+    return;
+  }
   console.log(String(result));
+}
+
+interface AgentGraphDigestSnapshot {
+  active_asset_id: string;
+  edges: Array<{ child_asset_id: string; parent_asset_id: string }>;
+  latest?: string[];
+  nodes: Array<{ asset_id: string; is_latest?: boolean; title?: string }>;
+  root_asset_id: string;
+  selected?: string[];
+}
+
+export function formatAgentGraphDigest(snapshot: AgentGraphDigestSnapshot): string {
+  const lines: string[] = [];
+  const titleFor = (assetId: string) => {
+    const node = snapshot.nodes.find(item => item.asset_id === assetId);
+    return node?.title ? `${node.title} (${assetId})` : assetId;
+  };
+  const root = snapshot.nodes.find(node => node.asset_id === snapshot.root_asset_id);
+  lines.push(`Lineage graph: ${root?.title || snapshot.root_asset_id}`);
+  lines.push(`Root: ${snapshot.root_asset_id}`);
+  lines.push(`Active: ${titleFor(snapshot.active_asset_id)}`);
+  lines.push(`Nodes: ${snapshot.nodes.length}  Edges: ${snapshot.edges.length}`);
+  const selected = snapshot.selected || [];
+  if (selected.length > 0) {
+    lines.push('Next variation:');
+    for (const assetId of selected) lines.push(`- ${titleFor(assetId)}`);
+  }
+  const latest = snapshot.latest || snapshot.nodes.filter(node => node.is_latest).map(node => node.asset_id);
+  if (latest.length > 0) {
+    lines.push('Latest leaves:');
+    for (const assetId of latest) lines.push(`- ${titleFor(assetId)}`);
+  }
+  lines.push('Edges:');
+  for (const edge of snapshot.edges) lines.push(`- ${titleFor(edge.parent_asset_id)} -> ${titleFor(edge.child_asset_id)}`);
+  return lines.join('\n');
 }
 
 function start(config: LineageCliConfig, args: string[]): void {
