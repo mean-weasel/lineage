@@ -177,12 +177,14 @@ describe('asset core catalog listing', () => {
     writeFileSync(demoFile, Buffer.from('<svg>demo root</svg>'));
 
     try {
-      const snapshot = listAssets(defaultProduct, { page: 1, pageSize: 100, source: 'local' });
-      const relativePaths = snapshot.assets.map(asset => asset.local?.relative_path).filter(Boolean);
+      const visibleSnapshot = listAssets(defaultProduct, { page: 1, pageSize: 100, query: 'visible', source: 'local' });
+      const ignoredSnapshot = listAssets(defaultProduct, { page: 1, pageSize: 100, query: 'demo-root', source: 'local' });
+      const visiblePaths = visibleSnapshot.assets.map(asset => asset.local?.relative_path).filter(Boolean);
+      const ignoredPaths = ignoredSnapshot.assets.map(asset => asset.local?.relative_path).filter(Boolean);
 
-      expect(relativePaths).toContain('vitest-local-review-visible/demo-linkedin-visible.png');
-      expect(relativePaths).not.toContain('playwright-results/trace-resources/trace-demo-root.svg');
-      expect(relativePaths).not.toContain('lineage-demo/2026-06-lineage-demo/demo-project/linkedin/demo-root.svg');
+      expect(visiblePaths).toContain('vitest-local-review-visible/demo-linkedin-visible.png');
+      expect(ignoredPaths).not.toContain('playwright-results/trace-resources/trace-demo-root.svg');
+      expect(ignoredPaths).not.toContain('lineage-demo/2026-06-lineage-demo/demo-project/linkedin/demo-root.svg');
     } finally {
       rmSync(localDir, { force: true, recursive: true });
       rmSync(playwrightDir, { force: true, recursive: true });
