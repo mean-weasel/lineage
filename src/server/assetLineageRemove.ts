@@ -9,6 +9,11 @@ function requireAsset(database: DatabaseSync, project: string, assetId: string):
   if (!row) throw new LineageError(`Unknown indexed asset: ${assetId}`, 404);
 }
 
+function assetChannel(database: DatabaseSync, project: string, assetId: string): string | undefined {
+  const row = database.prepare('select channel from assets where project_id = ? and id = ?').get(project, assetId) as { channel?: string } | undefined;
+  return row?.channel;
+}
+
 function parentOf(database: DatabaseSync, project: string, assetId: string): string | undefined {
   const row = database.prepare('select parent_asset_id from asset_edges where project_id = ? and child_asset_id = ? order by created_at limit 1').get(project, assetId) as { parent_asset_id?: string } | undefined;
   return row?.parent_asset_id;
@@ -61,6 +66,7 @@ export function removeLineageNode(project: string, fields: LineageRemoveNodeFiel
   }
   try {
     requireLineageWorkspaceClaimForWrite({
+      channel: assetChannel(database, project, root),
       claimToken: fields.claimToken,
       confirmWrite: fields.confirmWrite,
       project,

@@ -116,6 +116,42 @@ function explicitWorkspaceRoot(database: DatabaseSync, project: string, assetId:
   return row?.root_asset_id;
 }
 
+function nearestWorkspaceRoot(database: DatabaseSync, project: string, assetId: string): string {
+  let current = assetId;
+  const seen = new Set<string>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const explicit = explicitWorkspaceRoot(database, project, current);
+    if (explicit) return explicit;
+    const parent = parentOf(database, project, current);
+    if (!parent) return current;
+    current = parent;
+  }
+  return assetId;
+}
+
+function assetChannel(database: DatabaseSync, project: string, assetId: string): string | undefined {
+  const row = database.prepare('select channel from assets where project_id = ? and id = ?').get(project, assetId) as { channel?: string } | undefined;
+  return row?.channel;
+}
+
+function lineageWriteClaimContext(database: DatabaseSync, project: string, assetId: string): { channel?: string; rootAssetId: string } {
+  return {
+    channel: assetChannel(database, project, assetId),
+    rootAssetId: nearestWorkspaceRoot(database, project, assetId),
+  };
+}
+
+export function getLineageWriteClaimContext(project: string, assetId: string): { channel?: string; rootAssetId: string } {
+  const database = db();
+  try {
+    requireAsset(database, project, assetId);
+    return lineageWriteClaimContext(database, project, assetId);
+  } finally {
+    database.close();
+  }
+}
+
 function latestSelectedRoot(database: DatabaseSync, project: string): string | undefined {
   const row = database.prepare('select root_asset_id from asset_selections where project_id = ? order by selected_at desc limit 1').get(project) as { root_asset_id?: string } | undefined;
   return row?.root_asset_id;
@@ -151,13 +187,14 @@ export function linkLineageAssets(project: string, fields: LineageLinkFields) {
   requireAsset(database, project, fields.parentAssetId);
   requireAsset(database, project, fields.childAssetId);
   if (fields.parentAssetId === fields.childAssetId) throw new LineageError('Lineage link cannot point to itself');
-  const root = rootFor(database, project, fields.parentAssetId);
+  const claimContext = lineageWriteClaimContext(database, project, fields.parentAssetId);
   try {
     requireLineageWorkspaceClaimForWrite({
+      channel: claimContext.channel,
       claimToken: fields.claimToken,
       confirmWrite: fields.confirmWrite,
       project,
-      rootAssetId: root,
+      rootAssetId: claimContext.rootAssetId,
       writeKind: 'lineage_link',
     });
   } catch (error) {
@@ -254,6 +291,7 @@ export function updateLineageLayout(project: string, fields: LineageLayoutFields
   for (const position of fields.positions) requireAsset(database, project, position.assetId);
   try {
     requireLineageWorkspaceClaimForWrite({
+      channel: assetChannel(database, project, fields.rootAssetId),
       claimToken: fields.claimToken,
       confirmWrite: fields.confirmWrite,
       project,
