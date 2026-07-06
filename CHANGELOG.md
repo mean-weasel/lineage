@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Add graph orientation controls for lineage views and CLI flows, including browser coverage for orientation behavior.
+- Improve agent claim visibility with workspace/content occupancy badges, claim lifecycle controls, and release claim smoke coverage.
+- Harden lineage claim enforcement for explicit child workspaces and `project_channel` claims so scoped claims cannot authorize broader writes.
+- Make local startup helpers durable with tmux-backed Makefile commands.
+
 ## 0.1.4
 
 - Implement target-scoped agent claims for lineage and content-post agent writes, including claim lifecycle CLI/API commands, heartbeat/release/revoke/transfer controls, and token-redacted read APIs.
