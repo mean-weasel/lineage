@@ -80,6 +80,32 @@ by a second `lineage` word.
    "$LINEAGE_CLAIM_TOKEN" --json` before handing off or stopping.
 8. Run a negative check for unknown child IDs when changing handoff behavior.
 
+## Starting The App From Codex
+
+Prefer a real foreground terminal for human-driven daily use:
+
+```bash
+lineage start --host lineage.localhost
+```
+
+When starting Lineage from the Codex app or another agent command session, do
+not rely on `lineage start &` or `nohup` alone. Tool-owned background processes
+may be cleaned up after the command returns. Use the repo Makefile detached
+targets when a checkout is available:
+
+```bash
+make start-prod-bg
+make status-prod
+make logs-prod
+make stop-prod
+```
+
+Those targets prefer a detached `tmux` session when `tmux` is installed, and
+fall back to PID/log files otherwise. `make start-prod` remains foreground.
+Keep launchd or other OS service managers as explicit, platform-specific paths;
+macOS can block LaunchAgents with `EX_CONFIG`/`Operation not permitted` until
+the user approves or repairs the service.
+
 ## Boundaries
 
 - The package does not publish to social platforms.

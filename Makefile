@@ -13,12 +13,14 @@ LINEAGE_DEV_START_ARGS ?= --host lineage-dev.localhost
 LINEAGE_RUN_DIR ?= .asset-scratch/lineage-runtime
 LINEAGE_PROD_PID ?= $(LINEAGE_RUN_DIR)/lineage-prod.pid
 LINEAGE_PROD_LOG ?= $(LINEAGE_RUN_DIR)/lineage-prod.log
+LINEAGE_PROD_TMUX_SESSION ?= lineage-prod
 LINEAGE_LOCAL_PROD_AGENT_LABEL ?= com.meanweasel.lineage.localprod
 LINEAGE_LOCAL_PROD_PLIST ?= $(HOME)/Library/LaunchAgents/$(LINEAGE_LOCAL_PROD_AGENT_LABEL).plist
 LINEAGE_LOCAL_PROD_LOG ?= $(LINEAGE_RUN_DIR)/launchd-local-prod.log
 LINEAGE_LOCAL_PROD_ERR_LOG ?= $(LINEAGE_RUN_DIR)/launchd-local-prod.err.log
 LINEAGE_DEV_PID ?= $(LINEAGE_RUN_DIR)/lineage-dev.pid
 LINEAGE_DEV_LOG ?= $(LINEAGE_RUN_DIR)/lineage-dev.log
+LINEAGE_DEV_TMUX_SESSION ?= lineage-dev
 empty :=
 space := $(empty) $(empty)
 START_PROD_CMD = lineage start --open$(if $(strip $(LINEAGE_START_ARGS)),$(space)$(LINEAGE_START_ARGS))
@@ -39,16 +41,16 @@ help:
 	@printf "\\n"
 	@printf "Start Lineage:\\n"
 	@printf "  make start-prod           $(START_PROD_CMD)\\n"
-	@printf "  make start-prod-bg        start prod detached with PID/log under $(LINEAGE_RUN_DIR)\\n"
-	@printf "  make status-prod          show detached prod status\\n"
+	@printf "  make start-prod-bg        start prod detached with tmux when available\\n"
+	@printf "  make status-prod          show detached prod status and URL\\n"
 	@printf "  make stop-prod            stop detached prod server\\n"
-	@printf "  make logs-prod            tail detached prod log\\n"
+	@printf "  make logs-prod            show detached prod logs\\n"
 	@printf "  make start-local-prod-bg  start this checkout's built prod detached\\n"
 	@printf "  make status-local-prod    show detached local prod status\\n"
 	@printf "  make stop-local-prod      stop detached local prod server\\n"
 	@printf "  make logs-local-prod      tail detached local prod log\\n"
 	@printf "  make start-dev            $(START_DEV_CMD)\\n"
-	@printf "  make start-dev-bg         start dev detached with PID/log under $(LINEAGE_RUN_DIR)\\n"
+	@printf "  make start-dev-bg         start dev detached with tmux when available\\n"
 	@printf "  make status-dev           show detached dev status\\n"
 	@printf "  make stop-dev             stop detached dev server\\n"
 	@printf "  make logs-dev             tail detached dev log\\n"
@@ -83,25 +85,46 @@ start-prod:
 
 start-prod-bg:
 	@mkdir -p "$(LINEAGE_RUN_DIR)"
-	@if [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
-		printf "Lineage prod already running (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
+	@if command -v tmux >/dev/null 2>&1; then \
+		if tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
+			printf "Lineage prod already running in tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
+		else \
+			tmux new-session -d -s "$(LINEAGE_PROD_TMUX_SESSION)" -c "$$(pwd)" '$(START_PROD_CMD)'; \
+			rm -f "$(LINEAGE_PROD_PID)"; \
+			printf "Lineage prod started in tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
+			printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
+			printf "URL: %s\\n" "$(LINEAGE_PROD_URL)"; \
+		fi; \
 	else \
-		rm -f "$(LINEAGE_PROD_PID)"; \
-		nohup $(START_PROD_CMD) > "$(LINEAGE_PROD_LOG)" 2>&1 & \
-		printf "%s\\n" "$$!" > "$(LINEAGE_PROD_PID)"; \
-		printf "Lineage prod started detached (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
-		printf "Log: %s\\n" "$(LINEAGE_PROD_LOG)"; \
+		if [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
+			printf "Lineage prod already running (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
+		else \
+			rm -f "$(LINEAGE_PROD_PID)"; \
+			nohup $(START_PROD_CMD) > "$(LINEAGE_PROD_LOG)" 2>&1 & \
+			printf "%s\\n" "$$!" > "$(LINEAGE_PROD_PID)"; \
+			printf "Lineage prod started detached (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
+			printf "Log: %s\\n" "$(LINEAGE_PROD_LOG)"; \
+		fi; \
 	fi
 
 status-prod:
-	@if [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
+		printf "Lineage prod running in tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
+		printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
+		printf "URL: %s\\n" "$(LINEAGE_PROD_URL)"; \
+	elif [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
 		printf "Lineage prod running (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
+		printf "URL: %s\\n" "$(LINEAGE_PROD_URL)"; \
 	else \
 		printf "Lineage prod is not running\\n"; \
 	fi
 
 stop-prod:
-	@if [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
+		tmux kill-session -t "$(LINEAGE_PROD_TMUX_SESSION)"; \
+		printf "Stopped Lineage prod tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
+		rm -f "$(LINEAGE_PROD_PID)"; \
+	elif [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
 		kill "$$(cat "$(LINEAGE_PROD_PID)")"; \
 		printf "Stopped Lineage prod (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
 		rm -f "$(LINEAGE_PROD_PID)"; \
@@ -111,7 +134,11 @@ stop-prod:
 	fi
 
 logs-prod:
-	@tail -n 80 "$(LINEAGE_PROD_LOG)" 2>/dev/null || true
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
+		tmux capture-pane -pt "$(LINEAGE_PROD_TMUX_SESSION):0" -S -80; \
+	else \
+		tail -n 80 "$(LINEAGE_PROD_LOG)" 2>/dev/null || true; \
+	fi
 
 start-local-prod-bg:
 	@mkdir -p "$(LINEAGE_RUN_DIR)"
@@ -148,25 +175,43 @@ start-dev:
 
 start-dev-bg:
 	@mkdir -p "$(LINEAGE_RUN_DIR)"
-	@if [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
-		printf "Lineage dev already running (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
+	@if command -v tmux >/dev/null 2>&1; then \
+		if tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
+			printf "Lineage dev already running in tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
+		else \
+			tmux new-session -d -s "$(LINEAGE_DEV_TMUX_SESSION)" -c "$$(pwd)" '$(START_DEV_CMD)'; \
+			rm -f "$(LINEAGE_DEV_PID)"; \
+			printf "Lineage dev started in tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
+			printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
+		fi; \
 	else \
-		rm -f "$(LINEAGE_DEV_PID)"; \
-		nohup $(START_DEV_CMD) > "$(LINEAGE_DEV_LOG)" 2>&1 & \
-		printf "%s\\n" "$$!" > "$(LINEAGE_DEV_PID)"; \
-		printf "Lineage dev started detached (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
-		printf "Log: %s\\n" "$(LINEAGE_DEV_LOG)"; \
+		if [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
+			printf "Lineage dev already running (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
+		else \
+			rm -f "$(LINEAGE_DEV_PID)"; \
+			nohup $(START_DEV_CMD) > "$(LINEAGE_DEV_LOG)" 2>&1 & \
+			printf "%s\\n" "$$!" > "$(LINEAGE_DEV_PID)"; \
+			printf "Lineage dev started detached (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
+			printf "Log: %s\\n" "$(LINEAGE_DEV_LOG)"; \
+		fi; \
 	fi
 
 status-dev:
-	@if [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
+		printf "Lineage dev running in tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
+		printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
+	elif [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
 		printf "Lineage dev running (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
 	else \
 		printf "Lineage dev is not running\\n"; \
 	fi
 
 stop-dev:
-	@if [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
+		tmux kill-session -t "$(LINEAGE_DEV_TMUX_SESSION)"; \
+		printf "Stopped Lineage dev tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
+		rm -f "$(LINEAGE_DEV_PID)"; \
+	elif [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
 		kill "$$(cat "$(LINEAGE_DEV_PID)")"; \
 		printf "Stopped Lineage dev (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
 		rm -f "$(LINEAGE_DEV_PID)"; \
@@ -176,7 +221,11 @@ stop-dev:
 	fi
 
 logs-dev:
-	@tail -n 80 "$(LINEAGE_DEV_LOG)" 2>/dev/null || true
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
+		tmux capture-pane -pt "$(LINEAGE_DEV_TMUX_SESSION):0" -S -80; \
+	else \
+		tail -n 80 "$(LINEAGE_DEV_LOG)" 2>/dev/null || true; \
+	fi
 
 dev:
 	npm run dev
