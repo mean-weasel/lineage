@@ -83,6 +83,57 @@ describe('asset lineage index', () => {
     });
   });
 
+  it('requires a matching active claim for direct confirmed lineage links on a claimed workspace', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    const claim = createAgentClaim({
+      agentName: 'Direct lineage link agent',
+      project: defaultProject,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(defaultProject, files.parentId),
+    });
+    const wrongClaim = createAgentClaim({
+      agentName: 'Wrong lineage link agent',
+      project: defaultProject,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(defaultProject, files.variationId),
+    });
+
+    expect(() => linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    })).toThrow('Mutating agent write requires a matching claim token.');
+    expect(() => linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      claimToken: wrongClaim.claim_token,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    })).toThrow('Claim does not cover lineage_workspace');
+
+    linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      claimToken: claim.claim_token,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toHaveLength(1);
+  });
+
+  it('allows direct lineage links without a token when the workspace is unclaimed', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toHaveLength(1);
+  });
+
   it('persists review state for indexed assets', () => {
     const files = seedFiles();
     indexLineageAssets(defaultProject);
@@ -96,6 +147,68 @@ describe('asset lineage index', () => {
 
     const snapshot = getLineageSnapshot(defaultProject, files.parentId);
     expect(snapshot.nodes.find(node => node.asset_id === files.parentId)?.review_state).toBe('rejected');
+  });
+
+  it('requires a matching claim for confirmed layout writes on a claimed workspace', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+    const claim = createAgentClaim({
+      agentName: 'Lineage layout agent',
+      project: defaultProject,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(defaultProject, files.parentId),
+    });
+
+    const dryRun = updateLineageLayout(defaultProject, {
+      confirmWrite: false,
+      positions: [{ assetId: files.childId, x: 10, y: 20 }],
+      rootAssetId: files.parentId,
+    });
+    expect(dryRun).toMatchObject({ dryRun: true });
+    expect(() => updateLineageLayout(defaultProject, {
+      confirmWrite: true,
+      positions: [{ assetId: files.childId, x: 10, y: 20 }],
+      rootAssetId: files.parentId,
+    })).toThrow('Mutating agent write requires a matching claim token.');
+
+    updateLineageLayout(defaultProject, {
+      claimToken: claim.claim_token,
+      confirmWrite: true,
+      positions: [{ assetId: files.childId, x: 10, y: 20 }],
+      rootAssetId: files.parentId,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).nodes.find(node => node.asset_id === files.childId)?.position).toEqual({ x: 10, y: 20 });
+  });
+
+  it('allows a project-channel claim to write claimed lineage workspace layout', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+    const claim = createAgentClaim({
+      agentName: 'Lineage project channel agent',
+      project: defaultProject,
+      scopeType: 'project_channel',
+      targetId: `${defaultProject}:all-lineage`,
+    });
+
+    updateLineageLayout(defaultProject, {
+      claimToken: claim.claim_token,
+      confirmWrite: true,
+      positions: [{ assetId: files.childId, x: 24, y: 42 }],
+      rootAssetId: files.parentId,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).nodes.find(node => node.asset_id === files.childId)?.position).toEqual({ x: 24, y: 42 });
   });
 
   it('persists needs-revision review state for indexed local assets', () => {

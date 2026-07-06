@@ -1,5 +1,5 @@
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
-import { ContentBatchError } from './contentBatches';
+import { ContentBatchError, requireContentPostClaim } from './contentBatches';
 import { contentPostHandoff, readinessForPost } from './contentPostHandoff';
 import type {
   ContentBatch,
@@ -125,7 +125,8 @@ export function setContentTarget(project: string, fields: ContentTargetFields) {
   const database = lineageDb();
   const timestamp = nowIso();
   try {
-    findPost(database, project, postId);
+    const post = findPost(database, project, postId);
+    requireContentPostClaim(project, post, fields.claimToken, 'content_target_set');
     database.prepare(`
       insert into content_targets (project_id, post_id, notes, selected_at, updated_at)
       values (?, ?, ?, ?, ?)
@@ -139,10 +140,19 @@ export function setContentTarget(project: string, fields: ContentTargetFields) {
   return { ok: true, message: `Selected content target ${postId}`, ...getContentTarget(project) };
 }
 
-export function clearContentTarget(project: string, confirmWrite: boolean) {
+export function clearContentTarget(project: string, confirmWrite: boolean, claimToken?: string) {
   if (!confirmWrite) return { ok: true, dryRun: true, message: 'Would clear selected content target' };
   const database = lineageDb();
   try {
+    const row = database.prepare('select post_id from content_targets where project_id = ?').get(project) as { post_id?: string } | undefined;
+    if (row?.post_id) {
+      try {
+        const post = findPost(database, project, String(row.post_id));
+        requireContentPostClaim(project, post, claimToken, 'content_target_clear');
+      } catch (error) {
+        if (!(error instanceof ContentBatchError && error.status === 404)) throw error;
+      }
+    }
     database.prepare('delete from content_targets where project_id = ?').run(project);
   } finally {
     database.close();

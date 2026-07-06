@@ -5,11 +5,11 @@ import { primaryViews, secondaryViews } from './Topbar.navigation';
 
 describe('Topbar navigation groups', () => {
   it('keeps workflow views in the primary tab group', () => {
-    expect(primaryViews.map(item => item.view)).toEqual(['lineage', 'review', 'assets', 'settings']);
+    expect(primaryViews.map(item => item.view)).toEqual(['lineage', 'review', 'assets', 'agents', 'settings']);
   });
 
-  it('keeps Ledger, Content, Agents, and Backup reachable as secondary views', () => {
-    expect(secondaryViews.map(item => item.view)).toEqual(['ledger', 'content', 'agents', 'backup']);
+  it('keeps Ledger, Content, and Backup reachable as secondary views', () => {
+    expect(secondaryViews.map(item => item.view)).toEqual(['ledger', 'content', 'backup']);
   });
 
   it('keeps live cloud inventory out of the global topbar', () => {

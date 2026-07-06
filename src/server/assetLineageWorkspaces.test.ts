@@ -284,6 +284,22 @@ describe('lineage workspaces', () => {
     expect(next.selection?.notes).toBe('Use LinkedIn branch next.');
   });
 
+  it('keeps snapshots scoped to an explicit child workspace root', () => {
+    const files = seedTwoLineages();
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      rootAssetId: files.childAId,
+      title: 'TikTok child workspace',
+    });
+
+    const snapshot = getLineageSnapshot(defaultProject, files.childAId);
+
+    expect(snapshot.root_asset_id).toBe(files.childAId);
+    expect(snapshot.active_asset_id).toBe(files.childAId);
+    expect(snapshot.nodes.map(node => node.asset_id)).toEqual([files.childAId]);
+  });
+
   it('archives a workspace and clears its selected next variation', () => {
     const files = seedTwoLineages();
     const saved = createLineageWorkspace(defaultProject, {

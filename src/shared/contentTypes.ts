@@ -175,6 +175,7 @@ export interface ContentTargetSnapshot {
 }
 
 export interface ContentTargetFields {
+  claimToken?: string;
   confirmWrite: boolean;
   notes?: string;
   postId: string;

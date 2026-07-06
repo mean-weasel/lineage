@@ -11,11 +11,12 @@ function snippetBetween(start: string, end: string): string {
 }
 
 describe('Lineage navigation behavior', () => {
-  it('includes the read-only Agents view in secondary navigation', () => {
+  it('includes the read-only Agents view in primary navigation and the sidebar', () => {
     const navSource = readFileSync(join(process.cwd(), 'src/web/components/Topbar.navigation.ts'), 'utf8');
     const sidebarSource = readFileSync(join(process.cwd(), 'src/web/components/Sidebar.tsx'), 'utf8');
 
     expect(navSource).toContain("{ label: 'Agents', view: 'agents' }");
+    expect(navSource.indexOf("{ label: 'Agents', view: 'agents' }")).toBeLessThan(navSource.indexOf('secondaryViews'));
     expect(sidebarSource).toContain("setView('agents')");
   });
 
