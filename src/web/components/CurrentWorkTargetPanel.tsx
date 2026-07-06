@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Bot, ChevronDown, Clipboard, Crosshair, FileSearch, Flag, ListChecks, RefreshCcw } from 'lucide-react';
-import type { AssetSelectionSnapshot, ContentOpsQueueSnapshot, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
+import { Bot, ChevronDown, Clipboard, Crosshair, FileSearch, Flag, ListChecks, RefreshCcw, ShieldCheck } from 'lucide-react';
+import type { AgentClaimSummary, AgentClaimsResponse, AssetSelectionSnapshot, ContentOpsQueueSnapshot, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
 import { api } from '../api';
 import { assetStorageState, type StudioView } from '../assetUi';
 import './CurrentWorkTargetPanel.css';
+
+type ClaimControlAction = 'release-stale' | 'revoke' | 'transfer';
 
 function agentSelectedCommand(project: string): string {
   return `npx lineage agent selected --project ${project}`;
@@ -39,20 +41,23 @@ export function CurrentWorkTarget({
   const [selection, setSelection] = useState<AssetSelectionSnapshot | null>(null);
   const [target, setTarget] = useState<ContentTargetSnapshot | null>(null);
   const [queue, setQueue] = useState<ContentOpsQueueSnapshot | null>(null);
+  const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   async function refresh() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ project });
-      const [nextTarget, nextQueue, nextSelection] = await Promise.all([
+      const [nextTarget, nextQueue, nextSelection, nextClaims] = await Promise.all([
         api<ContentTargetSnapshot>(`/api/content/target?${params}`),
         api<ContentOpsQueueSnapshot>(`/api/content/queue?${params}`),
         api<AssetSelectionSnapshot>(`/api/selections?${params}`),
+        api<AgentClaimsResponse>(`/api/agent-claims?${params}`),
       ]);
       setTarget(nextTarget);
       setQueue(nextQueue);
       setSelection(nextSelection);
+      setClaims(nextClaims.claims);
       setError(null);
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : String(refreshError));
@@ -71,13 +76,26 @@ export function CurrentWorkTarget({
     return () => window.removeEventListener('asset-selection-updated', listener);
   }, [project]);
 
-  return <CurrentWorkTargetPanel drawerOpen={drawerOpen} error={error} loading={loading} onCopy={onCopy} onRefresh={() => void refresh()} onToggleDrawer={() => setDrawerOpen(current => !current)} project={project} queue={queue} selectedAsset={selectedAsset} selection={selection} target={target} view={view} />;
+  async function controlClaim(action: ClaimControlAction, claim: AgentClaimSummary) {
+    const body = claimControlBody(action, claim);
+    if (!body) return;
+    await api(`/api/agent-claims/${claim.id}/${action}`, {
+      body: JSON.stringify({ project, ...body }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+    await refresh();
+  }
+
+  return <CurrentWorkTargetPanel claims={claims} drawerOpen={drawerOpen} error={error} loading={loading} onClaimControl={(action, claim) => { void controlClaim(action, claim); }} onCopy={onCopy} onRefresh={() => void refresh()} onToggleDrawer={() => setDrawerOpen(current => !current)} project={project} queue={queue} selectedAsset={selectedAsset} selection={selection} target={target} view={view} />;
 }
 
 export function CurrentWorkTargetPanel({
   drawerOpen = false,
+  claims = [],
   error,
   loading,
+  onClaimControl,
   onCopy,
   onRefresh,
   onToggleDrawer,
@@ -89,8 +107,10 @@ export function CurrentWorkTargetPanel({
   view,
 }: {
   drawerOpen?: boolean;
+  claims?: AgentClaimSummary[];
   error?: string | null;
   loading: boolean;
+  onClaimControl?: (action: ClaimControlAction, claim: AgentClaimSummary) => void;
   onCopy: (text: string, label: string) => Promise<void>;
   onRefresh: () => void;
   onToggleDrawer?: () => void;
@@ -105,6 +125,16 @@ export function CurrentWorkTargetPanel({
   const selectedTarget = target?.target;
   const nextItem = queue?.next_action;
   const selectedAssets = selection?.current.items.filter(item => item.selected_at && !item.deselected_at) || [];
+  const selectedTargetClaims = selectedTarget
+    ? claimsForTarget(claims, project, 'content_post', selectedTarget.post.id, selectedTarget.post.channel)
+    : [];
+  const queueLaneClaims = nextItem
+    ? claimsForTarget(claims, project, 'content_queue_lane', queue?.next_action_lane?.id || nextItem.readiness, nextItem.post.channel)
+    : [];
+  const selectionClaims = selection?.current
+    ? claimsForTarget(claims, project, 'selection_set', selection.current.id)
+    : [];
+  const visibleClaimCount = new Set([...selectedTargetClaims, ...queueLaneClaims, ...selectionClaims].map(claim => claim.id)).size;
   const drawerSummary = selectedAssets.length > 0
     ? `${selectedAssets.length} selected asset${selectedAssets.length === 1 ? '' : 's'}`
     : selectedTarget
@@ -112,6 +142,7 @@ export function CurrentWorkTargetPanel({
       : nextItem
         ? 'Next content item ready'
         : 'Natural language handoff ready';
+  const drawerSummaryWithClaims = visibleClaimCount > 0 ? `${drawerSummary} · ${visibleClaimCount} claim${visibleClaimCount === 1 ? '' : 's'}` : drawerSummary;
   return (
     <section className={`current-work-panel ${lineageContext ? 'lineage-context' : ''} ${drawerOpen ? 'open' : 'collapsed'}`} aria-label="Agent context drawer" data-testid="agent-context-drawer">
       <header>
@@ -126,7 +157,7 @@ export function CurrentWorkTargetPanel({
           <span className="work-target-toggle-icon"><Bot size={16} /></span>
           <span>
             <strong>Agent context</strong>
-            <small>{drawerSummary}</small>
+            <small>{drawerSummaryWithClaims}</small>
           </span>
           <ChevronDown className="work-target-chevron" size={17} />
         </button>
@@ -161,6 +192,7 @@ export function CurrentWorkTargetPanel({
               <strong>{selectedTarget.post.title}</strong>
               <code>{selectedTarget.post.id}</code>
               <p>{selectedTarget.post.channel} · {selectedTarget.readiness} · {selectedTarget.post.assets.length} asset{selectedTarget.post.assets.length === 1 ? '' : 's'}</p>
+              {claimOccupancy(selectedTargetClaims, onClaimControl)}
               <code className="command-line">{agentSelectedCommand(project)}</code>
               <div className="work-target-actions">
                 <button onClick={() => void onCopy(agentSelectedCommand(project), 'agent selected command')} type="button"><Clipboard size={14} />Copy selected</button>
@@ -188,6 +220,7 @@ export function CurrentWorkTargetPanel({
               <strong>{nextItem.post.title}</strong>
               <code>{nextItem.post.id}</code>
               <p>{nextItem.post.channel} · {nextItem.readiness} · {storageSummary(nextItem.asset_storage)}</p>
+              {claimOccupancy(queueLaneClaims, onClaimControl)}
               <code className="command-line">{agentNextCommand(project)}</code>
               <div className="work-target-actions">
                 <button onClick={() => void onCopy(agentNextCommand(project), 'agent next command')} type="button"><Clipboard size={14} />Copy next</button>
@@ -237,6 +270,7 @@ export function CurrentWorkTargetPanel({
             <>
               <strong>{selectedAssets.length} selected asset{selectedAssets.length === 1 ? '' : 's'}</strong>
               <code>{selectedAssets.map(item => item.variation_label ? `${item.variation_label}:${item.asset_id}` : item.asset_id).join(', ')}</code>
+              {claimOccupancy(selectionClaims, onClaimControl)}
               <code className="command-line">{agentSelectionsCommand(project)}</code>
               <div className="work-target-actions">
                 <button onClick={() => void onCopy(agentSelectionsCommand(project), 'agent selections command')} type="button"><Clipboard size={14} />Copy selections</button>
@@ -254,6 +288,55 @@ export function CurrentWorkTargetPanel({
         </div>
       </div>
     </section>
+  );
+}
+
+function claimsForTarget(claims: AgentClaimSummary[], project: string, scopeType: AgentClaimSummary['scope_type'], targetId: string, channel?: string): AgentClaimSummary[] {
+  return claims.filter(claim => {
+    if (claim.project !== project || claim.status !== 'active' || claim.derived_state === 'expired') return false;
+    if (claim.scope_type === scopeType && claim.target_id === targetId) return true;
+    return claim.scope_type === 'project_channel' && (!claim.channel || !channel || claim.channel === channel);
+  });
+}
+
+function claimControlBody(action: ClaimControlAction, claim: AgentClaimSummary): { confirmWrite: true; reason?: string; toAgentName?: string } | null {
+  if (action === 'release-stale') {
+    if (!window.confirm(`Release stale claim held by ${claim.agent_name}?`)) return null;
+    return { confirmWrite: true, reason: `Released stale ${claim.scope_type} claim ${claim.id} from the Agent context drawer.` };
+  }
+  if (action === 'revoke') {
+    const reason = window.prompt(`Reason for revoking ${claim.agent_name}'s claim?`);
+    if (!reason?.trim()) return null;
+    if (!window.confirm(`Revoke claim ${claim.id} from ${claim.agent_name}?`)) return null;
+    return { confirmWrite: true, reason: reason.trim() };
+  }
+  const toAgentName = window.prompt(`Transfer claim ${claim.id} to which agent?`);
+  if (!toAgentName?.trim()) return null;
+  if (!window.confirm(`Transfer claim ${claim.id} from ${claim.agent_name} to ${toAgentName.trim()}?`)) return null;
+  return { confirmWrite: true, reason: `Transferred from Agent context drawer.`, toAgentName: toAgentName.trim() };
+}
+
+function claimOccupancy(claims: AgentClaimSummary[], onClaimControl?: (action: ClaimControlAction, claim: AgentClaimSummary) => void) {
+  if (claims.length === 0) return null;
+  const staleCount = claims.filter(claim => claim.derived_state === 'stale').length;
+  const state = staleCount > 0 ? 'stale' : claims.some(claim => claim.derived_state === 'idle') ? 'idle' : 'active';
+  const label = claims.length === 1
+    ? `${state === 'active' ? 'Claimed' : state === 'idle' ? 'Idle claim' : 'Stale claim'} by ${claims[0].agent_name}`
+    : `${claims.length} active claims`;
+  return (
+    <div className={`claim-occupancy ${state}`}>
+      <p>
+        <ShieldCheck size={14} />
+        <span>{label}</span>
+      </p>
+      {onClaimControl && claims.length === 1 && (
+        <span className="claim-occupancy-actions">
+          {claims[0].derived_state === 'stale' && <button onClick={() => onClaimControl('release-stale', claims[0])} type="button">Release stale</button>}
+          <button onClick={() => onClaimControl('transfer', claims[0])} type="button">Transfer</button>
+          <button onClick={() => onClaimControl('revoke', claims[0])} type="button">Revoke</button>
+        </span>
+      )}
+    </div>
   );
 }
 

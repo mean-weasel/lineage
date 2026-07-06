@@ -30,6 +30,39 @@
   line-height: 1.35;
 }
 
+.lineage-context-claims {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 2px;
+  border: 1px solid #d8c58f;
+  border-radius: 7px;
+  background: #fff8df;
+  padding: 6px;
+  color: #66500f;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.lineage-context-claims > span {
+  overflow-wrap: anywhere;
+}
+
+.lineage-context-claims div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.lineage-context-claims button {
+  min-height: 26px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
 .lineage-context-menu button {
   min-height: 34px;
   border: 0;

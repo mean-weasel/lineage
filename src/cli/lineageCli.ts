@@ -3,6 +3,19 @@ import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  createAgentClaim,
+  heartbeatAgentClaim,
+  inspectAgentClaim,
+  isAgentClaimError,
+  listAgentClaims,
+  parseClaimTtl,
+  redactAgentClaimTokens,
+  releaseAgentClaim,
+  revokeAgentClaim,
+  transferAgentClaim,
+  type AgentClaimScopeType,
+} from '../server/agentClaims';
 import { defaultProduct } from '../server/assetCore';
 import { getLineageNextAsset, getLineageSnapshot } from '../server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineageHandoff';
@@ -26,6 +39,7 @@ interface StartOptions {
 interface DataCommandOptions {
   assetId?: string;
   childAssetId?: string;
+  claimToken?: string;
   confirmWrite: boolean;
   dbPath?: string;
   json: boolean;
@@ -91,7 +105,14 @@ Usage:
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
-  ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
+  ${config.binName} agent status [--project <project>] [--json]
+  ${config.binName} agent inspect --claim <claim-id> [--project <project>] [--json]
+  ${config.binName} agent heartbeat --claim-token <claim-id.secret> [--json]
+  ${config.binName} agent release --claim-token <claim-id.secret> [--json]
+  ${config.binName} agent revoke --claim <claim-id> --project <project> --reason <text> --confirm-write [--json]
+  ${config.binName} agent transfer --claim <claim-id> --to-agent-name <name> --confirm-write [--project <project>] [--json]
   ${config.binName} --help
   ${config.binName} --version
 
@@ -123,6 +144,7 @@ function resolveDataCommandOptions(args: string[]): DataCommandOptions {
   const options = {
     assetId: readOption(args, '--asset-id') || positions[0],
     childAssetId: readOption(args, '--child'),
+    claimToken: readOption(args, '--claim-token') || process.env.LINEAGE_CLAIM_TOKEN,
     confirmWrite: args.includes('--confirm-write'),
     dbPath: readOption(args, '--db'),
     json: args.includes('--json'),
@@ -145,6 +167,7 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
     if (!options.childAssetId) throw new Error('lineage link-child requires --child');
     return linkSelectedLineageChild(options.project, {
       childAssetId: options.childAssetId,
+      claimToken: options.claimToken,
       confirmWrite: options.confirmWrite,
       rootAssetId: options.rootAssetId || options.assetId,
     });
@@ -178,6 +201,89 @@ function printDataResult(command: string, result: unknown, json: boolean): void 
   if (command === 'link-child' && result && typeof result === 'object') {
     const link = result as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string }; message?: string };
     console.log(link.message || `${link.dryRun ? 'Dry run: ' : ''}Link ${link.edge?.child_asset_id || 'child'} from ${link.edge?.parent_asset_id || 'parent'}`);
+    return;
+  }
+  console.log(String(result));
+}
+
+export function runLineageAgentCommand(command: string, args: string[]): unknown {
+  const dbPath = readOption(args, '--db');
+  if (dbPath) process.env.LINEAGE_DB = dbPath;
+  const project = readOption(args, '--project') || process.env.LINEAGE_DEFAULT_PRODUCT || defaultProduct;
+  const claimId = readOption(args, '--claim');
+  const claimToken = readOption(args, '--claim-token') || process.env.LINEAGE_CLAIM_TOKEN;
+  if (command === 'claim') {
+    return createAgentClaim({
+      agentId: readOption(args, '--agent-id'),
+      agentKind: readOption(args, '--agent-kind'),
+      agentName: readOption(args, '--agent-name') || '',
+      channel: readOption(args, '--channel'),
+      force: args.includes('--force'),
+      project,
+      reason: readOption(args, '--reason'),
+      scopeType: (readOption(args, '--scope') || '') as AgentClaimScopeType,
+      targetId: readOption(args, '--target') || '',
+      targetTitle: readOption(args, '--target-title'),
+      threadId: readOption(args, '--thread-id'),
+      ttlSeconds: parseClaimTtl(readOption(args, '--ttl')),
+    });
+  }
+  if (command === 'status') return listAgentClaims(project);
+  if (command === 'inspect') {
+    if (!claimId) throw new Error('lineage agent inspect requires --claim');
+    return inspectAgentClaim(claimId, project);
+  }
+  if (command === 'heartbeat') {
+    if (!claimToken) throw new Error('lineage agent heartbeat requires --claim-token');
+    return heartbeatAgentClaim(claimToken, parseClaimTtl(readOption(args, '--ttl')));
+  }
+  if (command === 'release') {
+    if (!claimToken) throw new Error('lineage agent release requires --claim-token');
+    return releaseAgentClaim(claimToken);
+  }
+  if (command === 'revoke') {
+    if (!claimId) throw new Error('lineage agent revoke requires --claim');
+    return revokeAgentClaim(project, claimId, {
+      actor: readOption(args, '--actor') || 'human',
+      confirmWrite: args.includes('--confirm-write'),
+      reason: readOption(args, '--reason'),
+    });
+  }
+  if (command === 'transfer') {
+    if (!claimId) throw new Error('lineage agent transfer requires --claim');
+    return transferAgentClaim(project, claimId, {
+      actor: readOption(args, '--actor') || 'human',
+      confirmWrite: args.includes('--confirm-write'),
+      reason: readOption(args, '--reason'),
+      toAgentName: readOption(args, '--to-agent-name') || '',
+    });
+  }
+  throw new Error(`Unknown agent command: ${command}`);
+}
+
+function printAgentResult(command: string, result: unknown, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (command === 'claim' && result && typeof result === 'object' && 'claim' in result) {
+    const created = result as { claim?: { id: string; target_id: string }; claim_token?: string };
+    console.log(`Claimed ${created.claim?.target_id || 'target'} as ${created.claim?.id || 'claim'}`);
+    if (created.claim_token) console.log(`Token: ${created.claim_token}`);
+    return;
+  }
+  if (command === 'status' && result && typeof result === 'object' && 'claims' in result) {
+    const status = result as { claims: Array<{ agent_name: string; derived_state: string; target_id: string }> };
+    if (status.claims.length === 0) {
+      console.log('No agent claims.');
+      return;
+    }
+    for (const claim of status.claims) console.log(`${claim.agent_name} ${claim.derived_state} ${claim.target_id}`);
+    return;
+  }
+  if (result && typeof result === 'object' && 'claim' in result) {
+    const inspected = result as { claim?: { id: string; status: string; target_id: string } };
+    console.log(`${inspected.claim?.id || 'claim'} ${inspected.claim?.status || 'unknown'} ${inspected.claim?.target_id || ''}`.trim());
     return;
   }
   console.log(String(result));
@@ -262,9 +368,35 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     try {
       printDataResult(command, runLineageDataCommand(command, commandArgs), json);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (json) console.error(JSON.stringify({ ok: false, command, error: message }, null, 2));
+      const message = redactAgentClaimTokens(error instanceof Error ? error.message : String(error));
+      if (json) {
+        const output = isAgentClaimError(error)
+          ? { ok: false, command, error: error.code, message, conflicts: error.conflicts }
+          : { ok: false, command, error: message };
+        console.error(JSON.stringify(output, null, 2));
+      }
       else console.error(`${config.binName}: ${message}`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  if (command === 'agent') {
+    const commandArgs = normalizedArgs.slice(2);
+    const agentCommand = normalizedArgs[1] || '';
+    const json = commandArgs.includes('--json');
+    try {
+      printAgentResult(agentCommand, runLineageAgentCommand(agentCommand, commandArgs), json);
+    } catch (error) {
+      const message = redactAgentClaimTokens(error instanceof Error ? error.message : String(error));
+      if (json) {
+        const output = isAgentClaimError(error)
+          ? { ok: false, command: `agent ${agentCommand}`, error: error.code, message, conflicts: error.conflicts }
+          : { ok: false, command: `agent ${agentCommand}`, error: message };
+        console.error(JSON.stringify(output, null, 2));
+      } else {
+        console.error(`${config.binName}: ${message}`);
+      }
       process.exit(1);
     }
     process.exit(0);

@@ -4,7 +4,7 @@ import type { GrowthAsset, PlacementStatus } from '../shared/types';
 export type StatusFilter = 'all' | GrowthAsset['status'];
 export type PlacementFilter = 'all' | PlacementStatus | 'not-posted';
 export type SourceFilter = 'local' | 'catalog' | 'all';
-export type StudioView = 'review' | 'ledger' | 'content' | 'backup' | 'assets' | 'lineage' | 'settings';
+export type StudioView = 'review' | 'ledger' | 'content' | 'backup' | 'assets' | 'agents' | 'lineage' | 'settings';
 
 export interface Toast {
   type: 'ok' | 'error';

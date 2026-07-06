@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets } from '../server/assetLineage';
-import { resolveStartOptions, runLineageDataCommand } from './lineageCli';
+import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
+import { resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -144,5 +145,55 @@ describe('lineage CLI handoff commands', () => {
         '--json',
       ])
     ).toThrow('Unknown indexed asset: missing-child');
+  });
+
+  it('requires a matching claim token for confirmed link-child writes', () => {
+    seedCliDb();
+
+    expect(() =>
+      runLineageDataCommand('link-child', [
+        '--project', defaultProject,
+        '--root', fixtureRootAssetId,
+        '--child', fixtureChildAssetId,
+        '--db', cliDbFile,
+        '--confirm-write',
+        '--json',
+      ])
+    ).toThrow('Mutating agent write requires a matching claim token');
+
+    const claimed = runLineageAgentCommand('claim', [
+      '--project', defaultProject,
+      '--scope', 'lineage_workspace',
+      '--target', lineageWorkspaceId(defaultProject, fixtureRootAssetId),
+      '--target-title', 'CLI test lineage',
+      '--agent-name', 'CLI test agent',
+      '--db', cliDbFile,
+      '--json',
+    ]) as { claim_token: string };
+    const linked = runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--db', cliDbFile,
+      '--claim-token', claimed.claim_token,
+      '--confirm-write',
+      '--json',
+    ]) as { child_asset_id: string; edge?: { child_asset_id: string }; message?: string };
+
+    expect(linked.child_asset_id).toBe(fixtureChildAssetId);
+    expect(linked.edge?.child_asset_id).toBe(fixtureChildAssetId);
+    expect(linked.message).toContain('Linked');
+  });
+
+  it('keeps package docs aligned with claim-aware mutating command contracts', () => {
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const operator = readFileSync(join(repoRoot, 'plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md'), 'utf8');
+
+    expect(readme).toContain('lineage agent claim --project demo-project --scope lineage_workspace');
+    expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
+    expect(operator).toContain('lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN"');
+    expect(operator).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
+    expect(readme).toContain('Use `project_channel` only for rare work');
+    expect(operator).toContain('Use `project_channel` claims only for rare');
   });
 });

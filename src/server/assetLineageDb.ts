@@ -317,6 +317,41 @@ export function lineageDb(): DatabaseSync {
     );
     create index if not exists generation_job_receipts_job on generation_job_receipts(job_id, created_at);
     create table if not exists adapter_settings (project_id text not null references projects(id), adapter_type text not null check (adapter_type in ('cloud', 'scheduler', 'image_generator')), provider text not null, enabled integer not null check (enabled in (0, 1)), secret_ref text, safe_config_json text not null, created_at text not null, updated_at text not null, primary key(project_id, adapter_type, provider)); create index if not exists adapter_settings_project_type on adapter_settings(project_id, adapter_type);
+    create table if not exists agent_claims (
+      id text primary key,
+      token_hash text not null,
+      project_id text not null references projects(id),
+      channel text,
+      scope_type text not null check (scope_type in ('lineage_workspace', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
+      target_id text not null,
+      target_title text,
+      agent_id text,
+      agent_name text not null,
+      agent_kind text not null,
+      thread_id text,
+      status text not null check (status in ('active', 'expired', 'released', 'revoked', 'transferred')),
+      created_at text not null,
+      heartbeat_at text not null,
+      expires_at text not null,
+      released_at text,
+      revoked_at text,
+      revoked_by text,
+      override_reason text,
+      metadata_json text
+    );
+    create unique index if not exists agent_claims_token_hash on agent_claims(token_hash);
+    create index if not exists agent_claims_project_status on agent_claims(project_id, status, heartbeat_at);
+    create index if not exists agent_claims_target on agent_claims(project_id, channel, scope_type, target_id, status);
+    create table if not exists agent_claim_events (
+      id text primary key,
+      claim_id text not null references agent_claims(id) on delete cascade,
+      event_type text not null,
+      actor text,
+      message text,
+      created_at text not null,
+      metadata_json text
+    );
+    create index if not exists agent_claim_events_claim_created on agent_claim_events(claim_id, created_at);
   `);
   migrateAssetSelections(database);
   dropLegacyAssetSelectionRootUnique(database);

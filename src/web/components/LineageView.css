@@ -351,6 +351,12 @@
   font-weight: 800;
 }
 
+.lineage-handoff-panel .lineage-claim-handoff-button {
+  border-color: #8bbac1;
+  background: #e8f6f7;
+  color: #0b5965;
+}
+
 .lineage-brief-head {
   display: flex;
   justify-content: space-between;

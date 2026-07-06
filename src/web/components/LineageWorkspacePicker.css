@@ -37,6 +37,50 @@
   font-size: 11px;
 }
 
+.lineage-workspace-claim {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid #b8d5c2;
+  border-radius: 999px;
+  background: #f1fbf4;
+  padding: 4px 7px;
+  color: #245435 !important;
+  font-size: 11px !important;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.lineage-workspace-claim svg {
+  flex: 0 0 auto;
+}
+
+.lineage-workspace-claim span {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  text-overflow: ellipsis;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+
+.lineage-workspace-claim.idle {
+  border-color: #d8c58f;
+  background: #fff8df;
+  color: #66500f !important;
+}
+
+.lineage-workspace-claim.stale {
+  border-color: #e1b2a9;
+  background: #fff1ee;
+  color: #7b3428 !important;
+}
+
 .lineage-workspace-menu {
   position: absolute;
   top: calc(100% + 8px);

@@ -10,5 +10,6 @@ export const primaryViews: Array<{ label: string; view: StudioView }> = [
 export const secondaryViews: Array<{ label: string; view: StudioView }> = [
   { label: 'Ledger', view: 'ledger' },
   { label: 'Content batches', view: 'content' },
+  { label: 'Agents', view: 'agents' },
   { label: 'Backup queue', view: 'backup' },
 ];

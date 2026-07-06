@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
-import type { LineageNode } from '../../shared/types';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AgentClaimSummary, LineageNode } from '../../shared/types';
 import { LineageContextMenu } from './LineageContextMenu';
 
 function flattenText(node: ReactNode): string {
@@ -30,6 +30,26 @@ const node = {
   title: 'Variation A',
   user_selected: false,
 } satisfies LineageNode;
+
+const staleClaim = {
+  agent_kind: 'codex',
+  agent_name: 'Codex thread 123',
+  created_at: '2026-06-26T00:00:00.000Z',
+  derived_state: 'stale',
+  expires_at: '2026-06-26T00:20:00.000Z',
+  heartbeat_age_seconds: 960,
+  heartbeat_at: '2026-06-26T00:00:12.000Z',
+  id: 'claim_lineage',
+  project: 'demo-project',
+  scope_type: 'lineage_workspace',
+  status: 'active',
+  target_id: 'demo-project:lineage-workspace:root-asset',
+} satisfies AgentClaimSummary;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('LineageContextMenu', () => {
   it('offers use for next variation when the node is not selected', () => {
@@ -99,6 +119,30 @@ describe('LineageContextMenu', () => {
     const remove = collectButtons(menu).find(button => flattenText(button) === 'Root cannot be removed');
 
     expect(remove?.props.disabled).toBe(true);
+  });
+
+  it('requires explicit confirmation before lineage claim release, transfer, and revoke controls run', () => {
+    const events: string[] = [];
+    const confirm = vi.fn(() => true);
+    const prompt = vi.fn(() => 'handoff owner');
+    vi.stubGlobal('window', { confirm, prompt });
+    const menu = LineageContextMenu({
+      ...baseProps(node, events),
+      claims: [staleClaim],
+      onClaimControl: (action, claim, body) => events.push(`${action}:${claim.id}:${body.reason || body.toAgentName}`),
+    });
+
+    collectButtons(menu).find(button => flattenText(button) === 'Release stale claim')?.props.onClick();
+    collectButtons(menu).find(button => flattenText(button) === 'Transfer claim')?.props.onClick();
+    collectButtons(menu).find(button => flattenText(button) === 'Revoke claim')?.props.onClick();
+
+    expect(confirm).toHaveBeenCalledTimes(3);
+    expect(prompt).toHaveBeenCalledTimes(2);
+    expect(events).toEqual([
+      'release-stale:claim_lineage:Released stale lineage_workspace claim claim_lineage from the lineage context menu.',
+      'transfer:claim_lineage:Transferred from lineage context menu.',
+      'revoke:claim_lineage:handoff owner',
+    ]);
   });
 });
 

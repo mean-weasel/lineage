@@ -3,6 +3,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createAgentClaim, isAgentClaimError } from './agentClaims';
 import { defaultProject, repoRoot } from './assetCore';
 import { contentBatchRouter } from './contentBatchRoutes';
 
@@ -19,6 +20,13 @@ function appWithContentRoutes() {
   const app = express();
   app.use(express.json());
   app.use('/api/content', contentBatchRouter(projectFrom));
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (isAgentClaimError(error)) {
+      res.status(error.status).json({ conflicts: error.conflicts, error: error.code, message: error.message });
+      return;
+    }
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  });
   server = app.listen(0);
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
@@ -30,6 +38,15 @@ async function requestJson<T>(baseUrl: string, path: string, body?: Record<strin
     method: 'POST',
   } : undefined);
   return response.json() as Promise<T>;
+}
+
+async function postJson(baseUrl: string, path: string, body: Record<string, unknown>, headers: Record<string, string> = {}) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', ...headers },
+    method: 'POST',
+  });
+  return { body: await response.json() as Record<string, unknown>, status: response.status };
 }
 
 describe('content batch routes', () => {
@@ -104,5 +121,55 @@ describe('content batch routes', () => {
     expect(empty).toMatchObject({ selected: false, target: null });
     expect(selected).toMatchObject({ selected: true, target: { post: { id: 'draft-demo-route-target' }, readiness: 'needs_asset' } });
     expect(cleared).toMatchObject({ selected: false, target: null });
+  });
+
+  it('enforces content post claims through body and header tokens on mutating routes', async () => {
+    const baseUrl = appWithContentRoutes();
+    await requestJson(baseUrl, '/api/content/batches', {
+      batchId: 'route-claim',
+      channel: 'tiktok',
+      confirmWrite: true,
+      project: defaultProject,
+      title: 'Route claim batch',
+    });
+    await requestJson(baseUrl, '/api/content/posts', {
+      batchId: 'route-claim',
+      body: 'Claimed route post body',
+      channel: 'tiktok',
+      confirmWrite: true,
+      phase: 'draft',
+      postId: 'claimed-route-post',
+      project: defaultProject,
+      title: 'Claimed route post',
+    });
+    const claim = createAgentClaim({
+      agentName: 'route claim test agent',
+      channel: 'tiktok',
+      project: defaultProject,
+      scopeType: 'content_post',
+      targetId: 'claimed-route-post',
+      targetTitle: 'Claimed route post',
+    });
+
+    const denied = await postJson(baseUrl, '/api/content/posts/claimed-route-post/assets', {
+      assetId: 'asset-1',
+      confirmWrite: true,
+      project: defaultProject,
+    });
+    const attached = await postJson(baseUrl, '/api/content/posts/claimed-route-post/assets', {
+      assetId: 'asset-1',
+      claimToken: claim.claim_token,
+      confirmWrite: true,
+      project: defaultProject,
+    });
+    const phased = await postJson(baseUrl, '/api/content/posts/claimed-route-post', {
+      confirmWrite: true,
+      phase: 'review',
+      project: defaultProject,
+    }, { 'X-Lineage-Claim-Token': claim.claim_token });
+
+    expect(denied).toMatchObject({ status: 401, body: { error: 'claim_required' } });
+    expect(attached).toMatchObject({ status: 200, body: { ok: true, post: { id: 'claimed-route-post' } } });
+    expect(phased).toMatchObject({ status: 200, body: { ok: true, post: { phase: 'review' } } });
   });
 });

@@ -274,6 +274,72 @@
   color: #26343d;
 }
 
+.claim-occupancy {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid #b8d5c2;
+  border-radius: 999px;
+  background: #f1fbf4;
+  padding: 5px 8px;
+  color: #245435 !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+}
+
+.claim-occupancy p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+}
+
+.claim-occupancy svg {
+  flex: 0 0 auto;
+}
+
+.claim-occupancy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claim-occupancy-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.claim-occupancy-actions button {
+  min-height: 24px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.claim-occupancy.idle {
+  border-color: #d8c58f;
+  background: #fff8df;
+  color: #66500f !important;
+}
+
+.claim-occupancy.stale {
+  border-color: #e1b2a9;
+  background: #fff1ee;
+  color: #7b3428 !important;
+}
+
 .work-target-actions {
   display: flex;
   flex-wrap: wrap;

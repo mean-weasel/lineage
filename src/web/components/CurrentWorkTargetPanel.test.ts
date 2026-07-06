@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
-import type { AssetSelectionSnapshot, ContentOpsQueueSnapshot, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
+import type { AgentClaimSummary, AssetSelectionSnapshot, ContentOpsQueueSnapshot, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
 import { CurrentWorkTargetPanel } from './CurrentWorkTargetPanel';
 
 function flattenText(node: ReactNode): string {
@@ -179,6 +179,48 @@ const selection = {
   review_sets: [],
 } satisfies AssetSelectionSnapshot;
 
+const claims = [{
+  agent_kind: 'codex',
+  agent_name: 'Ada',
+  created_at: '2026-06-26T00:00:00.000Z',
+  derived_state: 'active',
+  expires_at: '2026-06-26T00:20:00.000Z',
+  heartbeat_age_seconds: 12,
+  heartbeat_at: '2026-06-26T00:00:12.000Z',
+  id: 'claim_content',
+  project: 'demo-project',
+  scope_type: 'content_post',
+  status: 'active',
+  target_id: 'selected-post',
+}, {
+  agent_kind: 'codex',
+  agent_name: 'Bea',
+  channel: 'linkedin',
+  created_at: '2026-06-26T00:00:00.000Z',
+  derived_state: 'stale',
+  expires_at: '2026-06-26T00:20:00.000Z',
+  heartbeat_age_seconds: 940,
+  heartbeat_at: '2026-06-26T00:00:12.000Z',
+  id: 'claim_queue',
+  project: 'demo-project',
+  scope_type: 'content_queue_lane',
+  status: 'active',
+  target_id: 'needs_asset',
+}, {
+  agent_kind: 'codex',
+  agent_name: 'Cy',
+  created_at: '2026-06-26T00:00:00.000Z',
+  derived_state: 'idle',
+  expires_at: '2026-06-26T00:20:00.000Z',
+  heartbeat_age_seconds: 360,
+  heartbeat_at: '2026-06-26T00:00:12.000Z',
+  id: 'claim_selection',
+  project: 'demo-project',
+  scope_type: 'selection_set',
+  status: 'active',
+  target_id: 'demo-project:current:current',
+}] satisfies AgentClaimSummary[];
+
 describe('CurrentWorkTargetPanel', () => {
   it('renders distinct content target, queue, and asset context slots', () => {
     const panel = CurrentWorkTargetPanel({
@@ -248,6 +290,53 @@ describe('CurrentWorkTargetPanel', () => {
     expect(text).toContain('D:asset-2');
     clickButton(panel, 'Copy selections');
     expect(copied).toContain('npx lineage agent selections --project demo-project');
+  });
+
+  it('shows compact claim occupancy for content target, queue, and selection scopes without tokens', () => {
+    const panel = CurrentWorkTargetPanel({
+      claims,
+      drawerOpen: true,
+      loading: false,
+      onCopy: async () => undefined,
+      onRefresh: () => undefined,
+      project: 'demo-project',
+      queue,
+      selectedAsset,
+      selection,
+      target,
+      view: 'content',
+    });
+    const text = flattenText(panel);
+
+    expect(text).toContain('2 selected assets · 3 claims');
+    expect(text).toContain('Claimed by Ada');
+    expect(text).toContain('Stale claim by Bea');
+    expect(text).toContain('Idle claim by Cy');
+    expect(text).not.toContain('claim_content.secret');
+  });
+
+  it('routes claim controls from the drawer with the selected claim id', () => {
+    const actions: string[] = [];
+    const panel = CurrentWorkTargetPanel({
+      claims,
+      drawerOpen: true,
+      loading: false,
+      onClaimControl: (action, claim) => { actions.push(`${action}:${claim.id}`); },
+      onCopy: async () => undefined,
+      onRefresh: () => undefined,
+      project: 'demo-project',
+      queue,
+      selectedAsset,
+      selection,
+      target,
+      view: 'content',
+    });
+
+    clickButton(panel, 'Release stale');
+    clickButton(panel, 'Transfer');
+    clickButton(panel, 'Revoke');
+
+    expect(actions).toEqual(['release-stale:claim_queue', 'transfer:claim_content', 'revoke:claim_content']);
   });
 
   it('marks lineage context so only selected asset context is visible in that drawer mode', () => {

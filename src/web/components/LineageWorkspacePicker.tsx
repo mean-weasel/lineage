@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LineageWorkspace } from '../../shared/types';
-import { lineageWorkspaceOptionLabel } from './lineageWorkspacePickerModel';
+import { ShieldCheck } from 'lucide-react';
+import type { AgentClaimSummary, AgentClaimsResponse, LineageWorkspace } from '../../shared/types';
+import { api } from '../api';
+import { agentClaimOccupancyLabel, agentClaimOccupancyState, lineageWorkspaceClaims, lineageWorkspaceOptionLabel } from './lineageWorkspacePickerModel';
 import './LineageWorkspacePicker.css';
 
 export function LineageWorkspacePicker({
@@ -21,7 +23,9 @@ export function LineageWorkspacePicker({
   workspaces: LineageWorkspace[];
 }) {
   const [open, setOpen] = useState(false);
+  const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const pickerRef = useRef<HTMLElement | null>(null);
+  const project = activeWorkspace?.project || workspaces[0]?.project || '';
 
   useEffect(() => {
     function closeOnOutsideClick(event: MouseEvent) {
@@ -42,10 +46,24 @@ export function LineageWorkspacePicker({
     setOpen(false);
   }, [closeSignal]);
 
+  useEffect(() => {
+    if (!project) {
+      setClaims([]);
+      return;
+    }
+    let cancelled = false;
+    api<AgentClaimsResponse>(`/api/agent-claims?${new URLSearchParams({ project })}`)
+      .then(response => { if (!cancelled) setClaims(response.claims); })
+      .catch(() => { if (!cancelled) setClaims([]); });
+    return () => { cancelled = true; };
+  }, [project, closeSignal, workspaces.length]);
+
   function select(workspaceId: string) {
     setOpen(false);
     onSelect(workspaceId);
   }
+
+  const activeClaims = activeWorkspace ? lineageWorkspaceClaims(claims, activeWorkspace) : [];
 
   return (
     <section aria-label="Lineage workspace picker" className="lineage-workspace-picker" ref={pickerRef}>
@@ -63,24 +81,20 @@ export function LineageWorkspacePicker({
         <span>Workspace</span>
         <strong>{activeWorkspace?.title || 'No workspace selected'}</strong>
         <code>{activeWorkspace?.root_asset_id || 'Start with New lineage'}</code>
+        <ClaimOccupancy claims={activeClaims} />
       </button>
       {open && (
         <div className="lineage-workspace-menu">
           <div className="lineage-workspace-options" role="listbox">
             {workspaces.length === 0 && <p>No workspaces yet.</p>}
             {workspaces.map(workspace => (
-              <button
-                aria-selected={activeWorkspace?.id === workspace.id}
-                className={activeWorkspace?.id === workspace.id ? 'active' : ''}
+              <WorkspaceOption
+                active={activeWorkspace?.id === workspace.id}
+                claims={lineageWorkspaceClaims(claims, workspace)}
                 key={workspace.id}
-                onClick={() => select(workspace.id)}
-                role="option"
-                type="button"
-              >
-                <strong>{workspace.title}</strong>
-                <code>{workspace.root_asset_id}</code>
-                <span>{lineageWorkspaceOptionLabel(workspace)}</span>
-              </button>
+                onSelect={() => select(workspace.id)}
+                workspace={workspace}
+              />
             ))}
           </div>
           <footer>
@@ -99,5 +113,38 @@ export function LineageWorkspacePicker({
         </div>
       )}
     </section>
+  );
+}
+
+function WorkspaceOption({ active, claims, onSelect, workspace }: {
+  active: boolean;
+  claims: AgentClaimSummary[];
+  onSelect: () => void;
+  workspace: LineageWorkspace;
+}) {
+  return (
+    <button
+      aria-selected={active}
+      className={active ? 'active' : ''}
+      onClick={onSelect}
+      role="option"
+      type="button"
+    >
+      <strong>{workspace.title}</strong>
+      <code>{workspace.root_asset_id}</code>
+      <span>{lineageWorkspaceOptionLabel(workspace)}</span>
+      <ClaimOccupancy claims={claims} />
+    </button>
+  );
+}
+
+function ClaimOccupancy({ claims }: { claims: AgentClaimSummary[] }) {
+  if (claims.length === 0) return null;
+  const state = agentClaimOccupancyState(claims);
+  return (
+    <small className={`lineage-workspace-claim ${state}`}>
+      <ShieldCheck size={13} />
+      <span>{agentClaimOccupancyLabel(claims)}</span>
+    </small>
   );
 }

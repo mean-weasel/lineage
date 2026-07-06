@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LineageBriefResponse, LineageNode } from '../../shared/types';
 import { LineageHandoffPanel } from './LineageHandoffPanel';
 
@@ -9,6 +9,20 @@ function flattenText(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(flattenText).join('');
   const element = node as ReactElement<{ children?: ReactNode }>;
   return flattenText(element.props?.children);
+}
+
+function collectButtons(node: ReactNode): ReactElement[] {
+  if (!node || typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') return [];
+  if (Array.isArray(node)) return node.flatMap(collectButtons);
+  const element = node as ReactElement<{ children?: ReactNode; type?: string }>;
+  const children = collectButtons(element.props?.children);
+  return element.type === 'button' ? [element, ...children] : children;
+}
+
+function clickButton(node: ReactNode, label: string): Promise<void> | void {
+  const button = collectButtons(node).find(item => flattenText(item).includes(label));
+  expect(button, `Missing button ${label}`).toBeTruthy();
+  return button?.props.onClick?.();
 }
 
 const nextBase = {
@@ -69,6 +83,11 @@ const brief = {
   warnings: [],
 } satisfies LineageBriefResponse;
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 describe('LineageHandoffPanel', () => {
   it('names the chosen variation source and exposes the exact CLI handoff', () => {
     const panel = LineageHandoffPanel({
@@ -99,5 +118,53 @@ describe('LineageHandoffPanel', () => {
     });
 
     expect(flattenText(panel)).toContain('Branch from here: this asset is not a latest leaf.');
+  });
+
+  it('creates a lineage workspace claim only when copying the claim-aware handoff', async () => {
+    const copied: string[] = [];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        claim: {
+          expires_at: '2026-06-27T00:20:00.000Z',
+          id: 'claim_test',
+          target_id: 'demo-project:lineage-workspace:local-root',
+        },
+        claim_token: 'claim_test.secret_123',
+      }),
+    });
+    const writeText = vi.fn(async (text: string) => { copied.push(text); });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const toasts: string[] = [];
+    const panel = LineageHandoffPanel({
+      brief,
+      nextBase,
+      onRefreshBrief: () => undefined,
+      onToast: (_type, message) => { toasts.push(message); },
+      project: 'demo-project',
+      rootAssetId: 'local-root',
+    });
+
+    expect(flattenText(panel)).not.toContain('claim_test.secret_123');
+    await clickButton(panel, 'Copy claim handoff');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/agent-claims', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        agentName: 'Copied Lineage handoff',
+        channel: 'tiktok',
+        project: 'demo-project',
+        scopeType: 'lineage_workspace',
+        targetId: 'demo-project:lineage-workspace:local-root',
+        targetTitle: 'Chosen asset lineage',
+        ttl: '20m',
+      }),
+    }));
+    expect(copied).toHaveLength(1);
+    expect(copied[0]).toContain("export LINEAGE_CLAIM_TOKEN='claim_test.secret_123'");
+    expect(copied[0]).toContain('npx @mean-weasel/lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --db /tmp/lineage.sqlite --json');
+    expect(copied[0]).toContain('npx @mean-weasel/lineage link-child --project demo-project --root local-root --child <asset-id> --confirm-write --db /tmp/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --json');
+    expect(toasts).toContain('Copied claim-aware handoff for claim_test');
   });
 });

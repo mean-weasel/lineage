@@ -102,6 +102,7 @@ export function Sidebar({
           <button className="text-button" onClick={() => setView('review')}>Review queue</button>
           <button className="text-button" onClick={() => setView('ledger')}>Ledger workflow</button>
           <button className="text-button" onClick={() => setView('content')}>Content batches</button>
+          <button className="text-button" onClick={() => setView('agents')}>Agents</button>
           <button className="text-button" onClick={showBackupQueue}>Backup queue</button>
           <button className="text-button" onClick={() => showAssets(() => setSource('local'))}>Local review</button>
           <button className="text-button" onClick={() => showAssets(() => setSource('catalog'))}>Catalog assets</button>

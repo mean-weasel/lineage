@@ -13,6 +13,8 @@ import { isAssetReviewError, markAssetReview, markAssetReviewsFromRequestBody, r
 import { getReviewQueue } from './server/assetReviewQueue';
 import { isAssetReviewSetError } from './server/assetReviewSets';
 import { assetSelectionRouter, isAssetSelectionError } from './server/assetSelections';
+import { isAgentClaimError } from './server/agentClaims';
+import { claimTokenFromRequest, registerAgentClaimRoutes } from './server/agentClaimRoutes';
 import { registerAdapterRoutes } from './server/adapters/adapterRoutes';
 import { isAdapterSettingsError } from './server/adapters/adapterSettings';
 import { isPostingAdapterError } from './server/adapters/posting/bufferPostingService';
@@ -61,6 +63,7 @@ app.get(
 app.get('/api/ledger', asyncRoute((req, res) => { res.json(getLedgerPageFromQuery(projectFrom(req), req.query)); }));
 app.post('/api/assets/lookup', asyncRoute((req, res) => { res.json(lookupAssets(projectFrom(req), Array.isArray(req.body.assetIds) ? req.body.assetIds.map(String) : [])); }));
 registerAdapterRoutes(app, projectFrom, asyncRoute);
+registerAgentClaimRoutes(app, projectFrom, asyncRoute);
 app.use('/api/content', contentBatchRouter(projectFrom));
 app.use('/api/selections', assetSelectionRouter(projectFrom));
 app.get('/api/generation/jobs', asyncRoute((req, res) => { res.json(listImageGenerationJobs(projectFrom(req), { assetId: typeof req.query.assetId === 'string' ? req.query.assetId : undefined, rootAssetId: typeof req.query.rootAssetId === 'string' ? req.query.rootAssetId : undefined, limit: Number(req.query.limit || 12) })); }));
@@ -162,6 +165,7 @@ app.post(
         rootAssetId: typeof req.body.rootAssetId === 'string' ? req.body.rootAssetId : undefined,
         childAssetId: String(req.body.childAssetId || ''),
         confirmWrite: req.body.confirmWrite === true,
+        claimToken: claimTokenFromRequest(req),
       })
     );
   })
@@ -385,6 +389,10 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     return;
   }
   if (isGenerationReceiptError(error)) { res.status(error.status).json({ error: error.message }); return; }
+  if (isAgentClaimError(error)) {
+    res.status(error.status).json({ error: error.code, message: error.message, conflicts: error.conflicts });
+    return;
+  }
   if (isLineageWorkspaceError(error)) {
     res.status(error.status).json({ error: error.message });
     return;

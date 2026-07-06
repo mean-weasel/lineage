@@ -45,8 +45,15 @@ Supported packaged handoff verbs:
 lineage next --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
 lineage brief --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
 lineage inspect --project demo-project --asset-id <asset-id> --db /absolute/path/to/lineage.sqlite --json
-lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --confirm-write --json
+lineage agent claim --project demo-project --scope lineage_workspace --target demo-project:lineage-workspace:<root-asset-id> --agent-name "Codex thread 123" --ttl 20m --db /absolute/path/to/lineage.sqlite --json
+lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --db /absolute/path/to/lineage.sqlite --json
+lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --db /absolute/path/to/lineage.sqlite --json
 ```
+
+Use `project_channel` claims only for rare, intentional ownership of a whole
+project/channel lane. Prefer `lineage_workspace` or `content_post` for normal
+handoffs.
 
 The same verbs may be run through npm without a global install:
 
@@ -65,9 +72,13 @@ by a second `lineage` word.
    commands.
 4. Use `lineage next --json` and `lineage inspect --json` before generating or
    linking work.
-5. Use `lineage link-child --confirm-write --json` only after the child asset is
-   indexed and the parent/root is clear.
-6. Run a negative check for unknown child IDs when changing handoff behavior.
+5. Use `lineage agent claim --scope lineage_workspace --json`, export the
+   returned raw token as `LINEAGE_CLAIM_TOKEN`, and heartbeat while working.
+6. Use `lineage link-child --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write
+   --json` only after the child asset is indexed and the parent/root is clear.
+7. Release the claim with `lineage agent release --claim-token
+   "$LINEAGE_CLAIM_TOKEN" --json` before handing off or stopping.
+8. Run a negative check for unknown child IDs when changing handoff behavior.
 
 ## Boundaries
 

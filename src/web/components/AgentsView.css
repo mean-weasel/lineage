@@ -1,0 +1,179 @@
+.agents-view {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+}
+
+.agents-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agents-head h2 {
+  font-size: 22px;
+}
+
+.agents-head p,
+.agents-empty,
+.agents-error {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.agents-error {
+  border: 1px solid rgba(177, 59, 59, 0.28);
+  border-radius: 8px;
+  background: #fff7f7;
+  padding: 9px 10px;
+  color: var(--danger);
+}
+
+.agents-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.agents-summary div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfe;
+  padding: 11px;
+}
+
+.agents-summary span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.agents-summary strong {
+  color: #22343d;
+  font-size: 24px;
+}
+
+.agents-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agents-group h3 {
+  color: #243743;
+  font-size: 14px;
+}
+
+.agents-list {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-claim-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(220px, 1.2fr) minmax(260px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #cbd9de;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.agent-claim-row.stale,
+.agent-claim-row.expired {
+  border-color: #e1b2a9;
+  background: #fff7f5;
+}
+
+.agent-claim-row.idle {
+  border-color: #d8c58f;
+  background: #fffaf0;
+}
+
+.agent-claim-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-claim-main svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.agent-claim-main div,
+.agent-claim-target {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-claim-main strong,
+.agent-claim-target strong {
+  overflow: hidden;
+  color: #22343d;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-claim-main span,
+.agent-claim-target code {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-claim-row dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.agent-claim-row dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.agent-claim-row dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #26343d;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .agents-view {
+    padding: 12px;
+  }
+
+  .agents-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agents-summary,
+  .agent-claim-row,
+  .agent-claim-row dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
