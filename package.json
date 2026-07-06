@@ -1,6 +1,6 @@
 {
   "name": "@mean-weasel/lineage",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local-first creative lineage workspace",
   "license": "MIT",
   "type": "module",
