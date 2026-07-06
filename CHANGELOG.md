@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4
+
+- Implement target-scoped agent claims for lineage and content-post agent writes, including claim lifecycle CLI/API commands, heartbeat/release/revoke/transfer controls, and token-redacted read APIs.
+- Add claim-aware handoff packets, workspace/content occupancy badges, and a read-only Agents view so humans can see active, idle, stale, and closed claims without exposing raw tokens.
+- Enforce matching claim tokens for claimed lineage/content mutations and document the `LINEAGE_CLAIM_TOKEN` operator flow, including rare `project_channel` ownership.
+
 ## 0.1.3
 
 - Add a managed Swissifier rich-demo media download flow that verifies the release archive and restored PNG checksums before loading the demo.

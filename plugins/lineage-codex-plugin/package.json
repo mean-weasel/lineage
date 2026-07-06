@@ -1,6 +1,6 @@
 {
   "name": "lineage-codex-plugin",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "files": [".codex-plugin", "skills", "README.md"]
