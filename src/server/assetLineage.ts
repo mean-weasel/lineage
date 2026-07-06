@@ -3,6 +3,7 @@ import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
 import { LINEAGE_NEXT_VARIATION_LIMIT, normalizeSelectionInput, selectedRows, selectionId } from './assetLineageSelection';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
+import { requireLineageWorkspaceClaimForWrite } from './lineageClaimGuards';
 import type {
   AssetReviewState,
   GrowthAsset,
@@ -107,6 +108,14 @@ function rootFor(database: DatabaseSync, project: string, assetId: string): stri
   return assetId;
 }
 
+function explicitWorkspaceRoot(database: DatabaseSync, project: string, assetId: string): string | undefined {
+  const row = database.prepare(`
+    select root_asset_id from lineage_workspaces
+    where project_id = ? and root_asset_id = ? and status != 'archived'
+  `).get(project, assetId) as { root_asset_id?: string } | undefined;
+  return row?.root_asset_id;
+}
+
 function latestSelectedRoot(database: DatabaseSync, project: string): string | undefined {
   const row = database.prepare('select root_asset_id from asset_selections where project_id = ? order by selected_at desc limit 1').get(project) as { root_asset_id?: string } | undefined;
   return row?.root_asset_id;
@@ -142,6 +151,19 @@ export function linkLineageAssets(project: string, fields: LineageLinkFields) {
   requireAsset(database, project, fields.parentAssetId);
   requireAsset(database, project, fields.childAssetId);
   if (fields.parentAssetId === fields.childAssetId) throw new LineageError('Lineage link cannot point to itself');
+  const root = rootFor(database, project, fields.parentAssetId);
+  try {
+    requireLineageWorkspaceClaimForWrite({
+      claimToken: fields.claimToken,
+      confirmWrite: fields.confirmWrite,
+      project,
+      rootAssetId: root,
+      writeKind: 'lineage_link',
+    });
+  } catch (error) {
+    database.close();
+    throw error;
+  }
   const edge = {
     id: edgeId(project, fields.parentAssetId, fields.childAssetId), parent_asset_id: fields.parentAssetId,
     child_asset_id: fields.childAssetId, relation_type: 'derived_from' as const, created_at: nowIso(),
@@ -177,7 +199,7 @@ function descendants(database: DatabaseSync, project: string, root: string): Lin
 export function getLineageSnapshot(project: string, assetId: string): LineageSnapshot {
   const database = db();
   requireAsset(database, project, assetId);
-  const root = rootFor(database, project, assetId);
+  const root = explicitWorkspaceRoot(database, project, assetId) || rootFor(database, project, assetId);
   const edges = descendants(database, project, root);
   const ids = [...new Set([root, ...edges.flatMap(edge => [edge.parent_asset_id, edge.child_asset_id])])];
   const placeholders = ids.map(() => '?').join(',');
@@ -230,6 +252,18 @@ export function updateLineageLayout(project: string, fields: LineageLayoutFields
   const database = db();
   requireAsset(database, project, fields.rootAssetId);
   for (const position of fields.positions) requireAsset(database, project, position.assetId);
+  try {
+    requireLineageWorkspaceClaimForWrite({
+      claimToken: fields.claimToken,
+      confirmWrite: fields.confirmWrite,
+      project,
+      rootAssetId: fields.rootAssetId,
+      writeKind: 'lineage_layout',
+    });
+  } catch (error) {
+    database.close();
+    throw error;
+  }
   if (!fields.confirmWrite) {
     database.close();
     return { ok: true as const, dryRun: true, root_asset_id: fields.rootAssetId, positions: fields.positions };

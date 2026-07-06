@@ -218,7 +218,7 @@ function findContentPost(database: DatabaseSync, project: string, postId: string
   return postFromRow(row, assetsForPost(database, project, postId));
 }
 
-function requireContentPostClaim(project: string, post: ContentPost, claimToken: string | undefined, writeKind: string): void {
+export function requireContentPostClaim(project: string, post: ContentPost, claimToken: string | undefined, writeKind: string): void {
   if (!claimToken && !hasActiveContentPostClaim(project, post)) return;
   const validation = validateAgentClaimForWrite({
     channel: post.channel,
@@ -270,7 +270,7 @@ export function updateContentPost(project: string, fields: ContentPostUpdateFiel
   const timestamp = nowIso();
   try {
     const current = findContentPost(database, project, postId);
-    if (fields.phase) requireContentPostClaim(project, current, fields.claimToken, 'content_post_phase');
+    requireContentPostClaim(project, current, fields.claimToken, fields.phase ? 'content_post_phase' : 'content_post_update');
     if (fields.batchId) {
       const batch = database.prepare('select id from content_batches where project_id = ? and id = ?').get(project, fields.batchId);
       if (!batch) throw new ContentBatchError(`Unknown content batch: ${fields.batchId}`, 404);

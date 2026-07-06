@@ -127,12 +127,13 @@ For local release validation:
 
 ```bash
 npm run release:dry-run -- --tag next
+npm run release:claim-smoke -- --package @mean-weasel/lineage@next
 npm run release:next
 npm run release:dry-run -- --tag latest
 npm run release:latest
 ```
 
-The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
+The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. Promotion also installs the candidate package and runs a claim lifecycle smoke that creates a target claim, proves missing-token writes fail, proves matching-token writes succeed, verifies read surfaces do not expose the raw token, and proves release invalidates the token. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
 
 Use the Release workflow operations this way:
 

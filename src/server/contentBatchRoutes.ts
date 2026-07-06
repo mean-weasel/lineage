@@ -75,6 +75,7 @@ export function contentBatchRouter(projectFrom: ProjectResolver): Router {
 
   router.post('/target', (req, res) => {
     res.json(setContentTarget(projectFrom(bodyProjectShape(req)), {
+      claimToken: claimTokenFromRequest(req),
       confirmWrite: boolBody(req, 'confirmWrite'),
       notes: stringBody(req, 'notes'),
       postId: stringBody(req, 'postId') || '',
@@ -82,7 +83,7 @@ export function contentBatchRouter(projectFrom: ProjectResolver): Router {
   });
 
   router.post('/target/clear', (req, res) => {
-    res.json(clearContentTarget(projectFrom(bodyProjectShape(req)), boolBody(req, 'confirmWrite')));
+    res.json(clearContentTarget(projectFrom(bodyProjectShape(req)), boolBody(req, 'confirmWrite'), claimTokenFromRequest(req)));
   });
 
   router.get('/batches/:batchId', (req, res) => {

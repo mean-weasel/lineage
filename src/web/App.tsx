@@ -4,7 +4,7 @@ import { api } from './api';
 import { normalizePlacementValues, postMutation } from './assetMutations';
 import { AssetDetailDrawer } from './components/AssetDetailDrawer';
 import { AssetBoard } from './components/AssetBoard';
-import { AgentsView } from './components/AgentsView';
+import { AgentsView, type AgentWorkTarget } from './components/AgentsView';
 import { ContentBatchesView } from './components/ContentBatchesView';
 import { CopiedTextFallback } from './components/CopiedTextFallback';
 import { CurrentWorkTarget } from './components/CurrentWorkTargetPanel';
@@ -199,6 +199,23 @@ export function App() {
     setQuery('');
     setView('backup');
   }
+  async function openAgentWork(target: AgentWorkTarget) {
+    try {
+      if (target.assetId) setSelectedId(target.assetId);
+      if (target.view === 'lineage' && target.workspaceId) {
+        await api(`/api/lineage-workspaces/${encodeURIComponent(target.workspaceId)}/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project, confirmWrite: true }),
+        });
+      }
+      setAssetDetailsOpen(false);
+      setView(target.view);
+      setToast({ type: 'ok', message: `Opened ${target.claim.target_title || target.claim.target_id}` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  }
   function toggleLocalBackup(asset: GrowthAsset) {
     if (!asset.local?.relative_path) return;
     setLocalBackupIds(current => current.includes(asset.asset_id) ? current.filter(id => id !== asset.asset_id) : [...current, asset.asset_id]);
@@ -297,7 +314,7 @@ export function App() {
             selectedAsset={selected}
           />
         ) : view === 'agents' ? (
-          <AgentsView project={project} />
+          <AgentsView onCopy={copyText} onOpenWork={openAgentWork} project={project} />
         ) : view === 'backup' ? (
           <LocalBackupQueue
             assets={assets}

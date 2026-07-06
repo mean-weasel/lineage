@@ -1,6 +1,7 @@
 import { lineageDb as db, nowIso, type DatabaseSync } from './assetLineageDb';
 import { selectedRows, selectionId } from './assetLineageSelection';
 import { getLineageSnapshot, LineageError } from './assetLineage';
+import { requireLineageWorkspaceClaimForWrite } from './lineageClaimGuards';
 import type { LineageRemoveNodeFields, LineageRemoveNodeResponse } from '../shared/types';
 
 function requireAsset(database: DatabaseSync, project: string, assetId: string): void {
@@ -57,6 +58,18 @@ export function removeLineageNode(project: string, fields: LineageRemoveNodeFiel
   if (!snapshot.nodes.some(node => node.asset_id === fields.assetId)) {
     database.close();
     throw new LineageError(`Asset ${fields.assetId} is not in lineage rooted at ${root}`, 404);
+  }
+  try {
+    requireLineageWorkspaceClaimForWrite({
+      claimToken: fields.claimToken,
+      confirmWrite: fields.confirmWrite,
+      project,
+      rootAssetId: root,
+      writeKind: 'lineage_remove_node',
+    });
+  } catch (error) {
+    database.close();
+    throw error;
   }
   const parentEdges = snapshot.edges.filter(edge => edge.child_asset_id === fields.assetId);
   const childEdges = snapshot.edges.filter(edge => edge.parent_asset_id === fields.assetId);

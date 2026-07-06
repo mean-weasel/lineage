@@ -32,33 +32,6 @@
   color: var(--danger);
 }
 
-.agents-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.agents-summary div {
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fbfdfe;
-  padding: 11px;
-}
-
-.agents-summary span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.agents-summary strong {
-  color: #22343d;
-  font-size: 24px;
-}
-
 .agents-group {
   display: grid;
   gap: 8px;
@@ -75,16 +48,81 @@
   gap: 8px;
 }
 
+.agents-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+}
+
+.agents-browser {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.agents-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(135px, 0.45fr) minmax(135px, 0.45fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.agents-filters label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.agents-filters label,
+.agents-filters select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 9px;
+}
+
+.agents-filters svg {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.agents-filters input,
+.agents-filters select {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #26343d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  outline: 0;
+}
+
+.agents-filters > select {
+  border: 1px solid var(--line);
+}
+
 .agent-claim-row {
   display: grid;
-  grid-template-columns: minmax(170px, 0.8fr) minmax(220px, 1.2fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(145px, 0.85fr) minmax(165px, 1fr) minmax(0, 1.1fr) minmax(132px, auto);
   align-items: center;
   gap: 12px;
+  width: 100%;
   min-width: 0;
   border: 1px solid #cbd9de;
   border-radius: 8px;
   background: #fff;
   padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-claim-row:focus-visible {
+  outline: 2px solid rgba(26, 117, 159, 0.42);
+  outline-offset: 2px;
 }
 
 .agent-claim-row.stale,
@@ -161,6 +199,17 @@
   white-space: nowrap;
 }
 
+.agent-row-actions {
+  display: grid;
+  gap: 6px;
+  justify-self: end;
+}
+
+.agent-row-open-graph,
+.agent-row-copy-briefing {
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .agents-view {
     padding: 12px;
@@ -171,9 +220,15 @@
     flex-direction: column;
   }
 
-  .agents-summary,
+  .agents-workspace,
+  .agents-filters,
   .agent-claim-row,
   .agent-claim-row dl {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-row-actions {
+    width: 100%;
+    justify-self: stretch;
   }
 }

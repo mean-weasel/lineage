@@ -47,8 +47,18 @@ if (!skipCi) {
   execFileSync('npm', ['run', 'prepare-release'], { cwd: root, stdio: 'inherit' });
 }
 
+function publishedVersionExists(spec) {
+  try {
+    execFileSync('npm', ['view', spec, 'version'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 if (promoteLatest) {
   const spec = `${packageInfo.name}@${packageInfo.version}`;
+  execFileSync(process.execPath, ['scripts/release-claim-smoke.mjs', '--package', `${packageInfo.name}@${fromTag}`], { cwd: root, stdio: 'inherit' });
   if (dryRun) {
     console.log(`Dry-run would promote ${spec} from npm tag ${fromTag} to latest`);
     process.exit(0);
@@ -62,8 +72,14 @@ if (promoteLatest) {
   execFileSync('npm', ['dist-tag', 'add', spec, 'latest'], { cwd: root, stdio: 'inherit' });
   console.log(`Promoted ${spec} to npm tag latest`);
 } else {
+  const spec = `${packageInfo.name}@${packageInfo.version}`;
   const publishArgs = ['publish', '--access', 'public', '--tag', tag];
   if (dryRun) publishArgs.push('--dry-run');
-  execFileSync('npm', publishArgs, { cwd: root, stdio: 'inherit' });
+  if (dryRun && publishedVersionExists(spec)) {
+    execFileSync('npm', ['pack', '--dry-run'], { cwd: root, stdio: 'inherit' });
+    console.log(`Dry-run package ${spec} is already published; npm publish --dry-run would reject an overwrite.`);
+  } else {
+    execFileSync('npm', publishArgs, { cwd: root, stdio: 'inherit' });
+  }
   console.log(`${dryRun ? 'Dry-run prepared' : 'Published'} ${packageInfo.name}@${packageInfo.version} with npm tag ${tag}`);
 }
