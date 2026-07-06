@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
-import { resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
+import { formatAgentGraphDigest, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -118,6 +118,56 @@ describe('lineage CLI handoff commands', () => {
     expect(inspected.active_asset_id).toBe(fixtureRootAssetId);
     expect(inspected.nodes.map(node => node.asset_id)).toContain(fixtureRootAssetId);
     expect(legacyNext.root_asset_id).toBe(fixtureRootAssetId);
+  });
+
+  it('returns a lineage graph snapshot from the agent CLI namespace', () => {
+    seedCliDb();
+
+    const graph = runLineageAgentCommand('graph', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--db', cliDbFile,
+      '--json',
+    ]) as { active_asset_id: string; edges: unknown[]; nodes: Array<{ asset_id: string }>; root_asset_id: string };
+
+    expect(graph.root_asset_id).toBe(fixtureRootAssetId);
+    expect(graph.active_asset_id).toBe(fixtureRootAssetId);
+    expect(graph.nodes.map(node => node.asset_id)).toContain(fixtureRootAssetId);
+    expect(Array.isArray(graph.edges)).toBe(true);
+  });
+
+  it('formats a readable agent graph digest for non-json CLI output', () => {
+    const output = formatAgentGraphDigest({
+      active_asset_id: 'root',
+      edges: [{ parent_asset_id: 'root', child_asset_id: 'child' }],
+      latest: ['child'],
+      nodes: [
+        { asset_id: 'root', title: 'Swissifier root' },
+        { asset_id: 'child', is_latest: true, title: 'Swissifier child' },
+      ],
+      root_asset_id: 'root',
+      selected: ['child'],
+    });
+
+    expect(output).toContain('Lineage graph: Swissifier root');
+    expect(output).toContain('Root: root');
+    expect(output).toContain('Active: Swissifier root (root)');
+    expect(output).toContain('Nodes: 2  Edges: 1');
+    expect(output).toContain('Next variation:\n- Swissifier child (child)');
+    expect(output).toContain('Latest leaves:\n- Swissifier child (child)');
+    expect(output).toContain('Edges:\n- Swissifier root (root) -> Swissifier child (child)');
+  });
+
+  it('requires a root for agent graph snapshots', () => {
+    seedCliDb();
+
+    expect(() =>
+      runLineageAgentCommand('graph', [
+        '--project', defaultProject,
+        '--db', cliDbFile,
+        '--json',
+      ])
+    ).toThrow('lineage agent graph requires --root');
   });
 
   it('dry-runs link-child and rejects unknown children before writing', () => {
