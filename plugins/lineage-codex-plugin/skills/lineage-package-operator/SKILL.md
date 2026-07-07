@@ -48,6 +48,11 @@ lineage inspect --project demo-project --asset-id <asset-id> --db /absolute/path
 lineage agent claim --project demo-project --scope lineage_workspace --target demo-project:lineage-workspace:<root-asset-id> --agent-name "Codex thread 123" --ttl 20m --db /absolute/path/to/lineage.sqlite --json
 lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --db /absolute/path/to/lineage.sqlite --json
 lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --db /absolute/path/to/lineage.sqlite --confirm-write --json
+lineage reroll list --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
+lineage reroll plan --project demo-project --root <root-asset-id> --target <target-asset-id> --prompt "Regenerate with clean readable text" --db /absolute/path/to/lineage.sqlite --json
+lineage reroll import --project demo-project --job-id <job-id> --file <.asset-scratch-file> --db /absolute/path/to/lineage.sqlite --confirm-write --json
+lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --db /absolute/path/to/lineage.sqlite --confirm-write --json
 lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --db /absolute/path/to/lineage.sqlite --json
 ```
 
@@ -76,9 +81,13 @@ by a second `lineage` word.
    returned raw token as `LINEAGE_CLAIM_TOKEN`, and heartbeat while working.
 6. Use `lineage link-child --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write
    --json` only after the child asset is indexed and the parent/root is clear.
-7. Release the claim with `lineage agent release --claim-token
+7. For re-rolls, use `lineage reroll mark --confirm-write --json`, then
+   `lineage reroll plan --json`, and import exactly one output with
+   `lineage reroll import --confirm-write --json` so the result becomes an
+   attempt instead of a visible child edge.
+8. Release the claim with `lineage agent release --claim-token
    "$LINEAGE_CLAIM_TOKEN" --json` before handing off or stopping.
-8. Run a negative check for unknown child IDs when changing handoff behavior.
+9. Run a negative check for unknown child IDs when changing handoff behavior.
 
 ## Starting The App From Codex
 

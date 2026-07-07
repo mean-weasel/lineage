@@ -17,7 +17,13 @@ import {
   type AgentClaimScopeType,
 } from '../server/agentClaims';
 import { defaultProduct } from '../server/assetCore';
-import { getLineageNextAsset, getLineageSnapshot, listLineageRerollRequests } from '../server/assetLineage';
+import {
+  clearLineageRerollRequest,
+  getLineageNextAsset,
+  getLineageSnapshot,
+  listLineageRerollRequests,
+  markLineageRerollRequest,
+} from '../server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineageHandoff';
 import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
 
@@ -108,6 +114,8 @@ Usage:
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} reroll mark --root <asset-id> --target <asset-id> [--notes <text>] [--requested-by agent|human|system] [--project <project>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} reroll cancel --root <asset-id> --target <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll plan --root <asset-id> --target <asset-id> --prompt <text> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll import --job-id <job-id> --file <scratch-file> --confirm-write [--project <project>] [--db <path>] [--json]
   ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
@@ -182,6 +190,29 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
       if (!options.rootAssetId) throw new Error('lineage reroll list requires --root');
       return listLineageRerollRequests(options.project, options.rootAssetId);
     }
+    if (subcommand === 'mark') {
+      const targetAssetId = readOption(args, '--target');
+      const requestedBy = rerollRequestedBy(readOption(args, '--requested-by') || 'agent');
+      if (!options.rootAssetId) throw new Error('lineage reroll mark requires --root');
+      if (!targetAssetId) throw new Error('lineage reroll mark requires --target');
+      return markLineageRerollRequest(options.project, {
+        rootAssetId: options.rootAssetId,
+        nodeAssetId: targetAssetId,
+        notes: readOption(args, '--notes'),
+        requestedBy,
+        confirmWrite: options.confirmWrite,
+      });
+    }
+    if (subcommand === 'cancel') {
+      const targetAssetId = readOption(args, '--target');
+      if (!options.rootAssetId) throw new Error('lineage reroll cancel requires --root');
+      if (!targetAssetId) throw new Error('lineage reroll cancel requires --target');
+      return clearLineageRerollRequest(options.project, {
+        rootAssetId: options.rootAssetId,
+        nodeAssetId: targetAssetId,
+        confirmWrite: options.confirmWrite,
+      });
+    }
     if (subcommand === 'plan') {
       const targetAssetId = readOption(args, '--target');
       const prompt = readOption(args, '--prompt');
@@ -205,6 +236,11 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
     throw new Error(`Unknown reroll command: ${subcommand}`);
   }
   throw new Error(`Unknown command: ${command}`);
+}
+
+function rerollRequestedBy(value: string): 'agent' | 'human' | 'system' {
+  if (value === 'agent' || value === 'human' || value === 'system') return value;
+  throw new Error(`Invalid re-roll requester: ${value}`);
 }
 
 function printDataResult(command: string, result: unknown, json: boolean): void {
@@ -245,6 +281,11 @@ function printDataResult(command: string, result: unknown, json: boolean): void 
     if ('job' in result) {
       const planned = result as { imported?: unknown[]; job?: { id: string; status: string } };
       console.log(planned.imported ? `Imported re-roll for ${planned.job?.id || 'job'}` : `Planned re-roll ${planned.job?.id || 'job'}`);
+      return;
+    }
+    if ('request' in result) {
+      const mutation = result as { dryRun?: boolean; request?: { node_asset_id: string; status: string } };
+      console.log(`${mutation.dryRun ? 'Dry run: ' : ''}Re-roll ${mutation.request?.status || 'request'} for ${mutation.request?.node_asset_id || 'target'}`);
       return;
     }
   }

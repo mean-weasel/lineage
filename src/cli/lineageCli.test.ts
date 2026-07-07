@@ -229,6 +229,94 @@ describe('lineage CLI handoff commands', () => {
     expect(imported.imported?.[0].parent_asset_id).toBe(fixtureRootAssetId);
   });
 
+  it('marks and cancels re-roll targets from the packaged CLI contract', () => {
+    seedCliDb();
+
+    const dryMarked = runLineageDataCommand('reroll', [
+      'mark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--notes', 'Fix distorted headline',
+      '--json',
+    ]) as { dryRun?: boolean; request?: { node_asset_id: string; requested_by: string } };
+    expect(dryMarked).toMatchObject({
+      dryRun: true,
+      request: {
+        node_asset_id: fixtureRootAssetId,
+        requested_by: 'agent',
+      },
+    });
+
+    const emptyList = runLineageDataCommand('reroll', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { requests?: Array<{ node_asset_id: string }> };
+    expect(emptyList.requests).toEqual([]);
+
+    const marked = runLineageDataCommand('reroll', [
+      'mark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--notes', 'Fix distorted headline',
+      '--confirm-write',
+      '--json',
+    ]) as { request?: { node_asset_id: string; notes?: string; requested_by: string; status: string } };
+    expect(marked.request).toMatchObject({
+      node_asset_id: fixtureRootAssetId,
+      notes: 'Fix distorted headline',
+      requested_by: 'agent',
+      status: 'pending',
+    });
+
+    const listed = runLineageDataCommand('reroll', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { requests?: Array<{ node_asset_id: string; notes?: string }> };
+    expect(listed.requests).toHaveLength(1);
+    expect(listed.requests?.[0]).toMatchObject({ node_asset_id: fixtureRootAssetId, notes: 'Fix distorted headline' });
+
+    const dryCancelled = runLineageDataCommand('reroll', [
+      'cancel',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--json',
+    ]) as { dryRun?: boolean; request?: { status: string } };
+    expect(dryCancelled).toMatchObject({ dryRun: true, request: { status: 'cancelled' } });
+
+    const stillListed = runLineageDataCommand('reroll', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { requests?: Array<{ node_asset_id: string }> };
+    expect(stillListed.requests?.map(request => request.node_asset_id)).toEqual([fixtureRootAssetId]);
+
+    const cancelled = runLineageDataCommand('reroll', [
+      'cancel',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--confirm-write',
+      '--json',
+    ]) as { request?: { node_asset_id: string; status: string } };
+    expect(cancelled.request).toMatchObject({ node_asset_id: fixtureRootAssetId, status: 'cancelled' });
+
+    const finalList = runLineageDataCommand('reroll', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { requests?: Array<{ node_asset_id: string }> };
+    expect(finalList.requests).toEqual([]);
+  });
+
   it('keeps package docs aligned with claim-aware mutating command contracts', () => {
     const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
     const operator = readFileSync(join(repoRoot, 'plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md'), 'utf8');
@@ -237,6 +325,10 @@ describe('lineage CLI handoff commands', () => {
     expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
     expect(operator).toContain('lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN"');
     expect(operator).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
+    expect(readme).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --confirm-write --json');
+    expect(readme).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json');
+    expect(operator).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --db /absolute/path/to/lineage.sqlite --confirm-write --json');
+    expect(operator).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --db /absolute/path/to/lineage.sqlite --confirm-write --json');
     expect(readme).toContain('Use `project_channel` only for rare work');
     expect(operator).toContain('Use `project_channel` claims only for rare');
   });

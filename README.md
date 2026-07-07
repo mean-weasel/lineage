@@ -62,6 +62,17 @@ lineage link-child --project demo-project --root <root-asset-id> --child <child-
 lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
+For re-roll work, mark the target, have the agent plan/import one replacement
+attempt, and cancel only when the request should be abandoned:
+
+```bash
+lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --confirm-write --json
+lineage reroll list --project demo-project --root <root-asset-id> --json
+lineage reroll plan --project demo-project --root <root-asset-id> --target <target-asset-id> --prompt "Regenerate with clean readable text" --json
+lineage reroll import --project demo-project --job-id <job-id> --file <.asset-scratch-file> --confirm-write --json
+lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json
+```
+
 The app-created claim-aware handoff packet includes the same token export,
 heartbeat, inspect, and write commands. Raw claim tokens are not shown in the
 read-only Agents view.
