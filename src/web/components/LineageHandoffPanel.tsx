@@ -17,6 +17,7 @@ export function LineageHandoffPanel({
   onRefreshBrief,
   onToast,
   project,
+  rerollTargets = [],
   rootAssetId,
 }: {
   brief: LineageBriefResponse | null;
@@ -24,9 +25,11 @@ export function LineageHandoffPanel({
   onRefreshBrief: () => void;
   onToast: (type: 'ok' | 'error', message: string) => void;
   project: string;
+  rerollTargets?: LineageNode[];
   rootAssetId: string;
 }) {
   const nextCommand = brief?.handoff?.next_command || `npx @mean-weasel/lineage next --project ${project} --root ${rootAssetId} --json`;
+  const rerollCommand = `npx @mean-weasel/lineage reroll list --project ${project} --root ${rootAssetId} --json`;
   const nextBaseLabel = nextBase ? `${nextBase.title} (${nextBase.asset_id})` : 'No asset chosen; CLI will report candidates or fallback.';
   const baseItems = [
     { label: 'next command', text: nextCommand },
@@ -87,6 +90,25 @@ export function LineageHandoffPanel({
           <button aria-label={`Copy ${item.label}`} onClick={() => void copy(item.text, item.label)}>{copyLabel(item.label)}</button>
         </div>
       ))}
+      {rerollTargets.length > 0 && (
+        <div className="lineage-brief-group">
+          <div className="lineage-brief-head">
+            <h4>Re-roll queue</h4>
+            <button aria-label="Copy re-roll queue handoff" onClick={() => void copy(rerollHandoffPacket(rerollCommand, rerollTargets), 're-roll queue')}>Copy queue</button>
+          </div>
+          <p>Use this for repair work. Import outputs with reroll import; do not link them as lineage children.</p>
+          <div className="lineage-copy-row">
+            <code>{rerollCommand}</code>
+            <button aria-label="Copy reroll list command" onClick={() => void copy(rerollCommand, 'reroll list command')}>Copy command</button>
+          </div>
+          {rerollTargets.map(target => (
+            <div className="lineage-copy-row" key={target.asset_id}>
+              <code>{target.asset_id}{target.reroll_request?.notes ? `: ${target.reroll_request.notes}` : ''}</code>
+              <button aria-label={`Copy re-roll target ${target.asset_id}`} onClick={() => void copy(target.asset_id, 're-roll target')}>Copy target</button>
+            </div>
+          ))}
+        </div>
+      )}
       {briefItems.length > 0 && (
         <div className="lineage-brief-group">
           <div className="lineage-brief-head">
@@ -113,6 +135,16 @@ export function LineageHandoffPanel({
       </button>
     </section>
   );
+}
+
+function rerollHandoffPacket(rerollCommand: string, targets: LineageNode[]): string {
+  return [
+    rerollCommand,
+    'For each pending target, ask for or use a target-specific repair prompt.',
+    'Run reroll plan for one target at a time, generate one file under .asset-scratch, then run reroll import.',
+    'Do not use link-child for re-roll outputs.',
+    ...targets.map(target => `Target ${target.asset_id}: ${target.title}${target.reroll_request?.notes ? ` (${target.reroll_request.notes})` : ''}`),
+  ].join('\n');
 }
 
 function lineageWorkspaceClaimTargetId(project: string, rootAssetId: string): string {

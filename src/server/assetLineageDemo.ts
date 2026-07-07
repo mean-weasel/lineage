@@ -26,6 +26,19 @@ interface SwissifierManifestAsset {
   position: { x: number; y: number };
 }
 
+interface SwissifierManifestRerollAttempt {
+  node_asset_id: string;
+  file: string;
+  title: string;
+  prompt: string;
+  generation_job_id: string;
+  checksum_sha256: string;
+  size_bytes: number;
+  content_type: string;
+  attempt_index: number;
+  current?: boolean;
+}
+
 interface SwissifierManifest {
   id: string;
   title: string;
@@ -42,6 +55,7 @@ interface SwissifierManifest {
   selected_asset_ids: string[];
   assets: SwissifierManifestAsset[];
   edges: Array<{ parent: string; child: string }>;
+  reroll_attempts?: SwissifierManifestRerollAttempt[];
 }
 
 const demoAssets = [
@@ -104,6 +118,18 @@ function swissifierRelativePath(manifest: SwissifierManifest, asset: SwissifierM
 
 function swissifierFilePath(manifest: SwissifierManifest, asset: SwissifierManifestAsset): string {
   return join(repoRoot, '.asset-scratch', swissifierRelativePath(manifest, asset));
+}
+
+function swissifierRerollRelativePath(manifest: SwissifierManifest, attempt: SwissifierManifestRerollAttempt): string {
+  return join(manifest.media.target_dir, 'reroll-attempts', attempt.file);
+}
+
+function swissifierRerollFilePath(manifest: SwissifierManifest, attempt: SwissifierManifestRerollAttempt): string {
+  return join(repoRoot, '.asset-scratch', swissifierRerollRelativePath(manifest, attempt));
+}
+
+function swissifierRerollFixturePath(attempt: SwissifierManifestRerollAttempt): string {
+  return join(dirname(swissifierManifestPath), 'swissifier-rerolls', attempt.file);
 }
 
 function swissifierSourcePath(manifest: SwissifierManifest, asset: SwissifierManifestAsset, sourceDir: string): string | null {
@@ -425,6 +451,29 @@ function writeDemoFiles(project: string): Record<string, string> {
   return ids;
 }
 
+function swissifierRerollAsset(attempt: SwissifierManifestRerollAttempt) {
+  const source = swissifierRerollFixturePath(attempt);
+  if (!existsSync(source)) throw new Error(`Missing Swissifier re-roll fixture media: ${attempt.file}`);
+  const body = readFileSync(source);
+  if (body.length !== attempt.size_bytes) throw new Error(`Unexpected Swissifier re-roll fixture size for ${attempt.file}`);
+  const checksumSha256 = sha256Hex(body);
+  if (checksumSha256 !== attempt.checksum_sha256) throw new Error(`Checksum mismatch for Swissifier re-roll fixture: ${attempt.file}`);
+  return {
+    assetId: `local-${checksumSha256.slice(0, 12)}`,
+    checksumSha256,
+    sizeBytes: body.length,
+  };
+}
+
+function writeSwissifierRerollFiles(manifest: SwissifierManifest) {
+  for (const attempt of manifest.reroll_attempts || []) {
+    swissifierRerollAsset(attempt);
+    const target = swissifierRerollFilePath(manifest, attempt);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(swissifierRerollFixturePath(attempt), target);
+  }
+}
+
 function upsertDemoAssets(project: string, ids: Record<string, string>) {
   const database = lineageDb();
   const timestamp = nowIso();
@@ -516,10 +565,101 @@ function upsertSwissifierAssets(project: string, manifest: SwissifierManifest) {
       );
       reviewStatement.run(asset.asset_id, timestamp);
     }
+    for (const attempt of manifest.reroll_attempts || []) {
+      const generated = swissifierRerollAsset(attempt);
+      assetStatement.run(
+        generated.assetId,
+        project,
+        swissifierRerollRelativePath(manifest, attempt),
+        generated.checksumSha256,
+        attempt.title,
+        'planned',
+        'local',
+        manifest.campaign,
+        manifest.audience,
+        generated.sizeBytes,
+        attempt.content_type,
+        timestamp,
+        timestamp,
+        timestamp
+      );
+      reviewStatement.run(generated.assetId, timestamp);
+    }
   } finally {
     database.close();
   }
-  return { catalog: 0, local: manifest.assets.length, total: manifest.assets.length };
+  const attemptCount = manifest.reroll_attempts?.length || 0;
+  return { catalog: 0, local: manifest.assets.length + attemptCount, total: manifest.assets.length + attemptCount };
+}
+
+function upsertSwissifierRerollAttempts(project: string, manifest: SwissifierManifest) {
+  const attempts = manifest.reroll_attempts || [];
+  if (attempts.length === 0) return { total: 0 };
+  const database = lineageDb();
+  const timestamp = nowIso();
+  try {
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const nodes = new Set(attempts.map(attempt => attempt.node_asset_id));
+      for (const nodeAssetId of nodes) {
+        database.prepare('update asset_attempts set is_current = 0 where project_id = ? and node_asset_id = ?').run(project, nodeAssetId);
+      }
+      const statement = database.prepare(`
+        insert into asset_attempts (
+          id, project_id, node_asset_id, asset_id, attempt_index, source, prompt, generation_job_id,
+          file_path, checksum_sha256, created_at, promoted_at, is_current
+        ) values (?, ?, ?, ?, ?, 'reroll', ?, ?, ?, ?, ?, ?, ?)
+        on conflict(id) do update set
+          asset_id = excluded.asset_id,
+          source = excluded.source,
+          prompt = excluded.prompt,
+          generation_job_id = excluded.generation_job_id,
+          file_path = excluded.file_path,
+          checksum_sha256 = excluded.checksum_sha256,
+          promoted_at = excluded.promoted_at,
+          is_current = excluded.is_current
+      `);
+      for (const attempt of attempts) {
+        const generated = swissifierRerollAsset(attempt);
+        statement.run(
+          `${project}:${attempt.node_asset_id}:attempt:${attempt.attempt_index}`,
+          project,
+          attempt.node_asset_id,
+          generated.assetId,
+          attempt.attempt_index,
+          attempt.prompt,
+          attempt.generation_job_id,
+          swissifierRerollRelativePath(manifest, attempt),
+          generated.checksumSha256,
+          timestamp,
+          timestamp,
+          attempt.current ? 1 : 0
+        );
+      }
+      for (const nodeAssetId of nodes) {
+        const currentCount = database.prepare('select count(*) count from asset_attempts where project_id = ? and node_asset_id = ? and is_current = 1').get(project, nodeAssetId) as { count: number };
+        if (currentCount.count === 0) {
+          database.prepare(`
+            update asset_attempts
+            set is_current = 1, promoted_at = ?
+            where id = (
+              select id from asset_attempts
+              where project_id = ? and node_asset_id = ?
+              order by attempt_index desc
+              limit 1
+            )
+          `).run(timestamp, project, nodeAssetId);
+        }
+      }
+      database.exec('COMMIT');
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+  } finally {
+    database.close();
+  }
+  return { total: attempts.length };
 }
 
 export function seedDemoLineageWorkspace(project: string, fields: { activate?: boolean; confirmWrite: boolean }) {
@@ -580,10 +720,12 @@ export function seedSwissifierRichDemoWorkspace(project: string, fields: { activ
       media_status: swissifierRichDemoMediaStatus(project),
     };
   }
+  writeSwissifierRerollFiles(manifest);
   const summary = upsertSwissifierAssets(project, manifest);
   for (const edge of manifest.edges) {
     linkLineageAssets(project, { parentAssetId: edge.parent, childAssetId: edge.child, confirmWrite: true });
   }
+  const reroll_attempts = upsertSwissifierRerollAttempts(project, manifest);
   updateSelectedAsset(project, {
     assetIds: manifest.selected_asset_ids,
     confirmWrite: true,
@@ -611,6 +753,7 @@ export function seedSwissifierRichDemoWorkspace(project: string, fields: { activ
     media_status: swissifierRichDemoMediaStatus(project),
     root_asset_id: manifest.root_asset_id,
     selected_asset_ids: manifest.selected_asset_ids,
+    reroll_attempts,
     summary,
     workspace,
   };

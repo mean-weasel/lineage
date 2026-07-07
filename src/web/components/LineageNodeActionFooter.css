@@ -1,0 +1,58 @@
+.lineage-node-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 14px;
+}
+
+.lineage-node-actions button,
+.lineage-node-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: #26343d;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.lineage-node-actions .primary-lite {
+  flex: 1 1 220px;
+  min-height: 42px;
+  border-color: #0d5b92;
+  background: #0d5b92;
+  color: #fff;
+  font-size: 13px;
+}
+
+.lineage-node-actions .danger {
+  border-color: #e3b7b7;
+  background: #fff4f4;
+  color: #8a3b3b;
+}
+
+.lineage-node-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 960px) {
+  .lineage-node-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+  }
+}
+
+@media (max-width: 640px) {
+  .lineage-node-actions button,
+  .lineage-node-actions a {
+    flex: 1 1 140px;
+  }
+}

@@ -43,6 +43,7 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
   } = props;
   const activeStorage = activeNode ? storageStateFor({ hasLocal: Boolean(activeNode.local_path), hasS3: Boolean(activeNode.s3_key) }) : null;
   const staleSelectedNodes = selectedNodes.filter(node => !node.is_latest);
+  const pendingRerollNodes = snapshot.nodes.filter(node => node.reroll_request?.status === 'pending');
   const submitChild = (event: FormEvent) => {
     event.preventDefault();
     void linkChild();
@@ -93,6 +94,21 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
         {selectedNodes.length > 1 && <p className="muted-copy">The agent will use these as separate next-variation bases; imported outputs should link back to the matching selected parent.</p>}
       </section>
       <section className="lineage-next-panel">
+        <div className="lineage-panel-title-row">
+          <h3>Re-roll queue</h3>
+          <span className="lineage-count-pill">{pendingRerollNodes.length}</span>
+        </div>
+        {pendingRerollNodes.length > 0 ? pendingRerollNodes.map(node => (
+          <div className={`lineage-candidate ${node.asset_id === activeNode?.asset_id ? 'active' : ''}`} key={node.asset_id}>
+            <button aria-label={`Inspect re-roll target ${node.title}`} className="lineage-candidate-main" onClick={() => { setActiveNodeId(node.asset_id); onSelectedAsset(node.asset_id); }}>
+              <span>{node.title}</span>
+              <code>{node.asset_id}</code>
+              {node.reroll_request?.notes && <small>{node.reroll_request.notes}</small>}
+            </button>
+          </div>
+        )) : <p className="muted-copy">No pending re-roll targets.</p>}
+      </section>
+      <section className="lineage-next-panel">
         <h3>Latest candidates</h3>
         {latestNodes.length > 0 ? latestNodes.map(node => {
           const cannotAdd = !node.user_selected && selectionFull;
@@ -113,7 +129,7 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
           );
         }) : <p className="muted-copy">No latest leaves yet.</p>}
       </section>
-      <LineageHandoffPanel brief={brief} nextBase={selectedNode} onRefreshBrief={() => void refreshBrief()} onToast={onToast} project={project} rootAssetId={snapshot.root_asset_id} />
+      <LineageHandoffPanel brief={brief} nextBase={selectedNode} onRefreshBrief={() => void refreshBrief()} onToast={onToast} project={project} rerollTargets={pendingRerollNodes} rootAssetId={snapshot.root_asset_id} />
       <h3>Inspecting</h3>
       {activeNode ? (
         <>

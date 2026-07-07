@@ -120,6 +120,42 @@ describe('LineageHandoffPanel', () => {
     expect(flattenText(panel)).toContain('Branch from here: this asset is not a latest leaf.');
   });
 
+  it('exposes re-roll queue handoff without child-link language', async () => {
+    const copied: string[] = [];
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async (text: string) => { copied.push(text); }) } });
+    const rerollTarget = {
+      ...nextBase,
+      asset_id: 'local-reroll-target',
+      reroll_request: {
+        id: 'reroll-1',
+        project_id: 'demo-project',
+        root_asset_id: 'local-root',
+        node_asset_id: 'local-reroll-target',
+        status: 'pending',
+        requested_by: 'human',
+        notes: 'Fix warped text',
+        created_at: '2026-07-07T00:00:00.000Z',
+      },
+    } satisfies LineageNode;
+    const panel = LineageHandoffPanel({
+      brief: null,
+      nextBase,
+      onRefreshBrief: () => undefined,
+      onToast: () => undefined,
+      project: 'demo-project',
+      rerollTargets: [rerollTarget],
+      rootAssetId: 'local-root',
+    });
+
+    const text = flattenText(panel);
+    expect(text).toContain('Re-roll queue');
+    expect(text).toContain('npx @mean-weasel/lineage reroll list --project demo-project --root local-root --json');
+    expect(text).toContain('do not link them as lineage children');
+    await clickButton(panel, 'Copy queue');
+    expect(copied[0]).toContain('Do not use link-child for re-roll outputs.');
+    expect(copied[0]).toContain('local-reroll-target');
+  });
+
   it('creates a lineage workspace claim only when copying the claim-aware handoff', async () => {
     const copied: string[] = [];
     const fetchMock = vi.fn().mockResolvedValue({

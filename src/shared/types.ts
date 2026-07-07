@@ -261,6 +261,9 @@ export interface LineageNode {
   selection_note?: string;
   preview_url?: string;
   position?: LineagePosition;
+  attempt_count?: number;
+  current_attempt?: LineageAttempt;
+  reroll_request?: LineageRerollRequest;
 }
 
 export interface LineagePosition {
@@ -270,6 +273,38 @@ export interface LineagePosition {
 
 interface LineageSelection {
   asset_id: string; notes?: string; position: number; selected_at: string;
+}
+
+type LineageAttemptSource = 'generated_child' | 'initial' | 'reroll';
+type LineageRerollActor = 'agent' | 'human' | 'system';
+type LineageRerollRequestStatus = 'cancelled' | 'pending' | 'resolved';
+
+export interface LineageAttempt {
+  id: string;
+  project_id: string;
+  node_asset_id: string;
+  asset_id: string;
+  attempt_index: number;
+  source: LineageAttemptSource;
+  prompt?: string;
+  generation_job_id?: string;
+  file_path?: string;
+  checksum_sha256?: string;
+  created_at: string;
+  promoted_at?: string;
+  is_current: boolean;
+}
+
+export interface LineageRerollRequest {
+  id: string;
+  project_id: string;
+  root_asset_id: string;
+  node_asset_id: string;
+  status: LineageRerollRequestStatus;
+  requested_by: LineageRerollActor;
+  notes?: string;
+  created_at: string;
+  resolved_at?: string;
 }
 
 export interface LineageEdge {
@@ -312,6 +347,33 @@ export interface LineageChildrenResponse {
   fetchedAt: string;
 }
 
+export interface LineageAttemptsResponse {
+  project: string;
+  root_asset_id: string;
+  node_asset_id: string;
+  attempts: LineageAttempt[];
+  fetchedAt: string;
+}
+
+export interface LineageAttemptPromotionResponse extends LineageAttemptsResponse {
+  ok: true;
+  dryRun?: true;
+  attempt: LineageAttempt;
+}
+
+export interface LineageRerollRequestsResponse {
+  project: string;
+  root_asset_id: string;
+  requests: LineageRerollRequest[];
+  fetchedAt: string;
+}
+
+export interface LineageRerollRequestMutationResponse {
+  ok: true;
+  dryRun?: true;
+  request: LineageRerollRequest;
+}
+
 export interface LineageBriefResponse {
   project: string;
   root_asset_id: string;
@@ -340,7 +402,7 @@ export interface LineageBriefResponse {
   };
   fetchedAt: string;
 }
-export type { GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider } from './generationTypes';
+export type { GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider, GenerationSourceMode } from './generationTypes';
 export type { LineageWorkspace, LineageWorkspaceActor, LineageWorkspaceFields, LineageWorkspaceSnapshot, LineageWorkspaceStatus, LineageWorkspaceUpdateFields } from './lineageWorkspaceTypes';
 
 type AgentClaimScopeType = 'lineage_workspace' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';

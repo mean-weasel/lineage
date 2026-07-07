@@ -90,6 +90,16 @@
   color: #125d68;
 }
 
+.lineage-context-menu button.reroll-action {
+  color: #8a4526;
+}
+
+.lineage-context-menu button.reroll-action:hover,
+.lineage-context-menu button.reroll-action:focus-visible {
+  background: #fff2eb;
+  color: #753315;
+}
+
 .lineage-context-menu button.danger:hover,
 .lineage-context-menu button.danger:focus-visible {
   background: #fff0f0;

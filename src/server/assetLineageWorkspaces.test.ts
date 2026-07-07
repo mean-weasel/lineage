@@ -1,13 +1,13 @@
 import express, { type Express } from 'express';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
-import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
+import { getLineageAttempts, getLineageNextAsset, getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import {
   archiveDemoLineageWorkspace,
   demoSeedMediaStatus,
@@ -417,6 +417,31 @@ describe('lineage workspaces', () => {
       local_path: 'rich-demo-drafts/swissifier-v1/swissifier-linkedin-root-v1.png',
       position: { x: 40, y: 894 },
     });
+    const beforeAfter = snapshot.nodes.find(node => node.asset_id === 'local-27050bc5c393');
+    const mintDrill = snapshot.nodes.find(node => node.asset_id === 'local-6d06bdbd9f56');
+    expect(beforeAfter).toMatchObject({
+      attempt_count: 3,
+      current_attempt: {
+        attempt_index: 3,
+        file_path: 'rich-demo-drafts/swissifier-v1/reroll-attempts/swissifier-vertical-before-after-reroll-v3.png',
+        source: 'reroll',
+      },
+    });
+    expect(decodeURIComponent(beforeAfter?.preview_url || '')).toContain('reroll-attempts/swissifier-vertical-before-after-reroll-v3.png');
+    expect(mintDrill).toMatchObject({
+      attempt_count: 2,
+      current_attempt: {
+        attempt_index: 2,
+        file_path: 'rich-demo-drafts/swissifier-v1/reroll-attempts/swissifier-drill-mint-diagonal-reroll-v2.png',
+        source: 'reroll',
+      },
+    });
+    const attempts = getLineageAttempts(defaultProject, seeded.root_asset_id, 'local-27050bc5c393').attempts;
+    expect(attempts.map(attempt => attempt.attempt_index)).toEqual([3, 2, 1]);
+    expect(attempts[0].prompt).toContain('Re-roll again');
+    const currentAttemptPath = join(repoRoot, '.asset-scratch', attempts[0].file_path!);
+    expect(existsSync(currentAttemptPath)).toBe(true);
+    expect(readFileSync(currentAttemptPath).subarray(1, 4).toString('ascii')).toBe('PNG');
     expect(snapshot.nodes.every(node => node.local_path?.startsWith('rich-demo-drafts/swissifier-v1/'))).toBe(true);
     expect(next.strategy).toBe('selected');
     expect(next.selection_mode).toBe('multiple');
@@ -428,6 +453,7 @@ describe('lineage workspaces', () => {
       demo_id: 'swissifier-rich-demo',
       total: 14,
     });
+    expect(seeded.reroll_attempts).toEqual({ total: 3 });
   });
 
   it('reports Swissifier media status and requires an optional source to restore it', () => {

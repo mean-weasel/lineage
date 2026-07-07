@@ -104,6 +104,47 @@ describe('LineageContextMenu', () => {
     expect(events).toEqual(['review:rejected', 'close']);
   });
 
+  it('offers mark for re-roll separately from next variation selection', () => {
+    const events: string[] = [];
+    const menu = LineageContextMenu(baseProps(node, events));
+    const reroll = collectButtons(menu).find(button => flattenText(button) === 'Mark for re-roll');
+
+    reroll?.props.onClick();
+
+    expect(flattenText(menu)).toContain('Use for next variation');
+    expect(events).toEqual(['mark-reroll', 'close']);
+  });
+
+  it('offers clear re-roll request for pending re-roll nodes', () => {
+    const events: string[] = [];
+    const menu = LineageContextMenu(baseProps({
+      ...node,
+      reroll_request: {
+        id: 'reroll-1',
+        project_id: 'demo-project',
+        root_asset_id: 'root-asset',
+        node_asset_id: 'asset-1',
+        status: 'pending',
+        requested_by: 'human',
+        created_at: '2026-07-07T00:00:00.000Z',
+      },
+    }, events));
+    const clear = collectButtons(menu).find(button => flattenText(button) === 'Clear re-roll request');
+
+    clear?.props.onClick();
+
+    expect(events).toEqual(['clear-reroll', 'close']);
+  });
+
+  it('keeps re-roll, next variation, and review actions distinct', () => {
+    const menu = LineageContextMenu(baseProps(node));
+    const labels = collectButtons(menu).map(flattenText);
+
+    expect(labels).toContain('Mark for re-roll');
+    expect(labels).toContain('Use for next variation');
+    expect(labels).toContain('Needs revision');
+  });
+
   it('routes remove from lineage and closes after confirmation path starts', () => {
     const events: string[] = [];
     const menu = LineageContextMenu(baseProps(node, events));
@@ -156,7 +197,9 @@ function baseProps(
     node: nextNode,
     onClearAllNext: () => events.push('clear-all'),
     onClearNext: () => events.push('clear'),
+    onClearReroll: () => events.push('clear-reroll'),
     onClose: () => events.push('close'),
+    onMarkReroll: () => events.push('mark-reroll'),
     onOpenDetail: () => events.push('detail'),
     onRemoveFromLineage: () => events.push('remove-lineage'),
     onReplaceNext: () => events.push('replace'),

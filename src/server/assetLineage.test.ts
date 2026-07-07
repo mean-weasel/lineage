@@ -9,8 +9,14 @@ import {
   getLineageSnapshot,
   getLineageNextAsset,
   getLineageChildren,
+  getLineageAttempts,
   indexLineageAssets,
   linkLineageAssets,
+  clearLineageRerollRequest,
+  listLineageRerollRequests,
+  markLineageRerollRequest,
+  promoteLineageAttempt,
+  recordLineageRerollAttempt,
   updateAssetReview,
   updateLineageLayout,
   updateSelectedAsset,
@@ -43,6 +49,42 @@ function seedFiles() {
     parent, parentId: localId(parent),
     variation, variationId: localId(variation),
   };
+}
+
+function countRows(table: string, where = ''): number {
+  const database = lineageDb();
+  try {
+    const row = database.prepare(`select count(*) count from ${table} ${where}`).get() as { count: number };
+    return Number(row.count);
+  } finally {
+    database.close();
+  }
+}
+
+function seedRerollAttempts() {
+  const files = seedFiles();
+  indexLineageAssets(defaultProject);
+  recordLineageRerollAttempt(defaultProject, {
+    rootAssetId: files.parentId,
+    nodeAssetId: files.parentId,
+    assetId: files.variationId,
+    prompt: 'Try a cleaner second version.',
+    generationJobId: 'job-v2',
+    filePath: '.asset-scratch/vitest-lineage/demo-linkedin-lineage-variation.png',
+    checksumSha256: fileSha256(files.variation),
+    confirmWrite: true,
+  });
+  recordLineageRerollAttempt(defaultProject, {
+    rootAssetId: files.parentId,
+    nodeAssetId: files.parentId,
+    assetId: files.alternateId,
+    prompt: 'Try a cleaner third version.',
+    generationJobId: 'job-v3',
+    filePath: '.asset-scratch/vitest-lineage/demo-linkedin-lineage-alternate.png',
+    checksumSha256: fileSha256(files.alternate),
+    confirmWrite: true,
+  });
+  return files;
 }
 
 describe('asset lineage index', () => {
@@ -299,6 +341,232 @@ describe('asset lineage index', () => {
       review_notes: 'Composition is useful, but the CTA needs another pass.',
       review_state: 'needs_revision',
     });
+  });
+
+  it('marks multiple lineage nodes for re-roll and keeps requests separate from next variation selection', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+
+    const first = markLineageRerollRequest(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      notes: 'Fix garbled headline',
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+    const second = markLineageRerollRequest(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.childId,
+      notes: 'Remove extra shapes',
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+
+    expect(first.request.status).toBe('pending');
+    expect(second.request.status).toBe('pending');
+    expect(listLineageRerollRequests(defaultProject, files.parentId).requests.map(request => request.node_asset_id).sort()).toEqual([files.childId, files.parentId].sort());
+    const snapshot = getLineageSnapshot(defaultProject, files.parentId);
+    expect(snapshot.nodes.find(node => node.asset_id === files.parentId)?.review_state).toBe('needs_revision');
+    expect(snapshot.nodes.find(node => node.asset_id === files.childId)?.reroll_request?.notes).toBe('Remove extra shapes');
+    expect(snapshot.selected).toEqual([]);
+  });
+
+  it('rejects listing re-roll requests from a non-canonical child root', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+    markLineageRerollRequest(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.childId,
+      notes: 'Fix child artifact',
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+
+    expect(() => listLineageRerollRequests(defaultProject, files.childId)).toThrow(`Asset ${files.childId} is not a lineage root`);
+  });
+
+  it('cancels a re-roll request without clearing needs-revision review state', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    markLineageRerollRequest(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+
+    const cancelled = clearLineageRerollRequest(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      confirmWrite: true,
+    });
+
+    expect(cancelled.request.status).toBe('cancelled');
+    const snapshot = getLineageSnapshot(defaultProject, files.parentId);
+    expect(snapshot.nodes.find(node => node.asset_id === files.parentId)?.review_state).toBe('needs_revision');
+    expect(snapshot.nodes.find(node => node.asset_id === files.parentId)?.reroll_request).toBeUndefined();
+    expect(listLineageRerollRequests(defaultProject, files.parentId).requests).toEqual([]);
+  });
+
+  it('hydrates implicit attempt one for existing nodes without attempt rows', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    const snapshot = getLineageSnapshot(defaultProject, files.parentId);
+    const root = snapshot.nodes.find(node => node.asset_id === files.parentId);
+    expect(root?.attempt_count).toBe(1);
+    expect(root?.current_attempt).toMatchObject({
+      attempt_index: 1,
+      asset_id: files.parentId,
+      is_current: true,
+      source: 'initial',
+    });
+    expect(getLineageAttempts(defaultProject, files.parentId, files.parentId).attempts[0]).toMatchObject({
+      asset_id: files.parentId,
+      attempt_index: 1,
+      is_current: true,
+    });
+  });
+
+  it('promotes a previous physical attempt as current without creating a child edge', () => {
+    const files = seedRerollAttempts();
+    const beforeEdges = countRows('asset_edges');
+    const attempts = getLineageAttempts(defaultProject, files.parentId, files.parentId).attempts;
+    const v2 = attempts.find(attempt => attempt.attempt_index === 2);
+    expect(v2).toBeTruthy();
+
+    const promoted = promoteLineageAttempt(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      attemptId: v2!.id,
+      confirmWrite: true,
+    });
+
+    expect(promoted.attempt).toMatchObject({ attempt_index: 2, is_current: true });
+    expect(promoted.attempts.filter(attempt => attempt.is_current).map(attempt => attempt.attempt_index)).toEqual([2]);
+    const snapshot = getLineageSnapshot(defaultProject, files.parentId);
+    expect(snapshot.nodes.find(node => node.asset_id === files.parentId)?.current_attempt).toMatchObject({
+      attempt_index: 2,
+      asset_id: files.variationId,
+    });
+    expect(decodeURIComponent(snapshot.nodes.find(node => node.asset_id === files.parentId)?.preview_url || '')).toContain('demo-linkedin-lineage-variation.png');
+    expect(countRows('asset_edges')).toBe(beforeEdges);
+  });
+
+  it('promotes the implicit original attempt back to current', () => {
+    const files = seedRerollAttempts();
+    const implicit = getLineageAttempts(defaultProject, files.parentId, files.parentId).attempts.find(attempt => attempt.source === 'initial');
+    expect(implicit).toBeTruthy();
+
+    const promoted = promoteLineageAttempt(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      attemptId: implicit!.id,
+      confirmWrite: true,
+    });
+
+    expect(promoted.attempt).toMatchObject({ attempt_index: 1, is_current: true, source: 'initial' });
+    expect(promoted.attempts.filter(attempt => attempt.is_current).map(attempt => attempt.attempt_index)).toEqual([1]);
+    const snapshot = getLineageSnapshot(defaultProject, files.parentId);
+    expect(snapshot.nodes.find(node => node.asset_id === files.parentId)?.current_attempt).toMatchObject({
+      attempt_index: 1,
+      asset_id: files.parentId,
+      source: 'initial',
+    });
+    expect(decodeURIComponent(snapshot.nodes.find(node => node.asset_id === files.parentId)?.preview_url || '')).toContain('demo-linkedin-lineage-parent.png');
+  });
+
+  it('treats implicit v1 as current when physical attempts have no current row', () => {
+    const files = seedRerollAttempts();
+    const database = lineageDb();
+    try {
+      database.prepare('update asset_attempts set is_current = 0 where project_id = ? and node_asset_id = ?').run(defaultProject, files.parentId);
+    } finally {
+      database.close();
+    }
+
+    const attempts = getLineageAttempts(defaultProject, files.parentId, files.parentId).attempts;
+
+    expect(attempts.filter(attempt => attempt.is_current).map(attempt => attempt.attempt_index)).toEqual([1]);
+    expect(attempts.find(attempt => attempt.attempt_index === 1)).toMatchObject({
+      asset_id: files.parentId,
+      is_current: true,
+      source: 'initial',
+    });
+  });
+
+  it('dry-runs attempt promotion without mutating current state', () => {
+    const files = seedRerollAttempts();
+    const v2 = getLineageAttempts(defaultProject, files.parentId, files.parentId).attempts.find(attempt => attempt.attempt_index === 2)!;
+
+    const promoted = promoteLineageAttempt(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      attemptId: v2.id,
+      confirmWrite: false,
+    });
+
+    expect(promoted.dryRun).toBe(true);
+    expect(promoted.attempt).toMatchObject({ attempt_index: 2, is_current: true });
+    expect(getLineageAttempts(defaultProject, files.parentId, files.parentId).attempts.filter(attempt => attempt.is_current).map(attempt => attempt.attempt_index)).toEqual([3]);
+  });
+
+  it('rejects promoting an attempt from a different lineage node', () => {
+    const files = seedRerollAttempts();
+    linkLineageAssets(defaultProject, {
+      parentAssetId: files.parentId,
+      childAssetId: files.childId,
+      confirmWrite: true,
+    });
+    recordLineageRerollAttempt(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.childId,
+      assetId: files.alternateId,
+      prompt: 'Child-only attempt.',
+      generationJobId: 'job-child-v2',
+      filePath: '.asset-scratch/vitest-lineage/demo-linkedin-lineage-alternate.png',
+      checksumSha256: fileSha256(files.alternate),
+      confirmWrite: true,
+    });
+    const childAttempt = getLineageAttempts(defaultProject, files.parentId, files.childId).attempts.find(attempt => attempt.attempt_index === 2)!;
+
+    expect(() => promoteLineageAttempt(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      attemptId: childAttempt.id,
+      confirmWrite: true,
+    })).toThrow(`Attempt ${childAttempt.id} is not in ${files.parentId}`);
+  });
+
+  it('rejects recording a re-roll attempt whose asset is already a visible lineage node', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, {
+      parentAssetId: files.parentId,
+      childAssetId: files.childId,
+      confirmWrite: true,
+    });
+
+    expect(() => recordLineageRerollAttempt(defaultProject, {
+      rootAssetId: files.parentId,
+      nodeAssetId: files.parentId,
+      assetId: files.childId,
+      prompt: 'Try to reuse an existing child as an attempt.',
+      generationJobId: 'job-visible-node',
+      filePath: '.asset-scratch/vitest-lineage/demo-linkedin-lineage-child.png',
+      checksumSha256: fileSha256(files.child),
+      confirmWrite: true,
+    })).toThrow(`Attempt asset ${files.childId} is already a visible lineage node in ${files.parentId}`);
   });
 
   it('returns the next asset to evolve from selected state or latest fallback', () => {

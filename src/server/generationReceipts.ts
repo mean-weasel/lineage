@@ -2,7 +2,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { defaultProject, repoRoot } from './assetCore';
-import { getLineageNextAsset, indexLineageAssets } from './assetLineage';
+import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, listLineageRerollRequests, recordLineageRerollAttempt } from './assetLineage';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
@@ -16,7 +16,9 @@ import type {
   GenerationJobReceipt,
   GenerationPlanResponse,
   GenerationProvider,
+  GenerationSourceMode,
   LineageNextResponse,
+  LineageRerollRequest,
 } from '../shared/types';
 
 const adapterVersion = 'generation-receipts-v1';
@@ -103,6 +105,35 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
   };
 }
 
+function buildRerollHandoff(project: string, id: string, prompt: string, rootAssetId: string, target: { asset_id: string; title: string; local_path?: string; s3_key?: string }, request: LineageRerollRequest): GenerationHandoffPacket {
+  const importCommand = `npx lineage reroll import --project ${quote(project)} --job-id ${quote(id)} --file <.asset-scratch-file> --confirm-write --json`;
+  return {
+    schema_version: 'lineage.generation_handoff.v1',
+    provider,
+    project,
+    job_id: id,
+    prompt,
+    expected_output_count: 1,
+    lineage: {
+      root_asset_id: rootAssetId,
+      parent_asset_id: target.asset_id,
+      selection_strategy: 'reroll_request',
+      parent_title: target.title,
+      parent_local_path: target.local_path,
+      parent_s3_key: target.s3_key,
+    },
+    instructions: [
+      'Use Codex image generation outside Lineage server code.',
+      'Write the regenerated output file under .asset-scratch before import.',
+      'Do not call live provider APIs from the CLI or server.',
+      'Import exactly one output with reroll import, not link-child or generate image import.',
+      `Resolve re-roll request ${request.id}; do not create a visible lineage child edge.`,
+    ],
+    import_command: importCommand,
+    guardrails: { live_generation: false, external_services: false, output_root: '.asset-scratch', confirm_write_required: true },
+  };
+}
+
 function inputsFrom(jobIdValue: string, project: string, next: LineageNextResponse): GenerationJobInput[] {
   return selectedParents(next).map((parent, position) => ({
     id: `${jobIdValue}:input:${position}`,
@@ -167,7 +198,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
     project_id: String(row.project_id),
     provider: row.provider as GenerationProvider,
     adapter_version: String(row.adapter_version),
-    source_mode: 'lineage_selection',
+    source_mode: String(row.source_mode) as GenerationSourceMode,
     root_asset_id: String(row.root_asset_id),
     prompt: String(row.prompt),
     expected_output_count: Number(row.expected_output_count),
@@ -247,6 +278,97 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
       const insertInput = database.prepare('insert into generation_job_inputs (id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?)');
       for (const input of inputs) insertInput.run(input.id, id, project, input.asset_id, input.root_asset_id, input.role, input.position, input.selection_strategy, JSON.stringify(next));
       insertReceipt(database, id, 'plan', 'generate image plan', preview.receipts[0].payload);
+      database.exec('COMMIT');
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+    return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(database, project, id) };
+  } finally {
+    database.close();
+  }
+}
+
+export function planImageReroll(project = defaultProject, fields: { rootAssetId: string; targetAssetId: string; prompt: string; dryRun?: boolean }): GenerationPlanResponse {
+  const prompt = fields.prompt.trim();
+  if (!prompt) throw new GenerationReceiptError('Missing --prompt');
+  if (!fields.rootAssetId) throw new GenerationReceiptError('Missing --root');
+  if (!fields.targetAssetId) throw new GenerationReceiptError('Missing --target');
+  const snapshot = getLineageSnapshot(project, fields.rootAssetId);
+  const target = snapshot.nodes.find(node => node.asset_id === fields.targetAssetId);
+  if (!target) throw new GenerationReceiptError(`Re-roll target is not in lineage: ${fields.targetAssetId}`, 404);
+  const request = listLineageRerollRequests(project, snapshot.root_asset_id).requests.find(item => item.node_asset_id === fields.targetAssetId);
+  if (!request) throw new GenerationReceiptError(`No pending re-roll request for ${fields.targetAssetId}`);
+  const id = jobId();
+  const timestamp = nowIso();
+  const handoff = buildRerollHandoff(project, id, prompt, snapshot.root_asset_id, target, request);
+  const input: GenerationJobInput = {
+    id: `${id}:input:0`,
+    job_id: id,
+    project_id: project,
+    asset_id: target.asset_id,
+    root_asset_id: snapshot.root_asset_id,
+    role: 'reroll_target',
+    position: 0,
+    selection_strategy: 'reroll_request',
+    selection_snapshot: {
+      project,
+      root_asset_id: snapshot.root_asset_id,
+      strategy: 'selected',
+      selection_mode: 'single',
+      recommended_action: 'evolve_variations',
+      reason: 'user_selected',
+      next_asset: target,
+      next_assets: [target],
+      latest: snapshot.latest,
+      selected: [target.asset_id],
+      selection: null,
+      selections: [],
+      candidates: snapshot.nodes,
+      warnings: ['Re-roll target: import output as an attempt, not a lineage child.'],
+      fetchedAt: timestamp,
+    },
+  };
+  const preview: GenerationJob = {
+    id,
+    project_id: project,
+    provider,
+    adapter_version: adapterVersion,
+    source_mode: 'lineage_reroll',
+    root_asset_id: snapshot.root_asset_id,
+    prompt,
+    expected_output_count: 1,
+    status: 'planned',
+    output_dir: '.asset-scratch',
+    handoff,
+    created_at: timestamp,
+    updated_at: timestamp,
+    inputs: [input],
+    outputs: [],
+    receipts: [{
+      id: `${id}:receipt:plan:preview`,
+      job_id: id,
+      receipt_type: 'plan',
+      status: 'ok',
+      command: 'reroll plan',
+      payload: { prompt, expected_output_count: 1, lineage: handoff.lineage, reroll_request_id: request.id },
+      created_at: timestamp,
+    }],
+  };
+  if (fields.dryRun) return { ok: true, command: 'generate image plan', project, dryRun: true, wouldWrite: true, job: preview };
+  const database = lineageDb();
+  try {
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      database.prepare(`
+        insert into generation_jobs (
+          id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
+          expected_output_count, status, output_dir, handoff_json, created_at, updated_at
+        ) values (?, ?, ?, ?, 'lineage_reroll', ?, ?, 1, 'planned', ?, ?, ?, ?)
+      `).run(id, project, provider, adapterVersion, snapshot.root_asset_id, prompt, '.asset-scratch', JSON.stringify(handoff), timestamp, timestamp);
+      database.prepare('insert into generation_job_inputs (id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(input.id, id, project, input.asset_id, input.root_asset_id, input.role, input.position, input.selection_strategy, JSON.stringify(input.selection_snapshot));
+      insertReceipt(database, id, 'plan', 'reroll plan', preview.receipts[0].payload);
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
@@ -391,6 +513,64 @@ export function importImageGenerationOutputs(project = defaultProject, fields: {
       writeDb.exec('ROLLBACK');
       throw error;
     }
+    const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
+    return { ok: true, command: 'generate image import', project, job: importedJob, imported: importedJob.outputs };
+  } finally {
+    writeDb.close();
+  }
+}
+
+export function importImageRerollOutput(project = defaultProject, fields: { jobId: string; file: string; confirmWrite: boolean }): GenerationImportResponse {
+  if (!fields.jobId) throw new GenerationReceiptError('Missing --job-id');
+  if (!fields.confirmWrite) throw new GenerationReceiptError('Generation import requires --confirm-write');
+  const database = lineageDb();
+  let job: GenerationJob;
+  try {
+    job = loadGenerationJob(database, project, fields.jobId);
+  } finally {
+    database.close();
+  }
+  if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
+  if (job.source_mode !== 'lineage_reroll') throw new GenerationReceiptError(`Generation job is not a re-roll job: ${job.source_mode}`);
+  const target = job.inputs.filter(input => input.role === 'reroll_target');
+  if (target.length !== 1) throw new GenerationReceiptError('Re-roll import requires exactly one reroll_target input');
+  const resolved = resolveScratchFile(fields.file);
+  indexLineageAssets(project);
+  const writeDb = lineageDb();
+  try {
+    const timestamp = nowIso();
+    writeDb.exec('BEGIN IMMEDIATE');
+    try {
+      const assetRow = writeDb.prepare('select id from assets where project_id = ? and id = ?').get(project, resolved.assetId);
+      if (!assetRow) throw new GenerationReceiptError(`Indexed local asset was not found: ${resolved.relativePath}`);
+      const outputId = `${fields.jobId}:output:0`;
+      writeDb.prepare(`insert into generation_job_outputs (
+        id, job_id, project_id, output_index, file_path, checksum_sha256, size_bytes, content_type, imported_asset_id, parent_asset_id, imported_at
+      ) values (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`).run(outputId, fields.jobId, project, resolved.relativePath, resolved.checksum, resolved.size, resolved.contentType, resolved.assetId, target[0].asset_id, timestamp);
+      writeDb.prepare(`
+        update generation_jobs
+        set status = 'imported', imported_at = ?, updated_at = ?
+        where project_id = ? and id = ?
+      `).run(timestamp, timestamp, project, fields.jobId);
+      insertReceipt(writeDb, fields.jobId, 'import', 'reroll import', {
+        file: { output_index: 0, file_path: resolved.relativePath, imported_asset_id: resolved.assetId, parent_asset_id: target[0].asset_id },
+        reroll: { root_asset_id: job.root_asset_id, node_asset_id: target[0].asset_id },
+      });
+      writeDb.exec('COMMIT');
+    } catch (error) {
+      writeDb.exec('ROLLBACK');
+      throw error;
+    }
+    recordLineageRerollAttempt(project, {
+      rootAssetId: job.root_asset_id,
+      nodeAssetId: target[0].asset_id,
+      assetId: resolved.assetId,
+      prompt: job.prompt,
+      generationJobId: fields.jobId,
+      filePath: resolved.relativePath,
+      checksumSha256: resolved.checksum,
+      confirmWrite: true,
+    });
     const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
     return { ok: true, command: 'generate image import', project, job: importedJob, imported: importedJob.outputs };
   } finally {

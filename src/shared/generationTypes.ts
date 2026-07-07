@@ -4,10 +4,12 @@ export type GenerationProvider = 'codex-handoff';
 type GenerationJobStatus = 'planned' | 'imported' | 'failed' | 'cancelled';
 type GenerationReceiptType = 'plan' | 'import' | 'error';
 type GenerationReceiptStatus = 'ok' | 'error';
+export type GenerationSourceMode = 'lineage_reroll' | 'lineage_selection';
+type GenerationInputRole = 'lineage_next_base' | 'reference' | 'reroll_target';
 
 export interface GenerationJobInput {
   id: string; job_id: string; project_id: string; asset_id: string; root_asset_id: string;
-  role: 'lineage_next_base' | 'reference'; position: number; selection_strategy: string;
+  role: GenerationInputRole; position: number; selection_strategy: string;
   selection_snapshot: LineageNextResponse;
 }
 
@@ -40,7 +42,7 @@ export interface GenerationHandoffPacket {
 
 export interface GenerationJob {
   id: string; project_id: string; provider: GenerationProvider; adapter_version: string;
-  source_mode: 'lineage_selection'; root_asset_id: string; prompt: string;
+  source_mode: GenerationSourceMode; root_asset_id: string; prompt: string;
   expected_output_count: number; status: GenerationJobStatus; output_dir?: string;
   handoff: GenerationHandoffPacket; created_at: string; updated_at: string; imported_at?: string;
   inputs: GenerationJobInput[]; outputs: GenerationJobOutput[]; receipts: GenerationJobReceipt[];

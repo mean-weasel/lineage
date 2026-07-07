@@ -68,6 +68,17 @@ lineage link-child --project demo-project --root <root-asset-id> --child <child-
 lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
+For re-roll work, mark the target, have the agent plan/import one replacement
+attempt, and cancel only when the request should be abandoned:
+
+```bash
+lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --confirm-write --json
+lineage reroll list --project demo-project --root <root-asset-id> --json
+lineage reroll plan --project demo-project --root <root-asset-id> --target <target-asset-id> --prompt "Regenerate with clean readable text" --json
+lineage reroll import --project demo-project --job-id <job-id> --file <.asset-scratch-file> --confirm-write --json
+lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json
+```
+
 The app-created claim-aware handoff packet includes the same token export,
 heartbeat, inspect, and write commands. Raw claim tokens are not shown in the
 read-only Agents view.
@@ -155,11 +166,13 @@ Source checkouts and installed packages include a synthetic public demo catalog 
 
 If you create a real `demo-project/assets/catalog.json`, that root project catalog overrides the packaged fixture. The fixture keeps S3-shaped metadata for realistic catalog structure, but default previews are generated local SVG data URLs and do not call storage.
 
-Lineage also includes a lightweight Swissifier rich-demo manifest at `fixtures/demo-project/lineage/swissifier-rich-demo.json`. The manifest stores only synthetic metadata, checksums, graph edges, layout positions, and selected next-variation bases. It does not include generated PNG media or any local SQLite state.
+Lineage also includes a lightweight Swissifier rich-demo manifest at `fixtures/demo-project/lineage/swissifier-rich-demo.json`. The manifest stores only synthetic metadata, checksums, graph edges, layout positions, and selected next-variation bases. It does not include local SQLite state.
+
+The package intentionally includes three public-safe synthetic Swissifier re-roll PNG fixtures in `fixtures/demo-project/lineage/swissifier-rerolls/`. They are the only generated PNG media committed with the rich demo, and each file is pinned in the manifest by filename, SHA-256, size, content type, prompt, and demo generation job id so public-readiness and package-smoke checks can prove the fixture is hermetic.
 
 To hydrate the Swissifier demo with real images, use the Demo seed menu's Swissifier `Download media` control. Lineage downloads `swissifier-rich-demo-v1.tar.gz` from the [v0.1.2 GitHub release](https://github.com/mean-weasel/lineage/releases/tag/v0.1.2), verifies the archive checksum, safely unpacks the PNGs into local scratch storage, and then verifies each PNG checksum before loading the rich demo.
 
-Future rich-demo media packs should follow the same split: commit only the lightweight manifest changes, attach the generated media archive to the GitHub release for the app version that first references that archive, then pin the public release URL, archive size, and SHA-256 in the manifest. If a later app release reuses an unchanged media pack, keep the manifest pointed at the original release asset instead of duplicating the archive.
+Future rich-demo media packs should follow the same split unless a small synthetic media exception is explicitly documented and manifest-pinned like the packaged re-roll PNGs: commit lightweight manifest changes, attach generated media archives to the GitHub release for the app version that first references them, then pin the public release URL, archive size, and SHA-256 in the manifest. If a later app release reuses an unchanged media pack, keep the manifest pointed at the original release asset instead of duplicating the archive.
 
 For manual verification or offline restore, the expected archive checksum is:
 

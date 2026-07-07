@@ -85,7 +85,7 @@ function itemFromFile(file: string): MarkdownItem | null {
 }
 
 function demoMarkdownItems(kind: ImportKind): MarkdownItem[] {
-  const root = join(repoRoot, 'demo-project', 'channels');
+  const root = process.env.LINEAGE_CONTENT_SOURCE_ROOT || join(repoRoot, 'demo-project', 'channels');
   if (!existsSync(root)) return [];
   return walk(root)
     .map(itemFromFile)

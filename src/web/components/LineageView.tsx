@@ -3,11 +3,12 @@ import { type Edge, type EdgeChange, type ReactFlowInstance, useEdgesState, useN
 import '@xyflow/react/dist/style.css';
 import './LineageView.css';
 import './LineageFocus.css';
-import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageBriefResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
+import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
 import { api } from '../api';
 import type { AssetFlowNode } from './LineageAssetNode';
 import { LineageCanvas } from './LineageCanvas';
 import { LineageContextMenu } from './LineageContextMenu';
+import { LineageAttemptHistoryModal } from './LineageAttemptHistoryModal';
 import { LineageDetailModal } from './LineageDetailModal';
 import { LineageNewWorkspaceModal } from './LineageNewWorkspaceModal';
 import { LineageSidePanel } from './LineageSidePanel';
@@ -27,6 +28,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [childAssetId, setChildAssetId] = useState('');
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
+  const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
+  const [historyAttempts, setHistoryAttempts] = useState<LineageAttempt[]>([]);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [graphDirection, setGraphDirection] = useState<LineageGraphDirection>('LR');
@@ -48,7 +51,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const selectionFull = selectedNodes.length >= nextVariationLimit;
   const staleSelectedNodes = selectedNodes.filter(node => !node.is_latest);
   const rootNode = snapshot?.nodes.find(node => node.asset_id === snapshot.root_asset_id);
-  const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
+  const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
   const showCanvasStatus = Boolean(activeNodeId && activeNode);
   const inspectingId = activeNode?.asset_id || 'none';
   const nextBaseId = selectedNodes.length > 1 ? `${selectedNodes.length} selected` : selectedNode?.asset_id || 'none';
@@ -102,6 +105,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       if (!options.quiet) setBrief(null);
       setActiveNodeId(current => (current && next.nodes.some(node => node.asset_id === current) ? current : next.active_asset_id));
     } catch (error) {
+      if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return;
       if (!options.quiet && currentProjectRef.current === project) {
         setSnapshot(null);
         onToast('error', error instanceof Error ? error.message : String(error));
@@ -203,6 +207,53 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     if (conflict && !window.confirm(conflict.confirmation)) return;
     if (conflict) await clearNextVariation(assetId);
     void mutateLineage(`/api/reviews/${assetId}`, { reviewState, confirmWrite: true }, `Marked ${assetId} ${reviewState}`);
+  }
+  async function markReroll(node: LineageNode) {
+    if (!snapshot) return;
+    await mutateLineage(`/api/lineage/${snapshot.root_asset_id}/rerolls/${node.asset_id}`, {
+      confirmWrite: true,
+      requestedBy: 'human',
+    }, `Marked ${node.asset_id} for re-roll`);
+  }
+  async function clearReroll(node: LineageNode) {
+    if (!snapshot) return;
+    await mutateLineage(`/api/lineage/${snapshot.root_asset_id}/rerolls/${node.asset_id}/cancel`, {
+      confirmWrite: true,
+    }, `Cleared re-roll request for ${node.asset_id}`);
+  }
+  async function openAttemptHistory(assetId: string) {
+    if (!snapshot) return;
+    try {
+      const params = new URLSearchParams({ project });
+      const result = await api<LineageAttemptsResponse>(`/api/lineage/${snapshot.root_asset_id}/attempts/${assetId}?${params.toString()}`);
+      setHistoryAttempts(result.attempts);
+      setHistoryNodeId(assetId);
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  function closeAttemptHistory() {
+    setHistoryNodeId(null);
+    setHistoryAttempts([]);
+  }
+  function openDetailFromHistory(assetId: string) {
+    closeAttemptHistory();
+    setDetailNodeId(assetId);
+  }
+  async function promoteAttempt(attempt: LineageAttempt) {
+    if (!snapshot || !historyNodeId) return;
+    try {
+      const result = await api<LineageAttemptPromotionResponse>(`/api/lineage/${snapshot.root_asset_id}/attempts/${historyNodeId}/promote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, attemptId: attempt.id, confirmWrite: true }),
+      });
+      setHistoryAttempts(result.attempts);
+      onToast('ok', `Set v${attempt.attempt_index} as current`);
+      await refresh({ quiet: true });
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
   }
   async function linkChild() {
     if (!activeNode || !childAssetId.trim()) return;
@@ -416,6 +467,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             onNodeActionMenu={(assetId, x, y) => setNodeMenu(assetId ? { assetId, x, y } : null)}
             onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}
             onNodeOpenDetail={setDetailNodeId}
+            onNodeOpenHistory={assetId => void openAttemptHistory(assetId)}
             onNodePosition={node => void saveNodePosition(node)}
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
@@ -457,8 +509,31 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             snapshot={snapshot}
           />
         )}
-        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClose={() => setNodeMenu(null)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
+        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onMarkReroll={() => void markReroll(menuNode)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
       </div>
+      {historyNode && snapshot && (
+        <LineageAttemptHistoryModal
+          actions={{
+            canRemoveFromLineage: historyNode.asset_id !== snapshot.root_asset_id,
+            onClearAllNext: () => void clearNextVariation(),
+            onClearNext: () => void clearNextVariation(historyNode.asset_id),
+            onOpenNode: openDetailFromHistory,
+            onRemoveFromLineage: node => void removeNodeFromLineage(node),
+            onReplaceNext: replaceNextVariation,
+            onReview: markReview,
+            onSelectNext: selectNextBase,
+            onToast,
+            selectedCount: selectedNodes.length,
+            selectionFull,
+            snapshot,
+          }}
+          attempts={historyAttempts}
+          node={historyNode}
+          onClose={closeAttemptHistory}
+          onPromoteAttempt={promoteAttempt}
+          project={project}
+        />
+      )}
       {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
       <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
     </section>
