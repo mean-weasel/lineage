@@ -1,0 +1,86 @@
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { expect, test } from 'playwright/test';
+
+const project = 'bleep-e2e-project';
+const rootAssetId = 'bleep-e2e-root-static';
+const workspaceTitle = 'Bleep e2e workspace';
+const projectDir = join(process.cwd(), project);
+
+function writeProjectCatalog() {
+  mkdirSync(join(projectDir, 'assets'), { recursive: true });
+  writeFileSync(join(projectDir, 'assets', 'catalog.json'), `${JSON.stringify({
+    assets: [{
+      asset_id: rootAssetId,
+      audience: 'creators',
+      campaign: '2026-07-project-state',
+      channel: 'meta',
+      content_type: 'image',
+      cta: 'Try it',
+      hook: 'Project state regression root asset.',
+      product: project,
+      project,
+      s3: {
+        bucket: 'lineage-demo-assets',
+        content_type: 'image/png',
+        key: `products/${project}/assets/${rootAssetId}.png`,
+        region: 'us-east-1',
+        size_bytes: 2048,
+        updated_at: '2026-07-01T00:00:00.000Z',
+        version_id: 'project-state-e2e',
+      },
+      source: 'catalog',
+      status: 'working',
+      title: 'Bleep e2e root static',
+      utm_content: 'bleep_e2e_root_static',
+    }],
+    default_bucket: '',
+    default_region: 'us-east-1',
+    product: project,
+    project,
+  }, null, 2)}\n`);
+}
+
+test.beforeEach(async ({ request }) => {
+  rmSync(projectDir, { force: true, recursive: true });
+  writeProjectCatalog();
+
+  const created = await request.post('/api/lineage-workspaces', {
+    data: {
+      confirmWrite: true,
+      project,
+      rootAssetId,
+      title: workspaceTitle,
+    },
+  });
+  expect(created.ok()).toBe(true);
+});
+
+test.afterEach(() => {
+  rmSync(projectDir, { force: true, recursive: true });
+});
+
+test('honors project URL params and clears stale project lineage state when switching projects', async ({ page }) => {
+  await page.goto(`/?project=${project}`);
+
+  const projectSelect = page.locator('select').first();
+  const lineageHeader = page.locator('header.lineage-header');
+  const workspaceTrigger = lineageHeader.locator('.lineage-workspace-trigger');
+  await expect(projectSelect).toHaveValue(project);
+  await expect(workspaceTrigger.locator('strong')).toHaveText(workspaceTitle);
+  await expect(workspaceTrigger.locator('code')).toHaveText(rootAssetId);
+  await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
+  await expect(page.getByText('No workspace selected')).not.toBeVisible();
+
+  await projectSelect.selectOption('demo-project');
+  await expect(page).toHaveURL(/project=demo-project/);
+  await expect(projectSelect).toHaveValue('demo-project');
+
+  await projectSelect.selectOption(project);
+  await expect(page).toHaveURL(new RegExp(`project=${project}`));
+  await expect(projectSelect).toHaveValue(project);
+  await expect(workspaceTrigger.locator('strong')).toHaveText(workspaceTitle);
+  await expect(workspaceTrigger.locator('code')).toHaveText(rootAssetId);
+  await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
+  await expect(page.getByText('No workspace selected')).not.toBeVisible();
+});

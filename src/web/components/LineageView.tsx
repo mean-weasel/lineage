@@ -62,6 +62,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     setMenuCloseSignal(value => value + 1);
     setNodeMenu(null);
   }, []);
+  const currentProjectRef = useRef(project);
+  useEffect(() => { currentProjectRef.current = project; }, [project]);
   const clearFocus = useCallback(() => { setActiveNodeId(null); closeTransientMenus(); }, [closeTransientMenus]);
   const resetLineage = useCallback(() => { setSnapshot(null); setActiveNodeId(null); setBrief(null); }, []);
   const {
@@ -100,12 +102,12 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       if (!options.quiet) setBrief(null);
       setActiveNodeId(current => (current && next.nodes.some(node => node.asset_id === current) ? current : next.active_asset_id));
     } catch (error) {
-      if (!options.quiet) {
+      if (!options.quiet && currentProjectRef.current === project) {
         setSnapshot(null);
         onToast('error', error instanceof Error ? error.message : String(error));
       }
     } finally {
-      if (!options.quiet) setLoading(false);
+      if (!options.quiet && currentProjectRef.current === project) setLoading(false);
     }
   }, [onToast, project, workspaceRootAssetId]);
   async function indexAndRefresh() {
