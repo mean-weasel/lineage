@@ -85,12 +85,34 @@ p {
   line-height: 1.2;
 }
 
+.brand-copy {
+  min-width: 0;
+}
+
 .brand p,
 .board-head p,
 .upload-drawer header p {
   margin-top: 2px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.brand p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.brand-version {
+  border: 1px solid #cbd7df;
+  border-radius: 999px;
+  background: #f7fafc;
+  color: #42515b;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.4;
 }
 
 .side-section {
