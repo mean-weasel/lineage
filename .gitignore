@@ -5,6 +5,7 @@
 /test-results/
 /.asset-scratch/
 /demo-project/
+/.lineage/
 /*.tgz
 
 /docs/

@@ -5,6 +5,8 @@ import { defaultProject, repoRoot } from './assetCore';
 import { getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateLineageLayout, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
 import { removeLineageNode } from './assetLineageRemove';
+import { createAgentClaim } from './agentClaims';
+import { lineageWorkspaceId } from './assetLineageWorkspaces';
 import { fileSha256 } from './localReview';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage-remove');
@@ -85,6 +87,52 @@ describe('lineage node removal', () => {
     database.close();
     expect(assetRow).toMatchObject({ id: files.childId });
     expect(layoutRow).toBeUndefined();
+  });
+
+  it('requires a matching active claim for confirmed node removal on a claimed workspace', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, { childAssetId: files.childId, confirmWrite: true, parentAssetId: files.parentId });
+    const claim = createAgentClaim({
+      agentName: 'Lineage removal agent',
+      project: defaultProject,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(defaultProject, files.parentId),
+    });
+    const wrongClaim = createAgentClaim({
+      agentName: 'Wrong removal agent',
+      project: defaultProject,
+      scopeType: 'lineage_workspace',
+      targetId: lineageWorkspaceId(defaultProject, files.variationId),
+    });
+
+    const dryRun = removeLineageNode(defaultProject, {
+      assetId: files.childId,
+      confirmWrite: false,
+      rootAssetId: files.parentId,
+    });
+    expect(dryRun).toMatchObject({ dryRun: true });
+    expect(() => removeLineageNode(defaultProject, {
+      assetId: files.childId,
+      confirmWrite: true,
+      rootAssetId: files.parentId,
+    })).toThrow('Mutating agent write requires a matching claim token.');
+    expect(() => removeLineageNode(defaultProject, {
+      assetId: files.childId,
+      claimToken: wrongClaim.claim_token,
+      confirmWrite: true,
+      rootAssetId: files.parentId,
+    })).toThrow('Claim does not cover lineage_workspace');
+
+    const result = removeLineageNode(defaultProject, {
+      assetId: files.childId,
+      claimToken: claim.claim_token,
+      confirmWrite: true,
+      rootAssetId: files.parentId,
+    });
+
+    expect(result).toMatchObject({ asset_id: files.childId, asset_preserved: true });
+    expect(getLineageSnapshot(defaultProject, files.parentId).nodes.map(node => node.asset_id)).toEqual([files.parentId]);
   });
 
   it('reparents a removed non-leaf node children to its parent and compacts selections', () => {

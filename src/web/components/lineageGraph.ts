@@ -1,4 +1,4 @@
-import { MarkerType, type Edge } from '@xyflow/react';
+import { MarkerType, Position, type Edge } from '@xyflow/react';
 import { graphlib, layout } from '@dagrejs/dagre';
 import type { LineageSnapshot } from '../../shared/types';
 import type { AssetFlowNode, LineageFocusRole } from './LineageAssetNode';
@@ -6,9 +6,12 @@ import type { AssetFlowNode, LineageFocusRole } from './LineageAssetNode';
 const nodeWidth = 212;
 const nodeHeight = 164;
 
-export function toGraph(snapshot: LineageSnapshot | null, activeNodeId: string | null): { nodes: AssetFlowNode[]; edges: Edge[] } {
+export type LineageGraphDirection = 'BT' | 'LR' | 'RL' | 'TB';
+
+export function toGraph(snapshot: LineageSnapshot | null, activeNodeId: string | null, direction: LineageGraphDirection = 'LR'): { nodes: AssetFlowNode[]; edges: Edge[] } {
   if (!snapshot) return { nodes: [], edges: [] };
-  const tidyPositions = layoutLineageTree(snapshot);
+  const tidyPositions = layoutLineageTree(snapshot, direction);
+  const handlePositions = lineageHandlePositions(direction);
   const focus = lineageFocus(snapshot, activeNodeId);
   const nodes = snapshot.nodes.map(node => {
     return {
@@ -19,8 +22,17 @@ export function toGraph(snapshot: LineageSnapshot | null, activeNodeId: string |
       type: 'assetNode' as const,
       height: nodeHeight,
       position: node.position || tidyPositions.get(node.asset_id) || { x: 0, y: 0 },
+      sourcePosition: handlePositions.source,
+      targetPosition: handlePositions.target,
       width: nodeWidth,
-      data: { ...node, active: node.asset_id === activeNodeId, focusRole: focus.roles.get(node.asset_id) || 'none', root: node.asset_id === snapshot.root_asset_id },
+      data: {
+        ...node,
+        active: node.asset_id === activeNodeId,
+        focusRole: focus.roles.get(node.asset_id) || 'none',
+        root: node.asset_id === snapshot.root_asset_id,
+        sourcePosition: handlePositions.source,
+        targetPosition: handlePositions.target,
+      },
     };
   });
   const edges = snapshot.edges.map(edge => ({
@@ -35,11 +47,20 @@ export function toGraph(snapshot: LineageSnapshot | null, activeNodeId: string |
   return { nodes, edges };
 }
 
-export function lineageGraphKey(snapshot: LineageSnapshot | null): string {
+function lineageHandlePositions(direction: LineageGraphDirection): { source: Position; target: Position } {
+  return {
+    BT: { source: Position.Top, target: Position.Bottom },
+    LR: { source: Position.Right, target: Position.Left },
+    RL: { source: Position.Left, target: Position.Right },
+    TB: { source: Position.Bottom, target: Position.Top },
+  }[direction];
+}
+
+export function lineageGraphKey(snapshot: LineageSnapshot | null, direction: LineageGraphDirection = 'LR'): string {
   if (!snapshot) return 'lineage-empty';
   const nodeIds = snapshot.nodes.map(node => node.asset_id).sort().join(',');
   const edgeIds = snapshot.edges.map(edge => edge.id).sort().join(',');
-  return `${snapshot.root_asset_id}:${nodeIds}:${edgeIds}`;
+  return `${snapshot.root_asset_id}:${direction}:${nodeIds}:${edgeIds}`;
 }
 
 export function lineageFocus(snapshot: LineageSnapshot, activeNodeId: string | null): { edgeClasses: Map<string, string>; roles: Map<string, LineageFocusRole> } {
@@ -61,13 +82,13 @@ export function lineageFocus(snapshot: LineageSnapshot, activeNodeId: string | n
   return { edgeClasses, roles };
 }
 
-export function layoutLineageTree(snapshot: LineageSnapshot): Map<string, { x: number; y: number }> {
+export function layoutLineageTree(snapshot: LineageSnapshot, direction: LineageGraphDirection = 'LR'): Map<string, { x: number; y: number }> {
   const graph = new graphlib.Graph();
   graph.setGraph({
     marginx: 40,
     marginy: 40,
     nodesep: 80,
-    rankdir: 'LR',
+    rankdir: direction,
     ranksep: 110,
   });
   graph.setDefaultEdgeLabel(() => ({}));

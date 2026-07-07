@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { Position } from '@xyflow/react';
 import type { LineageSnapshot } from '../../shared/types';
-import { layoutLineageTree, lineageFocus, toGraph } from './lineageGraph';
+import { layoutLineageTree, lineageFocus, toGraph, type LineageGraphDirection } from './lineageGraph';
 
 const nodeSize = { height: 164, width: 212 };
 
@@ -49,7 +50,34 @@ describe('lineage graph layout', () => {
     expect(root).toBeDefined();
     expect(child).toBeDefined();
     expect(child?.x).toBeGreaterThan(root?.x || 0);
+    expect(graph.nodes[0].targetPosition).toBe(Position.Left);
+    expect(graph.nodes[0].sourcePosition).toBe(Position.Right);
+    expect(graph.nodes[0].data.targetPosition).toBe(Position.Left);
+    expect(graph.nodes[0].data.sourcePosition).toBe(Position.Right);
   });
+
+  it.each([
+    ['LR', 'x', 'greater', Position.Left, Position.Right],
+    ['RL', 'x', 'less', Position.Right, Position.Left],
+    ['TB', 'y', 'greater', Position.Top, Position.Bottom],
+    ['BT', 'y', 'less', Position.Bottom, Position.Top],
+  ] satisfies Array<[LineageGraphDirection, 'x' | 'y', 'greater' | 'less', Position, Position]>)(
+    'orients %s graph layout and node handles together',
+    (direction, axis, ordering, targetPosition, sourcePosition) => {
+      const graph = toGraph(snapshot(['root', 'child'], [['root', 'child']]), null, direction);
+      const root = graph.nodes.find(node => node.id === 'root')?.position;
+      const child = graph.nodes.find(node => node.id === 'child')?.position;
+
+      expect(root).toBeDefined();
+      expect(child).toBeDefined();
+      if (ordering === 'greater') expect(child?.[axis]).toBeGreaterThan(root?.[axis] || 0);
+      else expect(child?.[axis]).toBeLessThan(root?.[axis] || 0);
+      expect(graph.nodes[0].targetPosition).toBe(targetPosition);
+      expect(graph.nodes[0].sourcePosition).toBe(sourcePosition);
+      expect(graph.nodes[0].data.targetPosition).toBe(targetPosition);
+      expect(graph.nodes[0].data.sourcePosition).toBe(sourcePosition);
+    }
+  );
 
   it('keeps saved positions ahead of generated tidy positions', () => {
     const graph = toGraph(snapshot(['root', 'child'], [['root', 'child']], { child: { x: 777, y: 333 } }), null);

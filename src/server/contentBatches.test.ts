@@ -229,6 +229,7 @@ describe('content batch ledger', () => {
     });
 
     const selected = setContentTarget(defaultProject, {
+      claimToken,
       confirmWrite: true,
       notes: 'Use this as the next variation base.',
       postId: 'tiktok-upload-clean',
@@ -257,6 +258,28 @@ describe('content batch ledger', () => {
     const cleared = clearContentTarget(defaultProject, true);
 
     expect(cleared).toMatchObject({ ok: true, selected: false, target: null });
+  });
+
+  it('requires a matching claim to set or clear an actively claimed content target', () => {
+    seedBatch();
+    seedPost();
+    const claimToken = claimPost();
+
+    expect(setContentTarget(defaultProject, {
+      confirmWrite: false,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ dryRun: true });
+    expect(() => setContentTarget(defaultProject, {
+      confirmWrite: true,
+      postId: 'tiktok-upload-clean',
+    })).toThrow('Mutating agent write requires a matching claim token.');
+    expect(setContentTarget(defaultProject, {
+      claimToken,
+      confirmWrite: true,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ ok: true, target: { post: { id: 'tiktok-upload-clean' } } });
+    expect(() => clearContentTarget(defaultProject, true)).toThrow('Mutating agent write requires a matching claim token.');
+    expect(clearContentTarget(defaultProject, true, claimToken)).toMatchObject({ ok: true, selected: false, target: null });
   });
 
   it('rejects selecting an unknown content post', () => {
@@ -310,11 +333,23 @@ describe('content batch ledger', () => {
     expect(readinessForPost(archived)).toBe('skipped_or_archived');
   });
 
-  it('requires a matching content post claim for asset attachment and phase movement', () => {
+  it('requires a matching content post claim for asset attachment and post updates', () => {
     seedBatch();
     seedPost();
     const claimToken = claimPost();
 
+    expect(updateContentPost(defaultProject, {
+      body: 'Dry-run claimed body edit',
+      confirmWrite: false,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ dryRun: true });
+    expect(() =>
+      updateContentPost(defaultProject, {
+        body: 'Claimed body edit without a token',
+        confirmWrite: true,
+        postId: 'tiktok-upload-clean',
+      })
+    ).toThrow('Mutating agent write requires a matching claim token.');
     expect(() =>
       attachContentPostAsset(defaultProject, {
         assetId: 'asset-1',
@@ -331,11 +366,28 @@ describe('content batch ledger', () => {
       })
     ).toThrow('Unknown or invalid claim token.');
     expect(updateContentPost(defaultProject, {
+      body: 'Claimed body edit with a token',
+      claimToken,
+      confirmWrite: true,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ ok: true, post: { body: 'Claimed body edit with a token' } });
+    expect(updateContentPost(defaultProject, {
       claimToken,
       confirmWrite: true,
       phase: 'review',
       postId: 'tiktok-upload-clean',
     })).toMatchObject({ ok: true, post: { phase: 'review' } });
+  });
+
+  it('allows unclaimed content post metadata updates without a claim token', () => {
+    seedBatch();
+    seedPost();
+
+    expect(updateContentPost(defaultProject, {
+      body: 'Unclaimed body edit',
+      confirmWrite: true,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ ok: true, post: { body: 'Unclaimed body edit' } });
   });
 
   it('uses project channel claims as broad same-channel authority without blocking other channels', () => {
@@ -369,11 +421,17 @@ describe('content batch ledger', () => {
       confirmWrite: true,
       postId: 'linkedin-unclaimed',
     })).toMatchObject({ ok: true, post: { id: 'linkedin-unclaimed' } });
+    expect(updateContentPost(defaultProject, {
+      body: 'Same-channel body edit',
+      claimToken,
+      confirmWrite: true,
+      postId: 'tiktok-upload-clean',
+    })).toMatchObject({ ok: true, post: { body: 'Same-channel body edit' } });
     expect(() =>
       updateContentPost(defaultProject, {
+        body: 'Wrong-channel body edit',
         claimToken,
         confirmWrite: true,
-        phase: 'review',
         postId: 'linkedin-unclaimed',
       })
     ).toThrow('Claim channel tiktok does not match linkedin.');

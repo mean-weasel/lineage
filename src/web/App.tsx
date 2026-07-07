@@ -4,7 +4,7 @@ import { api } from './api';
 import { normalizePlacementValues, postMutation } from './assetMutations';
 import { AssetDetailDrawer } from './components/AssetDetailDrawer';
 import { AssetBoard } from './components/AssetBoard';
-import { AgentsView } from './components/AgentsView';
+import { AgentsView, type AgentWorkTarget } from './components/AgentsView';
 import { ContentBatchesView } from './components/ContentBatchesView';
 import { CopiedTextFallback } from './components/CopiedTextFallback';
 import { CurrentWorkTarget } from './components/CurrentWorkTargetPanel';
@@ -55,24 +55,25 @@ export function App() {
   const [inspectedAsset, setInspectedAsset] = useState<GrowthAsset | null>(null);
   const [workTargetRefreshKey, setWorkTargetRefreshKey] = useState(0);
 
-  const assets = snapshot?.assets || [];
+  const projectSnapshot = snapshot?.catalog.project === project ? snapshot : null;
+  const assets = projectSnapshot?.assets || [];
   const selectedFromList = selectedOrFirst(assets, selectedId);
-  const selected = selectedFromList || (inspectedAsset?.asset_id === selectedId ? inspectedAsset : undefined);
+  const selected = selectedFromList || (inspectedAsset?.project === project && inspectedAsset.asset_id === selectedId ? inspectedAsset : undefined);
   const selectedAssetId = selected?.asset_id || '';
   const localBackupAssets = [
     ...queuedBackupAssets.filter(asset => localBackupIds.includes(asset.asset_id)),
     ...assets.filter(asset => localBackupIds.includes(asset.asset_id) && asset.local?.relative_path),
   ].filter((asset, index, list) => list.findIndex(item => item.asset_id === asset.asset_id) === index);
   const selectedPreviewUrl = selected ? previewUrls[selected.asset_id] || null : null;
-  const channels = useMemo(() => ['all', ...(snapshot?.facets.channels || [])], [snapshot]);
+  const channels = useMemo(() => ['all', ...(projectSnapshot?.facets.channels || [])], [projectSnapshot]);
   const totals = useMemo(
     () => ({
-      assets: snapshot?.catalog.asset_count || 0,
-      live: snapshot?.liveObjects.length || 0,
-      orphan: snapshot?.orphanObjects.length || 0,
-      size: snapshot?.facets.totalSizeBytes || 0,
+      assets: projectSnapshot?.catalog.asset_count || 0,
+      live: projectSnapshot?.liveObjects.length || 0,
+      orphan: projectSnapshot?.orphanObjects.length || 0,
+      size: projectSnapshot?.facets.totalSizeBytes || 0,
     }),
-    [snapshot]
+    [projectSnapshot]
   );
   async function refreshProjects() {
     try {
@@ -205,6 +206,23 @@ export function App() {
     setQuery('');
     setView('backup');
   }
+  async function openAgentWork(target: AgentWorkTarget) {
+    try {
+      if (target.assetId) setSelectedId(target.assetId);
+      if (target.view === 'lineage' && target.workspaceId) {
+        await api(`/api/lineage-workspaces/${encodeURIComponent(target.workspaceId)}/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project, confirmWrite: true }),
+        });
+      }
+      setAssetDetailsOpen(false);
+      setView(target.view);
+      setToast({ type: 'ok', message: `Opened ${target.claim.target_title || target.claim.target_id}` });
+    } catch (error) {
+      setToast({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  }
   function toggleLocalBackup(asset: GrowthAsset) {
     if (!asset.local?.relative_path) return;
     setLocalBackupIds(current => current.includes(asset.asset_id) ? current.filter(id => id !== asset.asset_id) : [...current, asset.asset_id]);
@@ -261,7 +279,7 @@ export function App() {
 
   return (
     <div className={`app-shell ${view === 'lineage' ? 'lineage-mode' : ''}`}>
-      <Sidebar channel={channel} channels={channels} liveSync={liveSync} placementStatus={placementStatus} project={project} projects={projects} setChannel={setChannel} setPlacementStatus={setPlacementStatus} setProject={setProject} setSource={setSource} setStatus={setStatus} setView={setView} showBackupQueue={showBackupQueue} source={source} snapshot={snapshot} status={status} totals={totals} />
+      <Sidebar channel={channel} channels={channels} liveSync={liveSync} placementStatus={placementStatus} project={project} projects={projects} setChannel={setChannel} setPlacementStatus={setPlacementStatus} setProject={setProject} setSource={setSource} setStatus={setStatus} setView={setView} showBackupQueue={showBackupQueue} source={source} snapshot={projectSnapshot} status={status} totals={totals} />
       <main className="workspace">
         <Topbar
           assetDetailsOpen={assetDetailsOpen}
@@ -317,7 +335,7 @@ export function App() {
             selectedAsset={selected}
           />
         ) : view === 'agents' ? (
-          <AgentsView project={project} />
+          <AgentsView onCopy={copyText} onOpenWork={openAgentWork} project={project} />
         ) : view === 'backup' ? (
           <LocalBackupQueue
             assets={assets}
@@ -337,7 +355,7 @@ export function App() {
             selectedBackupIds={localBackupIds}
             setPage={setPage}
             setPageSize={setPageSize}
-            snapshot={snapshot}
+            snapshot={projectSnapshot}
           />
         ) : view === 'assets' ? (
           <>
@@ -349,7 +367,7 @@ export function App() {
               }}
               onOpen={() => setLocalBackupOpen(true)}
             />
-            <AssetBoard assets={assets} liveSync={liveSync} onCopy={copyText} onSelectionChanged={() => setWorkTargetRefreshKey(value => value + 1)} page={page} pageSize={pageSize} previewUrls={previewUrls} project={project} selected={selected} setLiveSync={setLiveSync} setPage={setPage} setPageSize={setPageSize} setSelectedId={setSelectedId} snapshot={snapshot} source={source} totals={totals} />
+            <AssetBoard assets={assets} liveSync={liveSync} onCopy={copyText} onSelectionChanged={() => setWorkTargetRefreshKey(value => value + 1)} page={page} pageSize={pageSize} previewUrls={previewUrls} project={project} selected={selected} setLiveSync={setLiveSync} setPage={setPage} setPageSize={setPageSize} setSelectedId={setSelectedId} snapshot={projectSnapshot} source={source} totals={totals} />
           </>
         ) : view === 'settings' ? <SettingsView onToast={(type, message) => setToast({ type, message })} project={project} /> : (
           <LineageView

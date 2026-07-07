@@ -1,6 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from 'react';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
 import type { DemoSeedMediaStatus } from './useLineageWorkspaces';
+import type { LineageGraphDirection } from './lineageGraph';
 import { LineageWorkspacePicker } from './LineageWorkspacePicker';
 import './LineageToolbar.css';
 
@@ -8,12 +9,14 @@ export function LineageToolbar({
   activeWorkspace,
   closeSignal,
   demoSeedStatus,
+  graphDirection,
   latestCount,
   loading,
   nextVariationId,
   onArchiveWorkspace,
   onDownloadSwissifierMedia,
   onFitGraph,
+  onGraphDirection,
   onIndexLocal,
   onNewLineage,
   onRefreshLineage,
@@ -35,12 +38,14 @@ export function LineageToolbar({
   activeWorkspace: LineageWorkspace | null;
   closeSignal: number;
   demoSeedStatus: DemoSeedMediaStatus | null;
+  graphDirection: LineageGraphDirection;
   latestCount: number;
   loading: boolean;
   nextVariationId: string;
   onArchiveWorkspace: () => void;
   onDownloadSwissifierMedia: () => void;
   onFitGraph: () => void;
+  onGraphDirection: (direction: LineageGraphDirection) => void;
   onIndexLocal: () => void;
   onNewLineage: () => void;
   onRefreshLineage: () => void;
@@ -149,6 +154,20 @@ export function LineageToolbar({
         <strong>{nextVariationId}</strong>
         <small>{latestCount} latest candidate{latestCount === 1 ? '' : 's'}</small>
       </button>
+      <label className="lineage-direction-control">
+        <span>Direction</span>
+        <select
+          aria-label="Lineage graph direction"
+          disabled={!snapshot || loading}
+          onChange={event => onGraphDirection(event.target.value as LineageGraphDirection)}
+          value={graphDirection}
+        >
+          <option value="LR">Left to right</option>
+          <option value="TB">Top to bottom</option>
+          <option value="RL">Right to left</option>
+          <option value="BT">Bottom to top</option>
+        </select>
+      </label>
       <details className="lineage-overflow" onToggle={event => setActionsOpen(event.currentTarget.open)} open={actionsOpen}>
         <summary onKeyDown={closeMenusOnEscape} tabIndex={0}>Actions</summary>
         <div>

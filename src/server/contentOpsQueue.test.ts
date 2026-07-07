@@ -87,7 +87,7 @@ function seedQueuePosts() {
     postId: 'review-s3-post',
   });
   attachContentPostAsset(defaultProject, { assetId: 'missing-queue-asset', claimToken: claimPost('scheduled-unresolved-post'), confirmWrite: true, postId: 'scheduled-unresolved-post' });
-  setContentTarget(defaultProject, { confirmWrite: true, notes: 'Next review handoff', postId: 'review-s3-post' });
+  setContentTarget(defaultProject, { claimToken: claimPost('review-s3-post'), confirmWrite: true, notes: 'Next review handoff', postId: 'review-s3-post' });
 }
 
 function lane(queue: ContentOpsQueueSnapshot, id: ContentOpsQueueLaneId) {

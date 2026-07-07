@@ -157,12 +157,41 @@ describe('content batch routes', () => {
       confirmWrite: true,
       project: defaultProject,
     });
+    const metadataDenied = await postJson(baseUrl, '/api/content/posts/claimed-route-post', {
+      body: 'Claimed route metadata without token',
+      confirmWrite: true,
+      project: defaultProject,
+    });
     const attached = await postJson(baseUrl, '/api/content/posts/claimed-route-post/assets', {
       assetId: 'asset-1',
       claimToken: claim.claim_token,
       confirmWrite: true,
       project: defaultProject,
     });
+    const metadataUpdated = await postJson(baseUrl, '/api/content/posts/claimed-route-post', {
+      body: 'Claimed route metadata with token',
+      confirmWrite: true,
+      project: defaultProject,
+    }, { 'X-Lineage-Claim-Token': claim.claim_token });
+    const targetDenied = await postJson(baseUrl, '/api/content/target', {
+      confirmWrite: true,
+      postId: 'claimed-route-post',
+      project: defaultProject,
+    });
+    const targetSelected = await postJson(baseUrl, '/api/content/target', {
+      claimToken: claim.claim_token,
+      confirmWrite: true,
+      postId: 'claimed-route-post',
+      project: defaultProject,
+    });
+    const clearDenied = await postJson(baseUrl, '/api/content/target/clear', {
+      confirmWrite: true,
+      project: defaultProject,
+    });
+    const targetCleared = await postJson(baseUrl, '/api/content/target/clear', {
+      confirmWrite: true,
+      project: defaultProject,
+    }, { 'X-Lineage-Claim-Token': claim.claim_token });
     const phased = await postJson(baseUrl, '/api/content/posts/claimed-route-post', {
       confirmWrite: true,
       phase: 'review',
@@ -170,7 +199,13 @@ describe('content batch routes', () => {
     }, { 'X-Lineage-Claim-Token': claim.claim_token });
 
     expect(denied).toMatchObject({ status: 401, body: { error: 'claim_required' } });
+    expect(metadataDenied).toMatchObject({ status: 401, body: { error: 'claim_required' } });
     expect(attached).toMatchObject({ status: 200, body: { ok: true, post: { id: 'claimed-route-post' } } });
+    expect(metadataUpdated).toMatchObject({ status: 200, body: { ok: true, post: { body: 'Claimed route metadata with token' } } });
+    expect(targetDenied).toMatchObject({ status: 401, body: { error: 'claim_required' } });
+    expect(targetSelected).toMatchObject({ status: 200, body: { selected: true, target: { post: { id: 'claimed-route-post' } } } });
+    expect(clearDenied).toMatchObject({ status: 401, body: { error: 'claim_required' } });
+    expect(targetCleared).toMatchObject({ status: 200, body: { selected: false, target: null } });
     expect(phased).toMatchObject({ status: 200, body: { ok: true, post: { phase: 'review' } } });
   });
 });

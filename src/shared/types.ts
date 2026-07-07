@@ -443,6 +443,7 @@ export interface LineageLayoutFields {
   rootAssetId: string;
   positions: Array<{ assetId: string; x: number; y: number }>;
   confirmWrite: boolean;
+  claimToken?: string;
 }
 
 export interface LineageSelectedChildFields {
@@ -454,7 +455,7 @@ export interface LineageLinkFields {
 }
 
 export interface LineageRemoveNodeFields {
-  assetId: string; rootAssetId?: string; confirmWrite: boolean;
+  assetId: string; rootAssetId?: string; confirmWrite: boolean; claimToken?: string;
 }
 
 export interface LineageRemoveNodeResponse {

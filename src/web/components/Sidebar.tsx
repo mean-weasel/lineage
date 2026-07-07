@@ -4,6 +4,7 @@ import type { AssetLibrarySnapshot, ProjectSummary } from '../../shared/types';
 import { appDescription, appName } from '../../shared/appConstants';
 import { formatBytes } from '../../shared/format';
 import { placementFilters, sourceFilters, statusFilters, type PlacementFilter, type SourceFilter, type StudioView, type StatusFilter } from '../assetUi';
+import { lineageReleaseInfo } from '../releaseInfo';
 import './Sidebar.css';
 
 export function Sidebar({
@@ -62,7 +63,19 @@ export function Sidebar({
       </button>
       <div className="brand">
         <div className="brand-mark" aria-label={appDescription}>L</div>
-        <div><h1>{appName}</h1><p>{project}</p></div>
+        <div className="brand-copy">
+          <h1>{appName}</h1>
+          <p>
+            <span>{project}</span>
+            <span
+              aria-label={`Lineage version ${lineageReleaseInfo.version}`}
+              className="brand-version"
+              title={`Lineage version ${lineageReleaseInfo.version}, ${lineageReleaseInfo.channel} channel`}
+            >
+              v{lineageReleaseInfo.version}
+            </span>
+          </p>
+        </div>
       </div>
       <button
         aria-controls="mobile-sidebar-controls"

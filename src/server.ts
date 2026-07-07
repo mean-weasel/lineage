@@ -180,13 +180,14 @@ app.post(
         parentAssetId: String(req.body.parentAssetId || ''),
         childAssetId: String(req.body.childAssetId || ''),
         confirmWrite: req.body.confirmWrite === true,
+        claimToken: claimTokenFromRequest(req),
       })
     );
   })
 );
 
 app.post('/api/lineage/remove-node', asyncRoute((req, res) => {
-  res.json(removeLineageNode(projectFrom(req), { assetId: String(req.body.assetId || ''), rootAssetId: typeof req.body.rootAssetId === 'string' ? req.body.rootAssetId : undefined, confirmWrite: req.body.confirmWrite === true }));
+  res.json(removeLineageNode(projectFrom(req), { assetId: String(req.body.assetId || ''), rootAssetId: typeof req.body.rootAssetId === 'string' ? req.body.rootAssetId : undefined, confirmWrite: req.body.confirmWrite === true, claimToken: claimTokenFromRequest(req) }));
 }));
 
 app.post(
@@ -202,6 +203,7 @@ app.post(
           y: Number(position.y),
         })),
         confirmWrite: req.body.confirmWrite === true,
+        claimToken: claimTokenFromRequest(req),
       })
     );
   })
