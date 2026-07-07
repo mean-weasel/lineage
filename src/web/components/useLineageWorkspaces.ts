@@ -41,10 +41,12 @@ export function useLineageWorkspaces({
   const [demoSeedStatus, setDemoSeedStatus] = useState<DemoSeedMediaStatus | null>(null);
   const [swissifierDemoStatus, setSwissifierDemoStatus] = useState<DemoSeedMediaStatus | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
-  const projectWorkspaceSnapshot = workspaceSnapshot?.project === project ? workspaceSnapshot : null;
+  const hasCurrentWorkspaceSnapshot = workspaceSnapshot?.project === project;
+  const projectWorkspaceSnapshot = hasCurrentWorkspaceSnapshot ? workspaceSnapshot : null;
   const visibleWorkspaces = (projectWorkspaceSnapshot?.workspaces || []).filter(workspace => workspace.status !== 'archived');
   const activeWorkspace = projectWorkspaceSnapshot?.active_workspace || visibleWorkspaces[0] || null;
-  const workspaceRootAssetId = lineageWorkspaceRootAssetId(activeWorkspace, projectWorkspaceSnapshot?.workspaces.length ? undefined : asset?.asset_id);
+  const fallbackAssetId = hasCurrentWorkspaceSnapshot && projectWorkspaceSnapshot?.workspaces.length === 0 ? asset?.asset_id : undefined;
+  const workspaceRootAssetId = lineageWorkspaceRootAssetId(activeWorkspace, fallbackAssetId);
 
   useEffect(() => {
     currentProjectRef.current = project;
