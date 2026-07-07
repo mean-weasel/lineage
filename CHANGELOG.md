@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- Add per-image re-roll attempt history with stack inspection, previous-attempt selection, and promotion back to the current/top attempt.
+- Add CLI and agent-facing re-roll commands for marking, listing, planning, importing, and cancelling one job per target image.
+- Package public-safe Swissifier re-roll PNG fixtures and manifest metadata so the demo canvas shows multi-attempt nodes out of the box.
+- Harden project switching, lineage workspace fallback, and backend attempt invariants around re-roll histories.
+
 ## 0.1.5
 
 - Add graph orientation controls for lineage views and CLI flows, including browser coverage for orientation behavior.
