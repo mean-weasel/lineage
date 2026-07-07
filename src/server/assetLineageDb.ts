@@ -61,6 +61,44 @@ export function lineageDb(): DatabaseSync {
     );
     create index if not exists edges_parent on asset_edges(project_id, parent_asset_id);
     create index if not exists edges_child on asset_edges(project_id, child_asset_id);
+    create table if not exists asset_attempts (
+      id text primary key,
+      project_id text not null references projects(id),
+      node_asset_id text not null references assets(id),
+      asset_id text not null references assets(id),
+      attempt_index integer not null check (attempt_index > 0),
+      source text not null check (source in ('initial', 'generated_child', 'reroll')),
+      prompt text,
+      generation_job_id text,
+      file_path text,
+      checksum_sha256 text,
+      created_at text not null,
+      promoted_at text,
+      is_current integer not null check (is_current in (0, 1)),
+      unique(project_id, node_asset_id, attempt_index),
+      unique(project_id, node_asset_id, asset_id, source)
+    );
+    create unique index if not exists asset_attempts_one_current
+      on asset_attempts(project_id, node_asset_id)
+      where is_current = 1;
+    create index if not exists asset_attempts_node_created
+      on asset_attempts(project_id, node_asset_id, created_at);
+    create table if not exists asset_reroll_requests (
+      id text primary key,
+      project_id text not null references projects(id),
+      root_asset_id text not null references assets(id),
+      node_asset_id text not null references assets(id),
+      status text not null check (status in ('pending', 'resolved', 'cancelled')),
+      requested_by text not null check (requested_by in ('human', 'agent', 'system')),
+      notes text,
+      created_at text not null,
+      resolved_at text
+    );
+    create unique index if not exists asset_reroll_requests_one_pending
+      on asset_reroll_requests(project_id, root_asset_id, node_asset_id)
+      where status = 'pending';
+    create index if not exists asset_reroll_requests_root_status
+      on asset_reroll_requests(project_id, root_asset_id, status, created_at);
     create table if not exists asset_reviews (
       asset_id text primary key references assets(id),
       review_state text not null check (review_state in ('unreviewed', 'approved', 'needs_revision', 'rejected', 'ignored')),
@@ -265,7 +303,7 @@ export function lineageDb(): DatabaseSync {
       project_id text not null references projects(id),
       provider text not null default 'codex-handoff',
       adapter_version text not null,
-      source_mode text not null check (source_mode in ('lineage_selection')),
+      source_mode text not null check (source_mode in ('lineage_selection', 'lineage_reroll')),
       root_asset_id text not null references assets(id),
       prompt text not null,
       expected_output_count integer not null check (expected_output_count > 0),
@@ -283,7 +321,7 @@ export function lineageDb(): DatabaseSync {
       project_id text not null references projects(id),
       asset_id text not null references assets(id),
       root_asset_id text not null references assets(id),
-      role text not null check (role in ('lineage_next_base', 'reference')),
+      role text not null check (role in ('lineage_next_base', 'reference', 'reroll_target')),
       position integer not null,
       selection_strategy text not null,
       selection_snapshot_json text not null,

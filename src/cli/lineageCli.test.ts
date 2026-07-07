@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
-import { indexLineageAssets } from '../server/assetLineage';
+import { indexLineageAssets, markLineageRerollRequest } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
 
@@ -183,6 +183,50 @@ describe('lineage CLI handoff commands', () => {
     expect(linked.child_asset_id).toBe(fixtureChildAssetId);
     expect(linked.edge?.child_asset_id).toBe(fixtureChildAssetId);
     expect(linked.message).toContain('Linked');
+  });
+
+  it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {
+    seedCliDb();
+    markLineageRerollRequest(defaultProject, {
+      rootAssetId: fixtureRootAssetId,
+      nodeAssetId: fixtureRootAssetId,
+      notes: 'Fix broken text',
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+
+    const listed = runLineageDataCommand('reroll', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { requests?: Array<{ node_asset_id: string }> };
+    expect(listed.requests?.map(request => request.node_asset_id)).toEqual([fixtureRootAssetId]);
+
+    const planned = runLineageDataCommand('reroll', [
+      'plan',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--prompt', 'Regenerate with clean readable text.',
+      '--json',
+    ]) as { job?: { id: string; source_mode: string } };
+    expect(planned.job).toMatchObject({ source_mode: 'lineage_reroll' });
+
+    mkdirSync(cliScratchDir, { recursive: true });
+    const outputFile = join(cliScratchDir, 'reroll-cli-output.png');
+    writeFileSync(outputFile, 'reroll-cli-output');
+    const imported = runLineageDataCommand('reroll', [
+      'import',
+      '--project', defaultProject,
+      '--job-id', planned.job?.id || '',
+      '--file', outputFile,
+      '--confirm-write',
+      '--json',
+    ]) as { imported?: Array<{ parent_asset_id: string }>; job?: { status: string } };
+
+    expect(imported.job?.status).toBe('imported');
+    expect(imported.imported?.[0].parent_asset_id).toBe(fixtureRootAssetId);
   });
 
   it('keeps package docs aligned with claim-aware mutating command contracts', () => {

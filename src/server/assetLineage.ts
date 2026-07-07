@@ -6,6 +6,9 @@ import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import type {
   AssetReviewState,
   GrowthAsset,
+  LineageAttempt,
+  LineageAttemptPromotionResponse,
+  LineageAttemptsResponse,
   LineageEdge,
   LineageChildrenResponse,
   LineageIndexSummary,
@@ -14,6 +17,9 @@ import type {
   LineageNode,
   LineageNextResponse,
   LineagePosition,
+  LineageRerollRequest,
+  LineageRerollRequestMutationResponse,
+  LineageRerollRequestsResponse,
   LineageSnapshot,
   ReviewFields,
   SelectionFields,
@@ -107,6 +113,12 @@ function rootFor(database: DatabaseSync, project: string, assetId: string): stri
   return assetId;
 }
 
+function assertCanonicalRoot(database: DatabaseSync, project: string, root: string): void {
+  requireAsset(database, project, root);
+  const canonicalRoot = rootFor(database, project, root);
+  if (canonicalRoot !== root) throw new LineageError(`Asset ${root} is not a lineage root`, 400);
+}
+
 function latestSelectedRoot(database: DatabaseSync, project: string): string | undefined {
   const row = database.prepare('select root_asset_id from asset_selections where project_id = ? order by selected_at desc limit 1').get(project) as { root_asset_id?: string } | undefined;
   return row?.root_asset_id;
@@ -125,6 +137,83 @@ function resolveRoot(database: DatabaseSync, project: string, rootAssetId?: stri
 
 function edgeId(project: string, parent: string, child: string): string {
   return `${project}:${parent}:derived_from:${child}`;
+}
+
+function rerollRequestId(project: string, root: string, node: string, timestamp: string): string {
+  return `${project}:${root}:reroll:${node}:${Date.parse(timestamp) || Date.now()}`;
+}
+
+function rowString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
+  return {
+    id: String(row.id),
+    project_id: String(row.project_id),
+    root_asset_id: String(row.root_asset_id),
+    node_asset_id: String(row.node_asset_id),
+    status: row.status as LineageRerollRequest['status'],
+    requested_by: row.requested_by as LineageRerollRequest['requested_by'],
+    notes: rowString(row.notes),
+    created_at: String(row.created_at),
+    resolved_at: rowString(row.resolved_at),
+  };
+}
+
+function attemptFrom(row: Record<string, unknown>): LineageAttempt {
+  return {
+    id: String(row.id),
+    project_id: String(row.project_id),
+    node_asset_id: String(row.node_asset_id),
+    asset_id: String(row.asset_id),
+    attempt_index: Number(row.attempt_index),
+    source: row.source as LineageAttempt['source'],
+    prompt: rowString(row.prompt),
+    generation_job_id: rowString(row.generation_job_id),
+    file_path: rowString(row.file_path),
+    checksum_sha256: rowString(row.checksum_sha256),
+    created_at: String(row.created_at),
+    promoted_at: rowString(row.promoted_at),
+    is_current: Boolean(Number(row.is_current)),
+  };
+}
+
+function implicitAttempt(row: { asset_id: string; project: string; local_path?: string; checksum_sha256?: string; asset_created_at?: string }, isCurrent = true): LineageAttempt {
+  const createdAt = row.asset_created_at || nowIso();
+  return {
+    id: `${row.project}:${row.asset_id}:attempt:implicit`,
+    project_id: row.project,
+    node_asset_id: row.asset_id,
+    asset_id: row.asset_id,
+    attempt_index: 1,
+    source: 'initial',
+    file_path: row.local_path,
+    checksum_sha256: row.checksum_sha256,
+    created_at: createdAt,
+    promoted_at: createdAt,
+    is_current: isCurrent,
+  };
+}
+
+function withImplicitAttempt(physicalAttempts: LineageAttempt[], row: { asset_id: string; project: string; local_path?: string; checksum_sha256?: string; asset_created_at?: string }): LineageAttempt[] {
+  if (physicalAttempts.some(attempt => attempt.source === 'initial')) return physicalAttempts;
+  return [...physicalAttempts, implicitAttempt(row, !physicalAttempts.some(attempt => attempt.is_current))];
+}
+
+function assertNodeInRoot(database: DatabaseSync, project: string, root: string, node: string): void {
+  assertCanonicalRoot(database, project, root);
+  requireAsset(database, project, node);
+  const nodeRoot = rootFor(database, project, node);
+  if (nodeRoot !== root) throw new LineageError(`Asset ${node} is not in lineage rooted at ${root}`);
+}
+
+function assertAttemptAssetNotVisibleLineageNode(database: DatabaseSync, project: string, root: string, assetId: string): void {
+  const visibleNodeIds = new Set([
+    root,
+    ...descendants(database, project, root).flatMap(edge => [edge.parent_asset_id, edge.child_asset_id]),
+  ]);
+  if (visibleNodeIds.has(assetId)) throw new LineageError(`Attempt asset ${assetId} is already a visible lineage node in ${root}`, 400);
 }
 
 function canPreviewLocally(mediaType: string, localPath?: string): boolean {
@@ -184,11 +273,25 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   const rows = database.prepare(`
     select a.id asset_id, a.project_id project, a.source, a.title, a.media_type, a.status, a.channel, a.campaign,
       a.local_path, a.s3_key, a.checksum_sha256, coalesce(r.review_state, 'unreviewed') review_state,
-      r.notes review_notes, l.x layout_x, l.y layout_y
+      r.notes review_notes, a.created_at asset_created_at, l.x layout_x, l.y layout_y
     from assets a left join asset_reviews r on r.asset_id = a.id
       left join asset_layouts l on l.project_id = a.project_id and l.root_asset_id = ? and l.asset_id = a.id
     where a.project_id = ? and a.id in (${placeholders})
-  `).all(root, project, ...ids) as Array<Omit<LineageNode, 'is_latest' | 'position' | 'preview_url' | 'selection_note' | 'user_selected'> & { layout_x?: number; layout_y?: number }>;
+  `).all(root, project, ...ids) as Array<Omit<LineageNode, 'attempt_count' | 'current_attempt' | 'is_latest' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
+  const attemptRows = ids.length > 0
+    ? database.prepare(`select * from asset_attempts where project_id = ? and node_asset_id in (${placeholders}) order by node_asset_id, attempt_index desc`).all(project, ...ids) as Array<Record<string, unknown>>
+    : [];
+  const attemptsByNode = new Map<string, LineageAttempt[]>();
+  for (const attempt of attemptRows.map(attemptFrom)) {
+    attemptsByNode.set(attempt.node_asset_id, [...(attemptsByNode.get(attempt.node_asset_id) || []), attempt]);
+  }
+  const rerollRows = ids.length > 0
+    ? database.prepare(`select * from asset_reroll_requests where project_id = ? and root_asset_id = ? and status = 'pending' and node_asset_id in (${placeholders}) order by created_at`).all(project, root, ...ids) as Array<Record<string, unknown>>
+    : [];
+  const rerollsByNode = new Map(rerollRows.map(row => {
+    const request = rerollRequestFrom(row);
+    return [request.node_asset_id, request] as const;
+  }));
   const selected = selectedRows(database, project, root);
   const childIds = new Set(edges.map(edge => edge.parent_asset_id));
   const selectedIds = new Set(selected.map(row => row.asset_id));
@@ -199,13 +302,19 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   const selection = selections[0] || null;
   const nodes = rows.map(row => {
     const position: LineagePosition | undefined = typeof row.layout_x === 'number' && typeof row.layout_y === 'number' ? { x: row.layout_x, y: row.layout_y } : undefined;
-    const { layout_x: _layoutX, layout_y: _layoutY, ...node } = row;
+    const { asset_created_at: _assetCreatedAt, layout_x: _layoutX, layout_y: _layoutY, ...node } = row;
     const nodeSelection = selections.find(item => item.asset_id === row.asset_id);
+    const attempts = withImplicitAttempt(attemptsByNode.get(row.asset_id) || [], row);
+    const currentAttempt = attempts.find(attempt => attempt.is_current) || attempts[0];
+    const previewPath = currentAttempt?.file_path || row.local_path;
     return {
       ...node,
+      attempt_count: attempts.length,
+      current_attempt: currentAttempt,
       is_latest: !childIds.has(row.asset_id),
       position,
-      preview_url: canPreviewLocally(row.media_type, row.local_path) ? localPreviewUrl(project, row.local_path) : undefined,
+      preview_url: canPreviewLocally(row.media_type, previewPath) ? localPreviewUrl(project, previewPath) : undefined,
+      reroll_request: rerollsByNode.get(row.asset_id),
       selection_note: nodeSelection?.notes,
       user_selected: selectedIds.has(row.asset_id),
     };
@@ -328,6 +437,249 @@ export function getLineageChildren(project: string, parentAssetId: string): Line
     children: snapshot.nodes.filter(node => childIds.has(node.asset_id)),
     edges, fetchedAt: nowIso(),
   };
+}
+
+export function listLineageRerollRequests(project: string, rootAssetId: string): LineageRerollRequestsResponse {
+  const database = db();
+  try {
+    assertCanonicalRoot(database, project, rootAssetId);
+    const rows = database.prepare(`
+      select * from asset_reroll_requests
+      where project_id = ? and root_asset_id = ? and status = 'pending'
+      order by created_at, id
+    `).all(project, rootAssetId) as Array<Record<string, unknown>>;
+    return { project, root_asset_id: rootAssetId, requests: rows.map(rerollRequestFrom), fetchedAt: nowIso() };
+  } finally {
+    database.close();
+  }
+}
+
+export function getLineageAttempts(project: string, rootAssetId: string, nodeAssetId: string): LineageAttemptsResponse {
+  const database = db();
+  try {
+    assertNodeInRoot(database, project, rootAssetId, nodeAssetId);
+    const rows = database.prepare(`
+      select * from asset_attempts
+      where project_id = ? and node_asset_id = ?
+      order by attempt_index desc, created_at desc
+    `).all(project, nodeAssetId) as Array<Record<string, unknown>>;
+    const asset = database.prepare('select id asset_id, project_id project, local_path, checksum_sha256, created_at asset_created_at from assets where project_id = ? and id = ?').get(project, nodeAssetId) as { asset_id: string; project: string; local_path?: string; checksum_sha256?: string; asset_created_at?: string };
+    return { project, root_asset_id: rootAssetId, node_asset_id: nodeAssetId, attempts: withImplicitAttempt(rows.map(attemptFrom), asset), fetchedAt: nowIso() };
+  } finally {
+    database.close();
+  }
+}
+
+export function promoteLineageAttempt(project: string, fields: {
+  rootAssetId: string;
+  nodeAssetId: string;
+  attemptId: string;
+  confirmWrite: boolean;
+}): LineageAttemptPromotionResponse {
+  const database = db();
+  try {
+    assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
+    const asset = database.prepare('select id asset_id, project_id project, local_path, checksum_sha256, created_at asset_created_at from assets where project_id = ? and id = ?').get(project, fields.nodeAssetId) as { asset_id: string; project: string; local_path?: string; checksum_sha256?: string; asset_created_at?: string };
+    const rows = database.prepare(`
+      select * from asset_attempts
+      where project_id = ? and node_asset_id = ?
+      order by attempt_index desc, created_at desc
+    `).all(project, fields.nodeAssetId) as Array<Record<string, unknown>>;
+    const attempts = withImplicitAttempt(rows.map(attemptFrom), asset);
+    const target = attempts.find(attempt => attempt.id === fields.attemptId);
+    if (!target) throw new LineageError(`Attempt ${fields.attemptId} is not in ${fields.nodeAssetId}`, 404);
+    const timestamp = nowIso();
+    const promotedAttempt = { ...target, is_current: true, promoted_at: timestamp };
+    if (!fields.confirmWrite) {
+      return {
+        ok: true,
+        dryRun: true,
+        project,
+        root_asset_id: fields.rootAssetId,
+        node_asset_id: fields.nodeAssetId,
+        attempt: promotedAttempt,
+        attempts: attempts.map(attempt => ({ ...attempt, is_current: attempt.id === target.id, promoted_at: attempt.id === target.id ? timestamp : attempt.promoted_at })),
+        fetchedAt: timestamp,
+      };
+    }
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      database.prepare('update asset_attempts set is_current = 0 where project_id = ? and node_asset_id = ?').run(project, fields.nodeAssetId);
+      if (target.source !== 'initial') {
+        const result = database.prepare(`
+          update asset_attempts
+          set is_current = 1, promoted_at = ?
+          where project_id = ? and node_asset_id = ? and id = ?
+        `).run(timestamp, project, fields.nodeAssetId, target.id);
+        if (result.changes !== 1) throw new LineageError(`Attempt ${fields.attemptId} is not in ${fields.nodeAssetId}`, 404);
+      }
+      database.exec('COMMIT');
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+    const refreshedRows = database.prepare(`
+      select * from asset_attempts
+      where project_id = ? and node_asset_id = ?
+      order by attempt_index desc, created_at desc
+    `).all(project, fields.nodeAssetId) as Array<Record<string, unknown>>;
+    const refreshedAttempts = withImplicitAttempt(refreshedRows.map(attemptFrom), asset);
+    const attempt = refreshedAttempts.find(item => item.id === target.id) || promotedAttempt;
+    return {
+      ok: true,
+      project,
+      root_asset_id: fields.rootAssetId,
+      node_asset_id: fields.nodeAssetId,
+      attempt,
+      attempts: refreshedAttempts,
+      fetchedAt: nowIso(),
+    };
+  } finally {
+    database.close();
+  }
+}
+
+export function recordLineageRerollAttempt(project: string, fields: {
+  rootAssetId: string;
+  nodeAssetId: string;
+  assetId: string;
+  prompt: string;
+  generationJobId: string;
+  filePath: string;
+  checksumSha256: string;
+  confirmWrite: boolean;
+}): { ok: true; attempt: LineageAttempt; dryRun?: true } {
+  const database = db();
+  try {
+    assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
+    requireAsset(database, project, fields.assetId);
+    assertAttemptAssetNotVisibleLineageNode(database, project, fields.rootAssetId, fields.assetId);
+    const timestamp = nowIso();
+    const maxRow = database.prepare('select max(attempt_index) max_index from asset_attempts where project_id = ? and node_asset_id = ?').get(project, fields.nodeAssetId) as { max_index?: number | null };
+    const attemptIndex = Number(maxRow.max_index || 1) + 1;
+    const attempt: LineageAttempt = {
+      id: `${project}:${fields.nodeAssetId}:attempt:${attemptIndex}`,
+      project_id: project,
+      node_asset_id: fields.nodeAssetId,
+      asset_id: fields.assetId,
+      attempt_index: attemptIndex,
+      source: 'reroll',
+      prompt: fields.prompt,
+      generation_job_id: fields.generationJobId,
+      file_path: fields.filePath,
+      checksum_sha256: fields.checksumSha256,
+      created_at: timestamp,
+      promoted_at: timestamp,
+      is_current: true,
+    };
+    if (!fields.confirmWrite) return { ok: true, dryRun: true, attempt };
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      database.prepare('update asset_attempts set is_current = 0 where project_id = ? and node_asset_id = ?').run(project, fields.nodeAssetId);
+      database.prepare(`
+        insert into asset_attempts (
+          id, project_id, node_asset_id, asset_id, attempt_index, source, prompt, generation_job_id,
+          file_path, checksum_sha256, created_at, promoted_at, is_current
+        ) values (?, ?, ?, ?, ?, 'reroll', ?, ?, ?, ?, ?, ?, 1)
+      `).run(
+        attempt.id, project, fields.nodeAssetId, fields.assetId, attempt.attempt_index, fields.prompt,
+        fields.generationJobId, fields.filePath, fields.checksumSha256, timestamp, timestamp
+      );
+      database.prepare(`
+        update asset_reroll_requests
+        set status = 'resolved', resolved_at = ?
+        where project_id = ? and root_asset_id = ? and node_asset_id = ? and status = 'pending'
+      `).run(timestamp, project, fields.rootAssetId, fields.nodeAssetId);
+      database.prepare(`
+        insert into asset_reviews (asset_id, review_state, reviewed_at, ignored_at, notes, updated_at)
+        values (?, 'unreviewed', ?, null, null, ?)
+        on conflict(asset_id) do update set
+          review_state = excluded.review_state, reviewed_at = excluded.reviewed_at,
+          ignored_at = excluded.ignored_at, updated_at = excluded.updated_at
+      `).run(fields.nodeAssetId, timestamp, timestamp);
+      database.exec('COMMIT');
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+    return { ok: true, attempt };
+  } finally {
+    database.close();
+  }
+}
+
+export function markLineageRerollRequest(project: string, fields: { rootAssetId: string; nodeAssetId: string; notes?: string; requestedBy?: 'agent' | 'human' | 'system'; confirmWrite: boolean }): LineageRerollRequestMutationResponse {
+  const database = db();
+  try {
+    assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
+    const existing = database.prepare(`
+      select * from asset_reroll_requests
+      where project_id = ? and root_asset_id = ? and node_asset_id = ? and status = 'pending'
+      order by created_at desc limit 1
+    `).get(project, fields.rootAssetId, fields.nodeAssetId) as Record<string, unknown> | undefined;
+    const timestamp = nowIso();
+    const request: LineageRerollRequest = existing ? {
+      ...rerollRequestFrom(existing),
+      notes: fields.notes || rerollRequestFrom(existing).notes,
+      requested_by: fields.requestedBy || rerollRequestFrom(existing).requested_by,
+    } : {
+      id: rerollRequestId(project, fields.rootAssetId, fields.nodeAssetId, timestamp),
+      project_id: project,
+      root_asset_id: fields.rootAssetId,
+      node_asset_id: fields.nodeAssetId,
+      status: 'pending',
+      requested_by: fields.requestedBy || 'human',
+      notes: fields.notes,
+      created_at: timestamp,
+    };
+    if (!fields.confirmWrite) return { ok: true, dryRun: true, request };
+    if (existing) {
+      database.prepare(`
+        update asset_reroll_requests
+        set requested_by = ?, notes = ?
+        where id = ?
+      `).run(request.requested_by, request.notes || null, request.id);
+    } else {
+      database.prepare(`
+        insert into asset_reroll_requests (id, project_id, root_asset_id, node_asset_id, status, requested_by, notes, created_at, resolved_at)
+        values (?, ?, ?, ?, 'pending', ?, ?, ?, null)
+      `).run(request.id, project, fields.rootAssetId, fields.nodeAssetId, request.requested_by, request.notes || null, request.created_at);
+    }
+    database.prepare(`
+      insert into asset_reviews (asset_id, review_state, reviewed_at, ignored_at, notes, updated_at)
+      values (?, 'needs_revision', ?, null, ?, ?)
+      on conflict(asset_id) do update set
+        review_state = excluded.review_state, reviewed_at = excluded.reviewed_at,
+        ignored_at = excluded.ignored_at, notes = coalesce(excluded.notes, asset_reviews.notes), updated_at = excluded.updated_at
+    `).run(fields.nodeAssetId, timestamp, request.notes || null, timestamp);
+    return { ok: true, request: rerollRequestFrom(database.prepare('select * from asset_reroll_requests where id = ?').get(request.id) as Record<string, unknown>) };
+  } finally {
+    database.close();
+  }
+}
+
+export function clearLineageRerollRequest(project: string, fields: { rootAssetId: string; nodeAssetId: string; confirmWrite: boolean }): LineageRerollRequestMutationResponse {
+  const database = db();
+  try {
+    assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
+    const existing = database.prepare(`
+      select * from asset_reroll_requests
+      where project_id = ? and root_asset_id = ? and node_asset_id = ? and status = 'pending'
+      order by created_at desc limit 1
+    `).get(project, fields.rootAssetId, fields.nodeAssetId) as Record<string, unknown> | undefined;
+    if (!existing) throw new LineageError(`No pending re-roll request for ${fields.nodeAssetId}`, 404);
+    const timestamp = nowIso();
+    const request = { ...rerollRequestFrom(existing), status: 'cancelled' as const, resolved_at: timestamp };
+    if (!fields.confirmWrite) return { ok: true, dryRun: true, request };
+    database.prepare(`
+      update asset_reroll_requests
+      set status = 'cancelled', resolved_at = ?
+      where id = ?
+    `).run(timestamp, request.id);
+    return { ok: true, request };
+  } finally {
+    database.close();
+  }
 }
 
 export function updateSelectedAsset(project: string, fields: SelectionFields) {

@@ -17,8 +17,9 @@ import {
   type AgentClaimScopeType,
 } from '../server/agentClaims';
 import { defaultProduct } from '../server/assetCore';
-import { getLineageNextAsset, getLineageSnapshot } from '../server/assetLineage';
+import { getLineageNextAsset, getLineageSnapshot, listLineageRerollRequests } from '../server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineageHandoff';
+import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
 
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev';
@@ -106,6 +107,9 @@ Usage:
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} reroll plan --root <asset-id> --target <asset-id> --prompt <text> [--project <project>] [--db <path>] [--json]
+  ${config.binName} reroll import --job-id <job-id> --file <scratch-file> --confirm-write [--project <project>] [--db <path>] [--json]
   ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
   ${config.binName} agent status [--project <project>] [--json]
   ${config.binName} agent inspect --claim <claim-id> [--project <project>] [--json]
@@ -172,6 +176,34 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
       rootAssetId: options.rootAssetId || options.assetId,
     });
   }
+  if (command === 'reroll') {
+    const subcommand = positionalArgs(args)[0] || '';
+    if (subcommand === 'list') {
+      if (!options.rootAssetId) throw new Error('lineage reroll list requires --root');
+      return listLineageRerollRequests(options.project, options.rootAssetId);
+    }
+    if (subcommand === 'plan') {
+      const targetAssetId = readOption(args, '--target');
+      const prompt = readOption(args, '--prompt');
+      if (!options.rootAssetId) throw new Error('lineage reroll plan requires --root');
+      if (!targetAssetId) throw new Error('lineage reroll plan requires --target');
+      if (!prompt) throw new Error('lineage reroll plan requires --prompt');
+      return planImageReroll(options.project, {
+        rootAssetId: options.rootAssetId,
+        targetAssetId,
+        prompt,
+        dryRun: args.includes('--dry-run'),
+      });
+    }
+    if (subcommand === 'import') {
+      const jobId = readOption(args, '--job-id');
+      const file = readOption(args, '--file');
+      if (!jobId) throw new Error('lineage reroll import requires --job-id');
+      if (!file) throw new Error('lineage reroll import requires --file');
+      return importImageRerollOutput(options.project, { jobId, file, confirmWrite: options.confirmWrite });
+    }
+    throw new Error(`Unknown reroll command: ${subcommand}`);
+  }
   throw new Error(`Unknown command: ${command}`);
 }
 
@@ -202,6 +234,19 @@ function printDataResult(command: string, result: unknown, json: boolean): void 
     const link = result as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string }; message?: string };
     console.log(link.message || `${link.dryRun ? 'Dry run: ' : ''}Link ${link.edge?.child_asset_id || 'child'} from ${link.edge?.parent_asset_id || 'parent'}`);
     return;
+  }
+  if (command === 'reroll' && result && typeof result === 'object') {
+    if ('requests' in result) {
+      const listed = result as { requests: Array<{ node_asset_id: string; notes?: string }> };
+      console.log(`${listed.requests.length} pending re-roll target(s)`);
+      for (const request of listed.requests) console.log(`${request.node_asset_id}${request.notes ? `: ${request.notes}` : ''}`);
+      return;
+    }
+    if ('job' in result) {
+      const planned = result as { imported?: unknown[]; job?: { id: string; status: string } };
+      console.log(planned.imported ? `Imported re-roll for ${planned.job?.id || 'job'}` : `Planned re-roll ${planned.job?.id || 'job'}`);
+      return;
+    }
   }
   console.log(String(result));
 }
@@ -362,7 +407,7 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     return;
   }
 
-  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'link-child') {
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'link-child' || command === 'reroll') {
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {

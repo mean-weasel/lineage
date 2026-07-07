@@ -2,13 +2,15 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
-import { indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
+import { getLineageAttempts, getLineageSnapshot, indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
 import { createLineageWorkspace } from './assetLineageWorkspaces';
 import {
   importImageGenerationOutputs,
+  importImageRerollOutput,
   inspectImageGeneration,
   planImageGeneration,
+  planImageReroll,
 } from './generationReceipts';
 import { listImageGenerationJobs } from './generationReceiptJobs';
 import { fileSha256 } from './localReview';
@@ -291,6 +293,65 @@ describe('generation receipts', () => {
       mapping_strategy: 'explicit_parent_files',
       files: [0, 1, 2, 3].map(output_index => ({ output_index, parent_asset_id: output_index < 2 ? lineage.selectedId : lineage.otherId })),
     });
+  });
+
+  it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
+    const lineage = setupSelectedLineage('reroll');
+    markLineageRerollRequest(defaultProject, {
+      rootAssetId: lineage.rootId,
+      nodeAssetId: lineage.selectedId,
+      notes: 'Fix text',
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+    const output = writeScratch('imports/reroll-output.png', 'reroll-output');
+
+    const plan = planImageReroll(defaultProject, {
+      targetAssetId: lineage.selectedId,
+      rootAssetId: lineage.rootId,
+      prompt: 'Regenerate the same image with readable headline text.',
+    });
+    expect(plan.job.source_mode).toBe('lineage_reroll');
+    expect(plan.job.expected_output_count).toBe(1);
+    expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'reroll_target' });
+
+    const imported = importImageRerollOutput(defaultProject, {
+      jobId: plan.job.id,
+      file: output,
+      confirmWrite: true,
+    });
+
+    expect(imported.imported[0].parent_asset_id).toBe(lineage.selectedId);
+    const snapshot = getLineageSnapshot(defaultProject, lineage.rootId);
+    const node = snapshot.nodes.find(item => item.asset_id === lineage.selectedId);
+    expect(node?.attempt_count).toBe(2);
+    expect(node?.current_attempt).toMatchObject({ source: 'reroll', attempt_index: 2 });
+    expect(node?.review_state).toBe('unreviewed');
+    expect(node?.reroll_request).toBeUndefined();
+    expect(snapshot.edges.some(edge => edge.parent_asset_id === lineage.selectedId && edge.child_asset_id === imported.imported[0].imported_asset_id)).toBe(false);
+    const attempts = getLineageAttempts(defaultProject, lineage.rootId, lineage.selectedId).attempts;
+    expect(attempts.filter(attempt => attempt.is_current).map(attempt => attempt.attempt_index)).toEqual([2]);
+  });
+
+  it('rejects re-roll import without --confirm-write before writing outputs or attempts', () => {
+    const lineage = setupSelectedLineage('reroll-no-confirm');
+    markLineageRerollRequest(defaultProject, { rootAssetId: lineage.rootId, nodeAssetId: lineage.selectedId, requestedBy: 'human', confirmWrite: true });
+    const output = writeScratch('imports/reroll-no-confirm.png', 'reroll-no-confirm');
+    const plan = planImageReroll(defaultProject, { rootAssetId: lineage.rootId, targetAssetId: lineage.selectedId, prompt: 'Fix text' });
+
+    expect(() => importImageRerollOutput(defaultProject, { jobId: plan.job.id, file: output, confirmWrite: false })).toThrow('Generation import requires --confirm-write');
+    expect(countRows('generation_job_outputs')).toBe(0);
+    expect(countRows('asset_attempts')).toBe(0);
+  });
+
+  it('rejects re-roll import files outside .asset-scratch before writing outputs or attempts', () => {
+    const lineage = setupSelectedLineage('reroll-outside');
+    markLineageRerollRequest(defaultProject, { rootAssetId: lineage.rootId, nodeAssetId: lineage.selectedId, requestedBy: 'human', confirmWrite: true });
+    const plan = planImageReroll(defaultProject, { rootAssetId: lineage.rootId, targetAssetId: lineage.selectedId, prompt: 'Fix text' });
+
+    expect(() => importImageRerollOutput(defaultProject, { jobId: plan.job.id, file: resolve(repoRoot, 'package.json'), confirmWrite: true })).toThrow('Import file must be under .asset-scratch');
+    expect(countRows('generation_job_outputs')).toBe(0);
+    expect(countRows('asset_attempts')).toBe(0);
   });
 
   it('rejects missing or unknown explicit parent file mappings without output rows', () => {

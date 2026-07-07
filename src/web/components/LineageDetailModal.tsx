@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { AssetReviewState, LineageNode, LineageSnapshot } from '../../shared/types';
 import type { GenerationJobListResponse } from '../../shared/generationTypes';
 import { storageStateFor } from '../assetUi';
-import { copyToClipboard } from '../clipboard';
 import { api } from '../api';
+import { LineageNodeActionFooter } from './LineageNodeActionFooter';
 import './LineageDetailModal.css';
 
 const receiptOrder = { plan: 0, import: 1, error: 2 };
@@ -43,11 +43,6 @@ export function LineageDetailModal({
     .map(edge => snapshot.nodes.find(item => item.asset_id === edge.parent_asset_id)).filter((item): item is LineageNode => Boolean(item));
   const children = snapshot.edges.filter(edge => edge.parent_asset_id === node.asset_id)
     .map(edge => snapshot.nodes.find(item => item.asset_id === edge.child_asset_id)).filter((item): item is LineageNode => Boolean(item));
-  const latestNodes = snapshot.nodes.filter(item => snapshot.latest.includes(item.asset_id));
-  const latestIndex = latestNodes.findIndex(item => item.asset_id === node.asset_id);
-  const previousLatest = latestIndex > 0 ? latestNodes[latestIndex - 1] : null;
-  const nextLatest = latestIndex >= 0 && latestIndex < latestNodes.length - 1 ? latestNodes[latestIndex + 1] : null;
-  const nextBaseLabel = node.user_selected ? 'Remove from next variation' : selectionFull ? 'Selection full' : 'Use for next variation';
   const storage = storageStateFor({ hasLocal: Boolean(node.local_path), hasS3: Boolean(node.s3_key) });
   const [proof, setProof] = useState<GenerationJobListResponse | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
@@ -76,18 +71,6 @@ export function LineageDetailModal({
       });
     return () => { cancelled = true; };
   }, [node.asset_id, snapshot.project, snapshot.root_asset_id]);
-
-  async function copyPath() {
-    const path = node.local_path || node.s3_key;
-    if (!path) return;
-    const label = node.local_path ? 'local path' : 'S3 key';
-    try {
-      await copyToClipboard(path);
-      onToast('ok', `Copied ${label}`);
-    } catch (error) {
-      onToast('error', error instanceof Error ? error.message : String(error));
-    }
-  }
 
   function openNode(assetId: string) {
     onOpenNode(assetId);
@@ -186,24 +169,21 @@ export function LineageDetailModal({
             ))}
           </section>
         </div>
-        <footer className="lineage-detail-actions">
-          <button aria-label={node.user_selected ? `Remove ${node.title} from next variation` : `Use ${node.title} for next variation`} className="primary-lite" disabled={!node.user_selected && selectionFull} onClick={() => node.user_selected ? onClearNext() : onSelectNext(node)}>
-            {nextBaseLabel}
-          </button>
-          {node.user_selected && selectedCount > 1 && <button onClick={() => onReplaceNext(node)}>Use only this for next variation</button>}
-          {!node.user_selected && selectedCount > 0 && <button onClick={() => onReplaceNext(node)}>Replace selection</button>}
-          {selectedCount > 0 && <button onClick={onClearAllNext}>Clear all next variation</button>}
-          {previousLatest && <button onClick={() => openNode(previousLatest.asset_id)}>Previous latest</button>}
-          {nextLatest && <button onClick={() => openNode(nextLatest.asset_id)}>Next latest</button>}
-          {node.preview_url && <a href={node.preview_url} rel="noreferrer" target="_blank">Open preview</a>}
-          {(node.local_path || node.s3_key) && <button onClick={() => void copyPath()}>Copy {node.local_path ? 'local path' : 'S3 key'}</button>}
-          <button aria-label={`Approve ${node.title}`} onClick={() => onReview('approved', node.asset_id)}>Approve</button>
-          <button aria-label={`Reject ${node.title}`} onClick={() => onReview('rejected', node.asset_id)}>Reject</button>
-          <button aria-label={`Ignore ${node.title}`} onClick={() => onReview('ignored', node.asset_id)}>Ignore</button>
-          <button aria-label={canRemoveFromLineage ? `Remove ${node.title} from lineage` : 'Root cannot be removed from lineage'} className="danger" disabled={!canRemoveFromLineage} onClick={() => onRemoveFromLineage(node)}>
-            {canRemoveFromLineage ? 'Remove from lineage' : 'Root cannot be removed'}
-          </button>
-        </footer>
+        <LineageNodeActionFooter
+          canRemoveFromLineage={canRemoveFromLineage}
+          node={node}
+          onClearAllNext={onClearAllNext}
+          onClearNext={onClearNext}
+          onOpenNode={openNode}
+          onRemoveFromLineage={onRemoveFromLineage}
+          onReplaceNext={onReplaceNext}
+          onReview={onReview}
+          onSelectNext={onSelectNext}
+          onToast={onToast}
+          selectedCount={selectedCount}
+          selectionFull={selectionFull}
+          snapshot={snapshot}
+        />
       </section>
     </div>
   );

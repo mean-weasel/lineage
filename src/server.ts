@@ -4,7 +4,22 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { archiveAsset, cleanupUploadedTemp, defaultProduct, deleteObjectGuarded, ensureUploadDir, isLineageAssetError, listAssets, listProjects, localPreviewPath, presignAsset, pullAsset, promoteAsset, repoRoot, uploadAsset, updatePlacement } from './server/assetCore';
 import { isAssetLookupError, lookupAssets } from './server/assetLookup';
-import { getLineageChildren, getLineageNextAsset, getLineageSnapshot, indexLineageAssets, isLineageError, linkLineageAssets, updateAssetReview, updateLineageLayout, updateSelectedAsset } from './server/assetLineage';
+import {
+  clearLineageRerollRequest,
+  getLineageAttempts,
+  getLineageChildren,
+  getLineageNextAsset,
+  getLineageSnapshot,
+  indexLineageAssets,
+  isLineageError,
+  linkLineageAssets,
+  listLineageRerollRequests,
+  markLineageRerollRequest,
+  promoteLineageAttempt,
+  updateAssetReview,
+  updateLineageLayout,
+  updateSelectedAsset,
+} from './server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from './server/assetLineageHandoff';
 import { removeLineageNode } from './server/assetLineageRemove';
 import { isLineageWorkspaceError } from './server/assetLineageWorkspaces';
@@ -119,6 +134,41 @@ app.get(
 );
 
 registerLineageWorkspaceRoutes(app, projectFrom, asyncRoute);
+
+app.get('/api/lineage/:rootAssetId/rerolls', asyncRoute((req, res) => {
+  res.json(listLineageRerollRequests(projectFrom(req), req.params.rootAssetId));
+}));
+
+app.post('/api/lineage/:rootAssetId/rerolls/:nodeAssetId', asyncRoute((req, res) => {
+  res.json(markLineageRerollRequest(projectFrom(req), {
+    rootAssetId: req.params.rootAssetId,
+    nodeAssetId: req.params.nodeAssetId,
+    notes: typeof req.body.notes === 'string' ? req.body.notes : undefined,
+    requestedBy: req.body.requestedBy === 'agent' || req.body.requestedBy === 'system' ? req.body.requestedBy : 'human',
+    confirmWrite: req.body.confirmWrite === true,
+  }));
+}));
+
+app.post('/api/lineage/:rootAssetId/rerolls/:nodeAssetId/cancel', asyncRoute((req, res) => {
+  res.json(clearLineageRerollRequest(projectFrom(req), {
+    rootAssetId: req.params.rootAssetId,
+    nodeAssetId: req.params.nodeAssetId,
+    confirmWrite: req.body.confirmWrite === true,
+  }));
+}));
+
+app.get('/api/lineage/:rootAssetId/attempts/:nodeAssetId', asyncRoute((req, res) => {
+  res.json(getLineageAttempts(projectFrom(req), req.params.rootAssetId, req.params.nodeAssetId));
+}));
+
+app.post('/api/lineage/:rootAssetId/attempts/:nodeAssetId/promote', asyncRoute((req, res) => {
+  res.json(promoteLineageAttempt(projectFrom(req), {
+    rootAssetId: req.params.rootAssetId,
+    nodeAssetId: req.params.nodeAssetId,
+    attemptId: String(req.body.attemptId || ''),
+    confirmWrite: req.body.confirmWrite === true,
+  }));
+}));
 
 app.get('/api/lineage/:assetId', asyncRoute((req, res) => { res.json(getLineageSnapshot(projectFrom(req), req.params.assetId)); }));
 

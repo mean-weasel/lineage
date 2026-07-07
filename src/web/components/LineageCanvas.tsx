@@ -20,6 +20,7 @@ export function LineageCanvas({
   onNodeActionMenu,
   onNodeInspect,
   onNodeOpenDetail,
+  onNodeOpenHistory,
   onNodePosition,
   onNodesChange,
   onReady,
@@ -42,6 +43,7 @@ export function LineageCanvas({
   onNodeActionMenu: (assetId: string, x: number, y: number) => void;
   onNodeInspect: (assetId: string | null) => void;
   onNodeOpenDetail: (assetId: string) => void;
+  onNodeOpenHistory: (assetId: string) => void;
   onNodePosition: (node: AssetFlowNode) => void;
   onNodesChange: (changes: NodeChange<AssetFlowNode>[]) => void;
   onReady: (instance: ReactFlowInstance<AssetFlowNode, Edge>) => void;
@@ -66,7 +68,7 @@ export function LineageCanvas({
       </div>
     );
   }
-  const interactiveNodes = flowNodes.map(node => ({ ...node, data: { ...node.data, onOpenDetail: onNodeOpenDetail } }));
+  const interactiveNodes = flowNodes.map(node => ({ ...node, data: { ...node.data, onOpenDetail: onNodeOpenDetail, onOpenHistory: onNodeOpenHistory } }));
 
   return (
     <>
@@ -90,7 +92,12 @@ export function LineageCanvas({
         onEdgesChange={onEdgesChange}
         onNodeClick={(_event, node) => { onNodeActionMenu('', 0, 0); onNodeInspect(node.id); onSelectedAsset(node.id); }}
         onNodeContextMenu={(event, node) => { event.preventDefault(); onNodeInspect(node.id); onNodeActionMenu(node.id, event.clientX, event.clientY); onSelectedAsset(node.id); }}
-        onNodeDoubleClick={(_event, node) => { onNodeInspect(node.id); onNodeOpenDetail(node.id); onSelectedAsset(node.id); }}
+        onNodeDoubleClick={(_event, node) => {
+          onNodeInspect(node.id);
+          if ((node.data.attempt_count || 1) > 1) onNodeOpenHistory(node.id);
+          else onNodeOpenDetail(node.id);
+          onSelectedAsset(node.id);
+        }}
         onNodeDragStop={(_event, node) => onNodePosition(node)}
         onNodesChange={onNodesChange}
         onInit={onReady}

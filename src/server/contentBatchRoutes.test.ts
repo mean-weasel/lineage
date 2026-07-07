@@ -53,6 +53,7 @@ describe('content batch routes', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
     process.env.LINEAGE_DB = dbFile;
+    process.env.LINEAGE_CONTENT_SOURCE_ROOT = join(scratchDir, 'missing-content-source');
   });
 
   afterEach(() => {

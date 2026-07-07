@@ -8,6 +8,7 @@ export function LineageContextMenu({
   node,
   claims = [],
   onClearAllNext,
+  onClearReroll,
   onClaimControl,
   canRemoveFromLineage,
   onClearNext,
@@ -17,6 +18,7 @@ export function LineageContextMenu({
   onReplaceNext,
   onReview,
   onSelectNext,
+  onMarkReroll,
   position,
   selectedCount,
   selectionFull,
@@ -25,6 +27,7 @@ export function LineageContextMenu({
   canRemoveFromLineage: boolean;
   claims?: AgentClaimSummary[];
   onClearAllNext: () => void;
+  onClearReroll: () => void;
   onClaimControl?: (action: ClaimControlAction, claim: AgentClaimSummary, body: ClaimControlBody) => void;
   onClearNext: () => void;
   onClose: () => void;
@@ -33,6 +36,7 @@ export function LineageContextMenu({
   onReplaceNext: () => void;
   onReview: (reviewState: AssetReviewState) => void;
   onSelectNext: () => void;
+  onMarkReroll: () => void;
   position: { x: number; y: number };
   selectedCount: number;
   selectionFull: boolean;
@@ -52,6 +56,9 @@ export function LineageContextMenu({
       {node.user_selected && selectedCount > 1 && <button className="selection-replace" onClick={() => run(onReplaceNext)} role="menuitem">Use only this for next variation</button>}
       {selectedCount > 0 && <button onClick={() => run(onClearAllNext)} role="menuitem">Clear all next variation</button>}
       {node.user_selected && !node.is_latest && <p role="status">Selected but not latest. Good for branching from an earlier idea.</p>}
+      {node.reroll_request?.status === 'pending'
+        ? <button className="reroll-action" onClick={() => run(onClearReroll)} role="menuitem">Clear re-roll request</button>
+        : <button className="reroll-action" onClick={() => run(onMarkReroll)} role="menuitem">Mark for re-roll</button>}
       {claims.length > 0 && (
         <div className="lineage-context-claims" role="group" aria-label="Agent claim controls">
           <span>{claimLabel(claims)}</span>

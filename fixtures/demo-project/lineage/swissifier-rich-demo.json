@@ -1,7 +1,7 @@
 {
   "id": "swissifier-rich-demo",
   "title": "Swissifier rich demo",
-  "notes": "Rich demo seed rooted on the first generated Swissifier LinkedIn creative. Generated PNG media is restored from the pinned optional release pack.",
+  "notes": "Rich demo seed rooted on the first generated Swissifier LinkedIn creative. Base PNG media is restored from the pinned optional release pack; three synthetic re-roll PNG fixtures are packaged and pinned below by checksum and size.",
   "campaign": "local-review",
   "audience": "local-review",
   "media": {
@@ -19,6 +19,43 @@
   "selected_asset_ids": [
     "local-27050bc5c393",
     "local-6d06bdbd9f56"
+  ],
+  "reroll_attempts": [
+    {
+      "node_asset_id": "local-27050bc5c393",
+      "file": "swissifier-vertical-before-after-reroll-v2.png",
+      "title": "swissifier vertical before after reroll v2",
+      "prompt": "Re-roll the before/after poster. Remove garbled caption text, keep the two-panel Swiss composition, and make the product shape clearer.",
+      "generation_job_id": "demo-swissifier-reroll-before-after-v2",
+      "checksum_sha256": "467ea38c930dbf3b72dd2e6b1fafef1049608c12edef0e76ea89f928c6ca13a4",
+      "size_bytes": 2158777,
+      "content_type": "image/png",
+      "attempt_index": 2
+    },
+    {
+      "node_asset_id": "local-27050bc5c393",
+      "file": "swissifier-vertical-before-after-reroll-v3.png",
+      "title": "swissifier vertical before after reroll v3",
+      "prompt": "Re-roll again with clean geometric blocks, no legible copy, brighter contrast, and no obfuscating dark bar.",
+      "generation_job_id": "demo-swissifier-reroll-before-after-v3",
+      "checksum_sha256": "1e30dbc03c9bce31c3956f6c43fbebbfa087988f93a7c8e23d19350f25fe02c4",
+      "size_bytes": 2075293,
+      "content_type": "image/png",
+      "attempt_index": 3,
+      "current": true
+    },
+    {
+      "node_asset_id": "local-6d06bdbd9f56",
+      "file": "swissifier-drill-mint-diagonal-reroll-v2.png",
+      "title": "swissifier drill mint diagonal reroll v2",
+      "prompt": "Re-roll the mint drill image. Remove the stray diagonal artifact, keep the Swiss grid, and make the drill silhouette more readable.",
+      "generation_job_id": "demo-swissifier-reroll-drill-mint-v2",
+      "checksum_sha256": "75d9d318aedb2722761fa2f48d88a0e34cb56e27ed4f8d22f79e7798a6c4269e",
+      "size_bytes": 2200225,
+      "content_type": "image/png",
+      "attempt_index": 2,
+      "current": true
+    }
   ],
   "assets": [
     {

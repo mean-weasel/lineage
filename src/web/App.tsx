@@ -22,10 +22,16 @@ import { UploadDrawer } from './components/UploadDrawer';
 import { canPreview, defaultProject, selectedOrFirst, type PlacementFilter, type SourceFilter, type StudioView, type StatusFilter, type Toast } from './assetUi';
 import { copyToClipboard } from './clipboard';
 import { shouldRevealCopiedText } from './copyFallback';
+
+function initialProjectFromUrl(): string {
+  if (typeof window === 'undefined') return defaultProject;
+  return new URLSearchParams(window.location.search).get('project') || defaultProject;
+}
+
 export function App() {
   const [snapshot, setSnapshot] = useState<AssetLibrarySnapshot | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [project, setProject] = useState(defaultProject);
+  const [project, setProject] = useState(initialProjectFromUrl);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [status, setStatus] = useState<StatusFilter>('all');
   const [placementStatus, setPlacementStatus] = useState<PlacementFilter>('all');
@@ -207,6 +213,20 @@ export function App() {
   useEffect(() => {
     void refreshProjects();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('project') === project) return;
+    params.set('project', project);
+    window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+  }, [project]);
+
+  useEffect(() => {
+    setToast(null);
+    setCopiedText(null);
+    setInspectedAsset(null);
+    setAssetDetailsOpen(false);
+  }, [project]);
 
   useEffect(() => {
     void refresh();

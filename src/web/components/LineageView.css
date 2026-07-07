@@ -726,6 +726,16 @@
   color: #1f6b3a;
 }
 
+.lineage-badges .attempt-stack {
+  background: #f2ecff;
+  color: #5b3a8d;
+}
+
+.lineage-badges .reroll {
+  background: #fff0e8;
+  color: #8a4526;
+}
+
 .lineage-badges .local-only {
   background: #fff7d7;
   color: #6e5812;
