@@ -209,6 +209,32 @@ describe('agent claims', () => {
     })).toMatchObject({ code: 'claim_channel_mismatch', ok: false });
   });
 
+  it('supports lineage_task claims for task-level occupancy', () => {
+    process.env.LINEAGE_DB = dbFile;
+    const created = createAgentClaim({
+      agentName: 'Task agent',
+      project: defaultProject,
+      scopeType: 'lineage_task',
+      targetId: 'task_demo_root_iterate_child',
+      targetTitle: 'Iterate child image',
+    });
+
+    expect(created.claim).toMatchObject({
+      project: defaultProject,
+      scope_type: 'lineage_task',
+      target_id: 'task_demo_root_iterate_child',
+    });
+
+    expect(validateAgentClaimForWrite({
+      claimToken: created.claim_token,
+      dangerLevel: 'enforce',
+      project: defaultProject,
+      scopeType: 'lineage_task',
+      targetId: 'task_demo_root_iterate_child',
+      writeKind: 'lineage_task_start',
+    })).toMatchObject({ ok: true });
+  });
+
   it('requires confirmation and reason for human revocation', () => {
     const created = createWorkspaceClaim();
 

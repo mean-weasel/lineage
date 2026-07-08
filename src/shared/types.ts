@@ -307,6 +307,56 @@ export interface LineageRerollRequest {
   resolved_at?: string;
 }
 
+type LineageTaskType = 'iterate' | 'reroll';
+type LineageTaskStatus = 'pending' | 'claimed' | 'in_progress' | 'resolved' | 'cancelled';
+type LineageTaskActor = 'human' | 'agent' | 'system';
+
+export interface LineageTaskEvent {
+  id: string;
+  task_id: string;
+  event_type: 'created' | 'instructions_updated' | 'comment_added' | 'claimed' | 'started' | 'resolved' | 'cancelled' | 'human_override' | 'claim_released';
+  actor?: LineageTaskActor | string;
+  message?: string;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LineageTask {
+  id: string;
+  project_id: string;
+  root_asset_id: string;
+  target_asset_id: string;
+  task_type: LineageTaskType;
+  status: LineageTaskStatus;
+  instructions?: string;
+  created_by: LineageTaskActor;
+  created_at: string;
+  updated_at: string;
+  claimed_at?: string;
+  started_at?: string;
+  resolved_at?: string;
+  cancelled_at?: string;
+  resolved_generation_job_id?: string;
+  resolved_asset_id?: string;
+  metadata?: Record<string, unknown>;
+  events?: LineageTaskEvent[];
+  active_claim?: AgentClaimSummary;
+}
+
+export interface LineageTasksResponse {
+  project: string;
+  root_asset_id: string;
+  tasks: LineageTask[];
+  fetchedAt: string;
+}
+
+export interface LineageTaskMutationResponse {
+  ok: true;
+  dryRun?: true;
+  task: LineageTask;
+  events?: LineageTaskEvent[];
+}
+
 export interface LineageEdge {
   id: string;
   parent_asset_id: string;
@@ -405,7 +455,7 @@ export interface LineageBriefResponse {
 export type { GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider, GenerationSourceMode } from './generationTypes';
 export type { LineageWorkspace, LineageWorkspaceActor, LineageWorkspaceFields, LineageWorkspaceSnapshot, LineageWorkspaceStatus, LineageWorkspaceUpdateFields } from './lineageWorkspaceTypes';
 
-type AgentClaimScopeType = 'lineage_workspace' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
+type AgentClaimScopeType = 'lineage_workspace' | 'lineage_task' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
 type AgentClaimStatus = 'active' | 'expired' | 'released' | 'revoked' | 'transferred';
 type AgentClaimDerivedState = 'active' | 'idle' | 'stale' | 'expired';
 

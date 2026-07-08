@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 
-export type AgentClaimScopeType = 'lineage_workspace' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
+export type AgentClaimScopeType = 'lineage_workspace' | 'lineage_task' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
 type AgentClaimStatus = 'active' | 'expired' | 'released' | 'revoked' | 'transferred';
 
 export interface AgentClaim {
@@ -73,7 +73,7 @@ type Row = Record<string, unknown>;
 const defaultTtlSeconds = 20 * 60;
 const idleAfterSeconds = 5 * 60;
 const staleAfterSeconds = 15 * 60;
-const scopes = new Set<AgentClaimScopeType>(['lineage_workspace', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel']);
+const scopes = new Set<AgentClaimScopeType>(['lineage_workspace', 'lineage_task', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel']);
 const claimTokenPattern = /claim_[a-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 
 export class AgentClaimError extends Error {
