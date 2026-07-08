@@ -514,37 +514,48 @@ function ensureAgentClaimScopeValues(database: DatabaseSync): void {
   const createSql = database.prepare("select sql from sqlite_master where type = 'table' and name = 'agent_claims'").get() as { sql?: string } | undefined;
   if (createSql?.sql?.includes("'lineage_task'")) return;
 
-  database.exec(`
-    alter table agent_claims rename to agent_claims_old;
-    create table agent_claims (
-      id text primary key,
-      token_hash text not null,
-      project_id text not null references projects(id),
-      channel text,
-      scope_type text not null check (scope_type in ('lineage_workspace', 'lineage_task', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
-      target_id text not null,
-      target_title text,
-      agent_id text,
-      agent_name text not null,
-      agent_kind text not null,
-      thread_id text,
-      status text not null check (status in ('active', 'expired', 'released', 'revoked', 'transferred')),
-      created_at text not null,
-      heartbeat_at text not null,
-      expires_at text not null,
-      released_at text,
-      revoked_at text,
-      revoked_by text,
-      override_reason text,
-      metadata_json text
-    );
-    insert into agent_claims
-    select * from agent_claims_old;
-    drop table agent_claims_old;
-    create unique index if not exists agent_claims_token_hash on agent_claims(token_hash);
-    create index if not exists agent_claims_project_status on agent_claims(project_id, status, heartbeat_at);
-    create index if not exists agent_claims_target on agent_claims(project_id, channel, scope_type, target_id, status);
-  `);
+  database.exec('PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON; BEGIN IMMEDIATE');
+  try {
+    database.exec(`
+      alter table agent_claims rename to agent_claims_old;
+      create table agent_claims (
+        id text primary key,
+        token_hash text not null,
+        project_id text not null references projects(id),
+        channel text,
+        scope_type text not null check (scope_type in ('lineage_workspace', 'lineage_task', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
+        target_id text not null,
+        target_title text,
+        agent_id text,
+        agent_name text not null,
+        agent_kind text not null,
+        thread_id text,
+        status text not null check (status in ('active', 'expired', 'released', 'revoked', 'transferred')),
+        created_at text not null,
+        heartbeat_at text not null,
+        expires_at text not null,
+        released_at text,
+        revoked_at text,
+        revoked_by text,
+        override_reason text,
+        metadata_json text
+      );
+      insert into agent_claims
+      select * from agent_claims_old;
+      drop table agent_claims_old;
+      create unique index if not exists agent_claims_token_hash on agent_claims(token_hash);
+      create index if not exists agent_claims_project_status on agent_claims(project_id, status, heartbeat_at);
+      create index if not exists agent_claims_target on agent_claims(project_id, channel, scope_type, target_id, status);
+    `);
+    const violations = database.prepare('pragma foreign_key_check').all();
+    if (violations.length > 0) throw new Error(`Agent claim scope migration failed foreign key check: ${JSON.stringify(violations)}`);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA legacy_alter_table = OFF; PRAGMA foreign_keys = ON');
+  }
 }
 
 function tableCreateSql(database: DatabaseSync, table: string): string {
