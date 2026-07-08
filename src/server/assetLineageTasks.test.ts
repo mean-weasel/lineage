@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { backfillLineageTasks, lineageDb } from './assetLineageDb';
+import { listAgentClaims } from './agentClaims';
 import {
   addLineageTaskComment,
   cancelLineageTask,
@@ -79,6 +80,8 @@ describe('asset lineage tasks', () => {
     });
 
     expect(created.task.id).toBe(taskIdFor(defaultProject, files.rootId, files.childId, 'iterate'));
+    expect(created.ok).toBe(true);
+    expect(updated.ok).toBe(true);
     expect(updated.task.instructions).toBe('Try brighter composition with more whitespace.');
     expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(1);
     expect(taskEventTypes(updated.task.id)).toEqual(['created', 'instructions_updated']);
@@ -126,6 +129,31 @@ describe('asset lineage tasks', () => {
     })).toThrow('pending');
     expect(JSON.stringify(started)).not.toContain(claimToken);
     expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'comment_added', 'started']);
+  });
+
+  it('does not create a second claim or event when claiming an already claimed task', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'First task worker',
+      taskId: created.task.id,
+    });
+
+    expect(() => claimLineageTask(defaultProject, {
+      agentName: 'Second task worker',
+      taskId: created.task.id,
+    })).toThrow('Only pending lineage tasks can be claimed.');
+
+    const activeTaskClaims = listAgentClaims(defaultProject).claims.filter(claim =>
+      claim.scope_type === 'lineage_task' && claim.target_id === created.task.id && claim.status === 'active'
+    );
+    expect(activeTaskClaims.map(claim => claim.id)).toEqual([claimed.claim.id]);
+    expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed']);
   });
 
   it('rejects upsert instruction edits for claimed and in-progress tasks', () => {
@@ -215,7 +243,7 @@ describe('asset lineage tasks', () => {
       confirmWrite: false,
       taskId: created.task.id,
     });
-    expect(dryRun).toMatchObject({ dryRun: true });
+    expect(dryRun).toMatchObject({ dryRun: true, ok: true });
     expect(listLineageTasks(defaultProject, files.rootId).tasks.map(task => task.id)).toContain(created.task.id);
 
     const cancelled = cancelLineageTask(defaultProject, {
@@ -224,6 +252,7 @@ describe('asset lineage tasks', () => {
       taskId: created.task.id,
     });
 
+    expect(cancelled.ok).toBe(true);
     expect(cancelled.task.status).toBe('cancelled');
     expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(0);
     expect(listLineageTasks(defaultProject, files.rootId, ['cancelled']).tasks.map(task => task.id)).toEqual([created.task.id]);
@@ -285,14 +314,20 @@ describe('asset lineage tasks', () => {
       rootAssetId: files.rootId,
     });
 
-    const first = listLineageTasks(defaultProject, files.rootId).tasks;
     const database = lineageDb();
     try {
+      database.prepare("delete from lineage_schema_migrations where key = 'lineage_tasks_backfilled_v1'").run();
       backfillLineageTasks(database);
       backfillLineageTasks(database);
+      expect(database.prepare("select key from lineage_schema_migrations where key = 'lineage_tasks_backfilled_v1'").get()).toMatchObject({
+        key: 'lineage_tasks_backfilled_v1',
+      });
     } finally {
       database.close();
     }
+    const first = listLineageTasks(defaultProject, files.rootId).tasks;
+    const reopened = lineageDb();
+    reopened.close();
     const second = listLineageTasks(defaultProject, files.rootId).tasks;
 
     expect(first.map(task => [task.task_type, task.instructions, task.created_by]).sort()).toEqual([

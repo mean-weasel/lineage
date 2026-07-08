@@ -50,6 +50,10 @@ export function lineageDb(): DatabaseSync {
     create index if not exists assets_project_source_seen on assets(project_id, source, last_seen_at);
     create index if not exists assets_project_checksum on assets(project_id, checksum_sha256);
     create index if not exists assets_project_channel_campaign on assets(project_id, channel, campaign);
+    create table if not exists lineage_schema_migrations (
+      key text primary key,
+      applied_at text not null
+    );
     create table if not exists asset_edges (
       id text primary key,
       project_id text not null references projects(id),
@@ -442,76 +446,65 @@ export function lineageDb(): DatabaseSync {
   return database;
 }
 
-function lineageTaskId(project: string, rootAssetId: string, targetAssetId: string, taskType: 'iterate' | 'reroll'): string {
-  return `${project}:${rootAssetId}:lineage-task:${taskType}:${targetAssetId}`;
-}
-
 export function backfillLineageTasks(database: DatabaseSync): void {
-  const selections = database.prepare(`
-    select project_id, root_asset_id, asset_id
-    from asset_selections
-  `).all() as Array<{ project_id: string; root_asset_id: string; asset_id: string }>;
-  const insertSelection = database.prepare(`
-    insert or ignore into lineage_tasks (
-      id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
-      created_by, created_at, updated_at, metadata_json
+  database.exec(`
+    create table if not exists lineage_schema_migrations (
+      key text primary key,
+      applied_at text not null
     )
-    select
-      ?,
-      s.project_id,
-      s.root_asset_id,
-      s.asset_id,
-      'iterate',
-      'pending',
-      s.notes,
-      'human',
-      s.selected_at,
-      s.selected_at,
-      null
-    from asset_selections s
-    where s.project_id = ? and s.root_asset_id = ? and s.asset_id = ?
   `);
-  for (const row of selections) {
-    insertSelection.run(
-      lineageTaskId(row.project_id, row.root_asset_id, row.asset_id, 'iterate'),
-      row.project_id,
-      row.root_asset_id,
-      row.asset_id
-    );
-  }
+  const marker = database.prepare("select key from lineage_schema_migrations where key = 'lineage_tasks_backfilled_v1'").get();
+  if (marker) return;
 
-  const rerolls = database.prepare(`
-    select project_id, root_asset_id, node_asset_id
-    from asset_reroll_requests
-    where status = 'pending'
-  `).all() as Array<{ project_id: string; root_asset_id: string; node_asset_id: string }>;
-  const insertReroll = database.prepare(`
-    insert or ignore into lineage_tasks (
-      id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
-      created_by, created_at, updated_at, metadata_json
-    )
-    select
-      ?,
-      r.project_id,
-      r.root_asset_id,
-      r.node_asset_id,
-      'reroll',
-      'pending',
-      r.notes,
-      r.requested_by,
-      r.created_at,
-      r.created_at,
-      null
-    from asset_reroll_requests r
-    where r.project_id = ? and r.root_asset_id = ? and r.node_asset_id = ? and r.status = 'pending'
-  `);
-  for (const row of rerolls) {
-    insertReroll.run(
-      lineageTaskId(row.project_id, row.root_asset_id, row.node_asset_id, 'reroll'),
-      row.project_id,
-      row.root_asset_id,
-      row.node_asset_id
-    );
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    database.exec(`
+      insert or ignore into lineage_tasks (
+        id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+        created_by, created_at, updated_at, metadata_json
+      )
+      select
+        s.project_id || ':' || s.root_asset_id || ':lineage-task:iterate:' || s.asset_id,
+        s.project_id,
+        s.root_asset_id,
+        s.asset_id,
+        'iterate',
+        'pending',
+        s.notes,
+        'human',
+        s.selected_at,
+        s.selected_at,
+        null
+      from asset_selections s;
+
+      insert or ignore into lineage_tasks (
+        id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+        created_by, created_at, updated_at, metadata_json
+      )
+      select
+        r.project_id || ':' || r.root_asset_id || ':lineage-task:reroll:' || r.node_asset_id,
+        r.project_id,
+        r.root_asset_id,
+        r.node_asset_id,
+        'reroll',
+        'pending',
+        r.notes,
+        r.requested_by,
+        r.created_at,
+        r.created_at,
+        null
+      from asset_reroll_requests r
+      where r.status = 'pending';
+    `);
+    database.prepare(`
+      insert into lineage_schema_migrations (key, applied_at)
+      values ('lineage_tasks_backfilled_v1', ?)
+      on conflict(key) do nothing
+    `).run(nowIso());
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
   }
 }
 

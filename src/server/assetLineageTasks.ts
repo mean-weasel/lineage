@@ -1,41 +1,15 @@
 import { randomBytes } from 'node:crypto';
-import { createAgentClaim, validateAgentClaimForWrite, type AgentClaim } from './agentClaims';
+import { createAgentClaim, releaseAgentClaim, validateAgentClaimForWrite, type AgentClaim } from './agentClaims';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
-
-export type LineageTaskType = 'iterate' | 'reroll';
-export type LineageTaskStatus = 'pending' | 'claimed' | 'in_progress' | 'resolved' | 'cancelled';
-export type LineageTaskActor = 'human' | 'agent' | 'system';
-
-export interface LineageTask {
-  id: string;
-  project_id: string;
-  root_asset_id: string;
-  target_asset_id: string;
-  task_type: LineageTaskType;
-  status: LineageTaskStatus;
-  instructions?: string;
-  created_by: LineageTaskActor;
-  created_at: string;
-  updated_at: string;
-  claimed_at?: string;
-  started_at?: string;
-  resolved_at?: string;
-  cancelled_at?: string;
-  resolved_generation_job_id?: string;
-  resolved_asset_id?: string;
-  claimed_by_claim_id?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface LineageTaskEvent {
-  id: string;
-  task_id: string;
-  event_type: string;
-  actor?: string;
-  message?: string;
-  created_at: string;
-  metadata?: Record<string, unknown>;
-}
+import type {
+  LineageTask,
+  LineageTaskActor,
+  LineageTaskEvent,
+  LineageTaskMutationResponse,
+  LineageTaskStatus,
+  LineageTasksResponse,
+  LineageTaskType,
+} from '../shared/types';
 
 export class LineageTaskError extends Error {
   constructor(message: string, public status = 400) {
@@ -44,6 +18,8 @@ export class LineageTaskError extends Error {
 }
 
 type Row = Record<string, unknown>;
+type LineageTaskMutationResult = Omit<LineageTaskMutationResponse, 'events'> & { project: string; events: LineageTaskEvent[] };
+type LineageTaskClaimResult = LineageTaskMutationResult & { claim: AgentClaim; claim_token: string };
 
 const activeStatuses: LineageTaskStatus[] = ['pending', 'claimed', 'in_progress'];
 const taskTypes = new Set<LineageTaskType>(['iterate', 'reroll']);
@@ -127,7 +103,7 @@ function eventFromRow(row: Row): LineageTaskEvent {
   return {
     id: String(row.id),
     task_id: String(row.task_id),
-    event_type: String(row.event_type),
+    event_type: String(row.event_type) as LineageTaskEvent['event_type'],
     actor: typeof row.actor === 'string' ? row.actor : undefined,
     message: typeof row.message === 'string' ? row.message : undefined,
     created_at: String(row.created_at),
@@ -158,11 +134,31 @@ function recordEvent(database: DatabaseSync, taskId: string, eventType: string, 
   `).run(randomId('lineage_task_event'), taskId, eventType, actor || null, message || null, nowIso(), metadataJson(metadata));
 }
 
-function taskWithEvents(database: DatabaseSync, project: string, taskId: string) {
+function taskWithEvents(database: DatabaseSync, project: string, taskId: string): LineageTaskMutationResult {
+  return { project, ok: true, task: requireTask(database, project, taskId), events: taskEvents(database, taskId) };
+}
+
+function assertChanged(result: { changes: number | bigint }, message: string): void {
+  if (Number(result.changes) !== 1) throw new LineageTaskError(message, 409);
+}
+
+function transaction<T>(database: DatabaseSync, callback: () => T): T {
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const value = callback();
+    database.exec('COMMIT');
+    return value;
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function taskReadWithEvents(database: DatabaseSync, project: string, taskId: string) {
   return { task: requireTask(database, project, taskId), events: taskEvents(database, taskId) };
 }
 
-export function listLineageTasks(project: string, rootAssetId: string, statuses: LineageTaskStatus[] = activeStatuses) {
+export function listLineageTasks(project: string, rootAssetId: string, statuses: LineageTaskStatus[] = activeStatuses): LineageTasksResponse {
   const normalizedProject = normalizeProject(project);
   const normalizedStatuses = statuses.map(normalizeStatus);
   const database = lineageDb();
@@ -187,7 +183,7 @@ export function getLineageTask(project: string, taskId: string) {
   const normalizedProject = normalizeProject(project);
   const database = lineageDb();
   try {
-    return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, taskId) };
+    return { project: normalizedProject, ...taskReadWithEvents(database, normalizedProject, taskId) };
   } finally {
     database.close();
   }
@@ -199,7 +195,7 @@ export function upsertLineageTask(project: string, fields: {
   rootAssetId: string;
   targetAssetId: string;
   taskType: LineageTaskType;
-}) {
+}): LineageTaskMutationResult {
   const normalizedProject = normalizeProject(project);
   const taskType = normalizeTaskType(fields.taskType);
   const taskId = taskIdFor(normalizedProject, fields.rootAssetId, fields.targetAssetId, taskType);
@@ -221,39 +217,51 @@ export function upsertLineageTask(project: string, fields: {
       }
       if (task.status === 'pending' && instructions !== undefined && instructions !== task.instructions) {
         const timestamp = nowIso();
-        database.prepare('update lineage_tasks set instructions = ?, updated_at = ? where id = ?').run(instructions, timestamp, task.id);
-        recordEvent(database, task.id, 'instructions_updated', fields.createdBy, 'Instructions updated.');
+        transaction(database, () => {
+          const result = database.prepare(`
+            update lineage_tasks
+            set instructions = ?, updated_at = ?
+            where id = ? and status = 'pending'
+          `).run(instructions, timestamp, task.id);
+          assertChanged(result, 'Only pending lineage tasks can update instructions.');
+          recordEvent(database, task.id, 'instructions_updated', fields.createdBy, 'Instructions updated.');
+        });
       }
-      return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, task.id) };
+      return taskWithEvents(database, normalizedProject, task.id);
     }
     const closedTask = findTask(database, normalizedProject, taskId);
     if (closedTask) {
       const timestamp = nowIso();
-      database.prepare(`
-        update lineage_tasks
-        set status = 'pending', instructions = ?, created_by = ?, updated_at = ?,
-          claimed_at = null, started_at = null, resolved_at = null, cancelled_at = null,
-          resolved_generation_job_id = null, resolved_asset_id = null, metadata_json = null
-        where id = ?
-      `).run(instructions || null, fields.createdBy, timestamp, taskId);
-      recordEvent(database, taskId, 'created', fields.createdBy, 'Lineage task created.');
-      return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, taskId) };
+      transaction(database, () => {
+        const result = database.prepare(`
+          update lineage_tasks
+          set status = 'pending', instructions = ?, created_by = ?, updated_at = ?,
+            claimed_at = null, started_at = null, resolved_at = null, cancelled_at = null,
+            resolved_generation_job_id = null, resolved_asset_id = null, metadata_json = null
+          where id = ? and status not in ('pending', 'claimed', 'in_progress')
+        `).run(instructions || null, fields.createdBy, timestamp, taskId);
+        assertChanged(result, 'Lineage task changed while reopening.');
+        recordEvent(database, taskId, 'created', fields.createdBy, 'Lineage task created.');
+      });
+      return taskWithEvents(database, normalizedProject, taskId);
     }
     const timestamp = nowIso();
-    database.prepare(`
-      insert into lineage_tasks (
-        id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
-        created_by, created_at, updated_at, metadata_json
-      ) values (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, null)
-    `).run(taskId, normalizedProject, fields.rootAssetId, fields.targetAssetId, taskType, instructions || null, fields.createdBy, timestamp, timestamp);
-    recordEvent(database, taskId, 'created', fields.createdBy, 'Lineage task created.');
-    return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, taskId) };
+    transaction(database, () => {
+      database.prepare(`
+        insert into lineage_tasks (
+          id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+          created_by, created_at, updated_at, metadata_json
+        ) values (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, null)
+      `).run(taskId, normalizedProject, fields.rootAssetId, fields.targetAssetId, taskType, instructions || null, fields.createdBy, timestamp, timestamp);
+      recordEvent(database, taskId, 'created', fields.createdBy, 'Lineage task created.');
+    });
+    return taskWithEvents(database, normalizedProject, taskId);
   } finally {
     database.close();
   }
 }
 
-export function updateLineageTaskInstructions(project: string, fields: { taskId: string; instructions: string }) {
+export function updateLineageTaskInstructions(project: string, fields: { taskId: string; instructions: string }): LineageTaskMutationResult {
   const normalizedProject = normalizeProject(project);
   const instructions = fields.instructions.trim();
   const database = lineageDb();
@@ -261,15 +269,22 @@ export function updateLineageTaskInstructions(project: string, fields: { taskId:
     const task = requireTask(database, normalizedProject, fields.taskId);
     if (task.status !== 'pending') throw new LineageTaskError('Only pending lineage tasks can update instructions.', 409);
     const timestamp = nowIso();
-    database.prepare('update lineage_tasks set instructions = ?, updated_at = ? where id = ?').run(instructions || null, timestamp, task.id);
-    recordEvent(database, task.id, 'instructions_updated', 'human', 'Instructions updated.');
-    return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, task.id) };
+    transaction(database, () => {
+      const result = database.prepare(`
+        update lineage_tasks
+        set instructions = ?, updated_at = ?
+        where id = ? and status = 'pending'
+      `).run(instructions || null, timestamp, task.id);
+      assertChanged(result, 'Only pending lineage tasks can update instructions.');
+      recordEvent(database, task.id, 'instructions_updated', 'human', 'Instructions updated.');
+    });
+    return taskWithEvents(database, normalizedProject, task.id);
   } finally {
     database.close();
   }
 }
 
-export function addLineageTaskComment(project: string, fields: { taskId: string; actor: string; message: string }) {
+export function addLineageTaskComment(project: string, fields: { taskId: string; actor: string; message: string }): LineageTaskMutationResult {
   const normalizedProject = normalizeProject(project);
   const actor = normalizeActor(fields.actor, 'Comment actor');
   const message = fields.message.trim();
@@ -277,14 +292,16 @@ export function addLineageTaskComment(project: string, fields: { taskId: string;
   const database = lineageDb();
   try {
     const task = requireTask(database, normalizedProject, fields.taskId);
-    recordEvent(database, task.id, 'comment_added', actor, message);
-    return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, task.id) };
+    transaction(database, () => {
+      recordEvent(database, task.id, 'comment_added', actor, message);
+    });
+    return taskWithEvents(database, normalizedProject, task.id);
   } finally {
     database.close();
   }
 }
 
-export function claimLineageTask(project: string, fields: { taskId: string; agentName: string }) {
+export function claimLineageTask(project: string, fields: { taskId: string; agentName: string }): LineageTaskClaimResult {
   const normalizedProject = normalizeProject(project);
   const agentName = normalizeActor(fields.agentName, 'Agent name');
   const beforeClaimDb = lineageDb();
@@ -303,31 +320,42 @@ export function claimLineageTask(project: string, fields: { taskId: string; agen
     targetTitle: fields.taskId,
   });
   if (!claimResult.claim) throw new LineageTaskError('Unable to create lineage task claim.', 500);
+  const claim = claimResult.claim;
 
   const database = lineageDb();
   try {
     const task = requireTask(database, normalizedProject, fields.taskId);
-    if (task.status !== 'pending') throw new LineageTaskError('Only pending lineage tasks can be claimed.', 409);
+    if (task.status !== 'pending') {
+      releaseAgentClaim(claimResult.claim_token);
+      throw new LineageTaskError('Only pending lineage tasks can be claimed.', 409);
+    }
     const timestamp = nowIso();
-    const metadata = { ...(task.metadata || {}), claim_id: claimResult.claim.id };
-    database.prepare(`
-      update lineage_tasks
-      set status = 'claimed', claimed_at = ?, updated_at = ?, metadata_json = ?
-      where id = ? and status = 'pending'
-    `).run(timestamp, timestamp, metadataJson(metadata), task.id);
-    recordEvent(database, task.id, 'claimed', agentName, 'Lineage task claimed.', { claim_id: claimResult.claim.id });
+    const metadata = { ...(task.metadata || {}), claim_id: claim.id };
+    try {
+      transaction(database, () => {
+        const result = database.prepare(`
+          update lineage_tasks
+          set status = 'claimed', claimed_at = ?, updated_at = ?, metadata_json = ?
+          where id = ? and status = 'pending'
+        `).run(timestamp, timestamp, metadataJson(metadata), task.id);
+        assertChanged(result, 'Only pending lineage tasks can be claimed.');
+        recordEvent(database, task.id, 'claimed', agentName, 'Lineage task claimed.', { claim_id: claim.id });
+      });
+    } catch (error) {
+      releaseAgentClaim(claimResult.claim_token);
+      throw error;
+    }
     return {
-      project: normalizedProject,
-      claim: claimResult.claim as AgentClaim,
-      claim_token: claimResult.claim_token,
       ...taskWithEvents(database, normalizedProject, task.id),
+      claim,
+      claim_token: claimResult.claim_token,
     };
   } finally {
     database.close();
   }
 }
 
-export function startLineageTask(project: string, fields: { taskId: string; claimToken: string }) {
+export function startLineageTask(project: string, fields: { taskId: string; claimToken: string }): LineageTaskMutationResult {
   const normalizedProject = normalizeProject(project);
   const validation = validateAgentClaimForWrite({
     claimToken: fields.claimToken,
@@ -347,25 +375,28 @@ export function startLineageTask(project: string, fields: { taskId: string; clai
     }
     const timestamp = nowIso();
     const metadata = { ...(task.metadata || {}), claim_id: validation.claim.id };
-    database.prepare(`
-      update lineage_tasks
-      set status = 'in_progress', started_at = ?, updated_at = ?, metadata_json = ?
-      where id = ? and status = 'claimed'
-    `).run(timestamp, timestamp, metadataJson(metadata), task.id);
-    recordEvent(database, task.id, 'started', validation.claim.agent_name, 'Lineage task started.', { claim_id: validation.claim.id });
-    return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, task.id) };
+    transaction(database, () => {
+      const result = database.prepare(`
+        update lineage_tasks
+        set status = 'in_progress', started_at = ?, updated_at = ?, metadata_json = ?
+        where id = ? and status = 'claimed'
+      `).run(timestamp, timestamp, metadataJson(metadata), task.id);
+      assertChanged(result, 'Only claimed lineage tasks can be started.');
+      recordEvent(database, task.id, 'started', validation.claim.agent_name, 'Lineage task started.', { claim_id: validation.claim.id });
+    });
+    return taskWithEvents(database, normalizedProject, task.id);
   } finally {
     database.close();
   }
 }
 
-export function cancelLineageTask(project: string, fields: { taskId: string; actor: string; confirmWrite: boolean; override?: boolean }) {
+export function cancelLineageTask(project: string, fields: { taskId: string; actor: string; confirmWrite: boolean; override?: boolean }): LineageTaskMutationResult {
   const normalizedProject = normalizeProject(project);
   const actor = normalizeActor(fields.actor, 'Cancel actor');
   const database = lineageDb();
   try {
     const task = requireTask(database, normalizedProject, fields.taskId);
-    if (task.status === 'cancelled') return { project: normalizedProject, task, events: taskEvents(database, task.id) };
+    if (task.status === 'cancelled') return { project: normalizedProject, ok: true, task, events: taskEvents(database, task.id) };
     if (!['pending', 'claimed', 'in_progress'].includes(task.status)) {
       throw new LineageTaskError(`Only open lineage tasks can be cancelled; task is ${task.status}.`, 409);
     }
@@ -374,14 +405,17 @@ export function cancelLineageTask(project: string, fields: { taskId: string; act
     }
     const timestamp = nowIso();
     const cancelledTask = { ...task, status: 'cancelled' as const, cancelled_at: timestamp, updated_at: timestamp };
-    if (!fields.confirmWrite) return { project: normalizedProject, dryRun: true as const, task: cancelledTask, events: taskEvents(database, task.id) };
-    database.prepare(`
-      update lineage_tasks
-      set status = 'cancelled', cancelled_at = ?, updated_at = ?
-      where id = ?
-    `).run(timestamp, timestamp, task.id);
-    recordEvent(database, task.id, 'cancelled', actor, 'Lineage task cancelled.');
-    return { project: normalizedProject, ...taskWithEvents(database, normalizedProject, task.id) };
+    if (!fields.confirmWrite) return { project: normalizedProject, ok: true, dryRun: true as const, task: cancelledTask, events: taskEvents(database, task.id) };
+    transaction(database, () => {
+      const result = database.prepare(`
+        update lineage_tasks
+        set status = 'cancelled', cancelled_at = ?, updated_at = ?
+        where id = ? and status = ?
+      `).run(timestamp, timestamp, task.id, task.status);
+      assertChanged(result, `Only ${task.status} lineage task ${task.id} could be cancelled.`);
+      recordEvent(database, task.id, 'cancelled', actor, 'Lineage task cancelled.');
+    });
+    return taskWithEvents(database, normalizedProject, task.id);
   } finally {
     database.close();
   }

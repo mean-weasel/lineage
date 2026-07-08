@@ -307,9 +307,9 @@ export interface LineageRerollRequest {
   resolved_at?: string;
 }
 
-type LineageTaskType = 'iterate' | 'reroll';
-type LineageTaskStatus = 'pending' | 'claimed' | 'in_progress' | 'resolved' | 'cancelled';
-type LineageTaskActor = 'human' | 'agent' | 'system';
+export type LineageTaskType = 'iterate' | 'reroll';
+export type LineageTaskStatus = 'pending' | 'claimed' | 'in_progress' | 'resolved' | 'cancelled';
+export type LineageTaskActor = 'human' | 'agent' | 'system';
 
 export interface LineageTaskEvent {
   id: string;
@@ -338,6 +338,7 @@ export interface LineageTask {
   cancelled_at?: string;
   resolved_generation_job_id?: string;
   resolved_asset_id?: string;
+  claimed_by_claim_id?: string;
   metadata?: Record<string, unknown>;
   events?: LineageTaskEvent[];
   active_claim?: AgentClaimSummary;
