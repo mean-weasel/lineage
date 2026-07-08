@@ -54,6 +54,7 @@ describe('LineageSidePanel task queue', () => {
 
     expect(container!.textContent).toContain('Agent Ada');
     expect(container!.textContent).not.toContain('internal-private-marker');
+    expect(getTextarea('Locked instructions for task-locked').disabled).toBe(true);
 
     changeTextarea('Comment for task-locked', 'Leaving this note while the agent keeps working.');
     await clickButton('Add comment');
@@ -77,6 +78,56 @@ describe('LineageSidePanel task queue', () => {
     ]);
     expect(refreshLineage).toHaveBeenCalledTimes(2);
     expect(toasts).toEqual(['Commented on reroll task', 'Unlocked reroll task']);
+  });
+
+  it('cancels pending tasks through the task route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, task: { ...pendingTask, status: 'cancelled' } }) });
+    const refreshLineage = vi.fn(async () => undefined);
+    const toasts: string[] = [];
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPanel({
+      onToast: (_type, message) => { toasts.push(message); },
+      refreshLineage,
+      snapshot: snapshotWithTasks([pendingTask]),
+    });
+
+    await clickButton('Cancel');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/lineage/tasks/task%20pending%2Fid/cancel');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST');
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      actor: 'human',
+      confirmWrite: true,
+      override: false,
+      project: 'demo-project',
+    });
+    expect(refreshLineage).toHaveBeenCalledTimes(1);
+    expect(toasts).toEqual(['Cancelled iterate task']);
+  });
+
+  it('cancels locked tasks with override confirmation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, task: { ...lockedTask, status: 'cancelled' } }) });
+    const refreshLineage = vi.fn(async () => undefined);
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPanel({
+      refreshLineage,
+      snapshot: snapshotWithTasks([lockedTask]),
+    });
+
+    await clickButton('Cancel');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/lineage/tasks/task-locked/cancel');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST');
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      actor: 'human',
+      confirmWrite: true,
+      override: true,
+      project: 'demo-project',
+    });
+    expect(refreshLineage).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith('Cancel reroll task while an agent is working?');
   });
 });
 
@@ -124,12 +175,17 @@ function renderPanel(props: Partial<Parameters<typeof LineageSidePanel>[0]> = {}
 }
 
 function changeTextarea(label: string, value: string) {
-  const textarea = Array.from(container!.querySelectorAll<HTMLTextAreaElement>('textarea')).find(item => item.getAttribute('aria-label') === label);
-  if (!textarea) throw new Error(`Missing textarea: ${label}`);
+  const textarea = getTextarea(label);
   act(() => {
     setNativeTextareaValue(textarea, value);
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   });
+}
+
+function getTextarea(label: string) {
+  const textarea = Array.from(container!.querySelectorAll<HTMLTextAreaElement>('textarea')).find(item => item.getAttribute('aria-label') === label);
+  if (!textarea) throw new Error(`Missing textarea: ${label}`);
+  return textarea;
 }
 
 function setNativeTextareaValue(textarea: HTMLTextAreaElement, value: string) {

@@ -282,6 +282,15 @@ function LineageTaskCard({ active, node, onInspect, onToast, project, refreshLin
     }, `Unlocked ${taskLabel(task)}`);
   }
 
+  async function cancelTask() {
+    if (!window.confirm(locked ? `Cancel ${taskLabel(task)} while an agent is working?` : `Cancel ${taskLabel(task)}?`)) return;
+    await mutate(`/api/lineage/tasks/${encodeURIComponent(task.id)}/cancel`, {
+      actor: 'human',
+      confirmWrite: true,
+      override: locked,
+    }, `Cancelled ${taskLabel(task)}`);
+  }
+
   return (
     <article className={`lineage-task-card ${active ? 'active' : ''} ${locked ? 'locked' : task.status}`}>
       <button aria-label={`Inspect task target ${node?.title || task.target_asset_id}`} className="lineage-task-target" onClick={onInspect} type="button">
@@ -298,13 +307,16 @@ function LineageTaskCard({ active, node, onInspect, onToast, project, refreshLin
             Instructions
             <textarea aria-label={`Instructions for ${task.id}`} value={instructions} onChange={event => setInstructions(event.target.value)} />
           </label>
-          <button disabled={busy || instructions === (task.instructions || '')} type="submit">Save instructions</button>
+          <div className="lineage-task-actions">
+            <button disabled={busy || instructions === (task.instructions || '')} type="submit">Save instructions</button>
+            <button disabled={busy} onClick={cancelTask} type="button">Cancel</button>
+          </div>
         </form>
       ) : (
         <div className="lineage-task-locked-body">
           <label>
             Instructions
-            <textarea aria-label={`Locked instructions for ${task.id}`} readOnly value={instructions || 'No instructions.'} />
+            <textarea aria-label={`Locked instructions for ${task.id}`} disabled readOnly value={instructions || 'No instructions.'} />
           </label>
           {locked && <ClaimLine claim={task.active_claim} />}
           {locked && (
@@ -316,6 +328,7 @@ function LineageTaskCard({ active, node, onInspect, onToast, project, refreshLin
               <div className="lineage-task-actions">
                 <button disabled={busy || !comment.trim()} type="submit">Add comment</button>
                 <button disabled={busy} onClick={overrideTask} type="button">Unlock</button>
+                <button disabled={busy} onClick={cancelTask} type="button">Cancel</button>
               </div>
             </form>
           )}

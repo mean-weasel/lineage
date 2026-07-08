@@ -607,7 +607,8 @@
   font-weight: 600;
 }
 
-.lineage-task-locked-body textarea[readonly] {
+.lineage-task-locked-body textarea[readonly],
+.lineage-task-locked-body textarea:disabled {
   background: #f7fafb;
   color: #40515d;
 }
