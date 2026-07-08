@@ -471,11 +471,20 @@ export function cancelLineageTask(project: string, fields: { taskId: string; act
     if (task.status !== 'pending' && !fields.override) {
       throw new LineageTaskError('Cancelling an active lineage task requires override=true.', 409);
     }
-    const timestamp = nowIso();
-    const cancelledTask = { ...task, status: 'cancelled' as const, cancelled_at: timestamp, updated_at: timestamp };
-    if (!fields.confirmWrite) return { project: normalizedProject, ok: true, dryRun: true as const, task: cancelledTask, events: taskEvents(database, task.id) };
     const overridingActiveTask = fields.override === true && task.status !== 'pending';
     const metadata = overridingActiveTask ? metadataWithoutClaim(task.metadata) : task.metadata;
+    const timestamp = nowIso();
+    const cancelledTask = {
+      ...task,
+      cancelled_at: timestamp,
+      claimed_at: overridingActiveTask ? undefined : task.claimed_at,
+      claimed_by_claim_id: overridingActiveTask ? undefined : task.claimed_by_claim_id,
+      started_at: overridingActiveTask ? undefined : task.started_at,
+      status: 'cancelled' as const,
+      updated_at: timestamp,
+      metadata,
+    };
+    if (!fields.confirmWrite) return { project: normalizedProject, ok: true, dryRun: true as const, task: cancelledTask, events: taskEvents(database, task.id) };
     transaction(database, () => {
       const result = database.prepare(`
         update lineage_tasks

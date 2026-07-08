@@ -377,6 +377,40 @@ describe('asset lineage tasks', () => {
     expect(inspectAgentClaim(claimed.claim.id, defaultProject).claim.status).toBe('revoked');
   });
 
+  it('previews active cancel overrides with the same unlocked task shape as confirmed writes', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'Task worker',
+      taskId: created.task.id,
+    });
+    startLineageTask(defaultProject, {
+      claimToken: claimed.claim_token,
+      taskId: created.task.id,
+    });
+
+    const dryRun = cancelLineageTask(defaultProject, {
+      actor: 'human',
+      confirmWrite: false,
+      override: true,
+      taskId: created.task.id,
+    });
+
+    expect(dryRun).toMatchObject({ dryRun: true });
+    expect(dryRun.task).toMatchObject({
+      claimed_at: undefined,
+      claimed_by_claim_id: undefined,
+      started_at: undefined,
+      status: 'cancelled',
+    });
+    expect(inspectAgentClaim(claimed.claim.id, defaultProject).claim.status).toBe('active');
+  });
+
   it('does not override pending or closed lineage tasks', () => {
     const files = seedLineage();
     const created = upsertLineageTask(defaultProject, {
