@@ -45,6 +45,52 @@ describe('AssetNode', () => {
     expect(onOpenDetail).toHaveBeenCalledWith('local-node');
     expect(onOpenHistory).not.toHaveBeenCalled();
   });
+
+  it('renders compact badges for pending and locked lineage tasks', () => {
+    renderNode({
+      lineage_tasks: {
+        iterate: {
+          id: 'task-iterate',
+          project_id: 'demo-project',
+          root_asset_id: 'local-root',
+          target_asset_id: 'local-node',
+          task_type: 'iterate',
+          status: 'pending',
+          instructions: 'Make a clean variant.',
+          created_by: 'human',
+          created_at: '2026-07-07T00:00:00.000Z',
+          updated_at: '2026-07-07T00:00:00.000Z',
+        },
+        reroll: {
+          id: 'task-reroll',
+          project_id: 'demo-project',
+          root_asset_id: 'local-root',
+          target_asset_id: 'local-node',
+          task_type: 'reroll',
+          status: 'in_progress',
+          instructions: 'Repair the current output.',
+          created_by: 'human',
+          created_at: '2026-07-07T00:00:00.000Z',
+          updated_at: '2026-07-07T00:00:00.000Z',
+        },
+      },
+      reroll_request: {
+        id: 'reroll-request',
+        project_id: 'demo-project',
+        root_asset_id: 'local-root',
+        node_asset_id: 'local-node',
+        status: 'pending',
+        requested_by: 'human',
+        created_at: '2026-07-07T00:00:00.000Z',
+      },
+    });
+
+    const badges = Array.from(container!.querySelectorAll<HTMLElement>('.lineage-task-badge'));
+    expect(badges.map(badge => badge.textContent)).toEqual(['iterate pending', 'reroll locked']);
+    expect(badges[0].className).toContain('pending');
+    expect(badges[1].className).toContain('locked');
+    expect(container!.textContent).not.toContain('re-roll');
+  });
 });
 
 function renderNode(data: Partial<AssetFlowNode['data']>) {

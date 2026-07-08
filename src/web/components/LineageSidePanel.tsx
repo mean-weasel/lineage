@@ -1,5 +1,6 @@
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import type { AssetReviewState, LineageBriefResponse, LineageNode, LineageSnapshot } from '../../shared/types';
+import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
+import type { AssetReviewState, LineageBriefResponse, LineageNode, LineageSnapshot, LineageTask, LineageTaskMutationResponse } from '../../shared/types';
+import { api } from '../api';
 import { storageStateFor } from '../assetUi';
 import { CandidateMeta } from './LineageCandidateMeta';
 import { LineageHandoffPanel } from './LineageHandoffPanel';
@@ -18,6 +19,7 @@ interface LineageSidePanelProps {
   onToast: (type: 'ok' | 'error', message: string) => void;
   project: string;
   refreshBrief: () => Promise<void>;
+  refreshLineage: () => Promise<void>;
   replaceNextVariation: (node: LineageNode, notes?: string) => void;
   saveRationale: () => void;
   selectNextBase: (node: LineageNode, notes?: string) => void;
@@ -39,7 +41,7 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
   const {
     activeNode, brief, childAssetId, clearNextVariation, closePanel, latestNodes, linkChild, markReview, noteDirty, onSelectedAsset,
     nextVariationLimit, onToast, project, refreshBrief, saveRationale, selectNextBase, selectedNode, selectedNodes, selectionFull,
-    replaceNextVariation, selectionNote, setActiveNodeId, setChildAssetId, setDetailNodeId, setSelected, setSelectionNote, sideOpen, snapshot,
+    refreshLineage, replaceNextVariation, selectionNote, setActiveNodeId, setChildAssetId, setDetailNodeId, setSelected, setSelectionNote, sideOpen, snapshot,
   } = props;
   const activeStorage = activeNode ? storageStateFor({ hasLocal: Boolean(activeNode.local_path), hasS3: Boolean(activeNode.s3_key) }) : null;
   const staleSelectedNodes = selectedNodes.filter(node => !node.is_latest);
@@ -93,6 +95,15 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
         )}
         {selectedNodes.length > 1 && <p className="muted-copy">The agent will use these as separate next-variation bases; imported outputs should link back to the matching selected parent.</p>}
       </section>
+      <LineageTaskQueuePanel
+        activeNode={activeNode}
+        onSelectedAsset={onSelectedAsset}
+        onToast={onToast}
+        project={project}
+        refreshLineage={refreshLineage}
+        setActiveNodeId={setActiveNodeId}
+        snapshot={snapshot}
+      />
       <section className="lineage-next-panel">
         <div className="lineage-panel-title-row">
           <h3>Re-roll queue</h3>
@@ -175,4 +186,173 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
       )}
     </aside>
   );
+}
+
+function LineageTaskQueuePanel({ activeNode, onSelectedAsset, onToast, project, refreshLineage, setActiveNodeId, snapshot }: {
+  activeNode?: LineageNode;
+  onSelectedAsset: (assetId: string) => void;
+  onToast: (type: 'ok' | 'error', message: string) => void;
+  project: string;
+  refreshLineage: () => Promise<void>;
+  setActiveNodeId: Dispatch<SetStateAction<string | null>>;
+  snapshot: LineageSnapshot;
+}) {
+  const tasks = useMemo(() => orderedLineageTasks(snapshot.tasks || []), [snapshot.tasks]);
+  const openCount = tasks.filter(task => isOpenTask(task)).length;
+  const nodesByAsset = useMemo(() => new Map(snapshot.nodes.map(node => [node.asset_id, node])), [snapshot.nodes]);
+  return (
+    <section className="lineage-next-panel lineage-task-queue-panel">
+      <div className="lineage-panel-title-row">
+        <h3>Task queue</h3>
+        <span className="lineage-count-pill">{openCount}</span>
+      </div>
+      {tasks.length > 0 ? tasks.map(task => (
+        <LineageTaskCard
+          active={task.target_asset_id === activeNode?.asset_id}
+          key={`${task.id}:${task.updated_at}`}
+          node={nodesByAsset.get(task.target_asset_id)}
+          onInspect={() => {
+            setActiveNodeId(task.target_asset_id);
+            onSelectedAsset(task.target_asset_id);
+          }}
+          onToast={onToast}
+          project={project}
+          refreshLineage={refreshLineage}
+          task={task}
+        />
+      )) : <p className="muted-copy">No open lineage tasks.</p>}
+    </section>
+  );
+}
+
+function LineageTaskCard({ active, node, onInspect, onToast, project, refreshLineage, task }: {
+  active: boolean;
+  node?: LineageNode;
+  onInspect: () => void;
+  onToast: (type: 'ok' | 'error', message: string) => void;
+  project: string;
+  refreshLineage: () => Promise<void>;
+  task: LineageTask;
+}) {
+  const locked = task.status === 'claimed' || task.status === 'in_progress';
+  const pending = task.status === 'pending';
+  const [instructions, setInstructions] = useState(task.instructions || '');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setInstructions(task.instructions || ''), [task.id, task.instructions]);
+
+  async function mutate(path: string, body: Record<string, unknown>, message: string): Promise<boolean> {
+    setBusy(true);
+    try {
+      await api<LineageTaskMutationResponse>(path, {
+        body: JSON.stringify({ project, ...body }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      onToast('ok', message);
+      await refreshLineage();
+      return true;
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveInstructions(event: FormEvent) {
+    event.preventDefault();
+    await mutate(`/api/lineage/tasks/${encodeURIComponent(task.id)}/instructions`, { instructions }, `Updated ${taskLabel(task)} instructions`);
+  }
+
+  async function addComment(event: FormEvent) {
+    event.preventDefault();
+    const message = comment.trim();
+    if (!message) return;
+    if (await mutate(`/api/lineage/tasks/${encodeURIComponent(task.id)}/comment`, { actor: 'human', message }, `Commented on ${taskLabel(task)}`)) {
+      setComment('');
+    }
+  }
+
+  async function overrideTask() {
+    if (!window.confirm(`Unlock ${taskLabel(task)} for human edits?`)) return;
+    await mutate(`/api/lineage/tasks/${encodeURIComponent(task.id)}/override`, {
+      actor: 'human',
+      reason: 'Human unlocked task from lineage UI.',
+    }, `Unlocked ${taskLabel(task)}`);
+  }
+
+  return (
+    <article className={`lineage-task-card ${active ? 'active' : ''} ${locked ? 'locked' : task.status}`}>
+      <button aria-label={`Inspect task target ${node?.title || task.target_asset_id}`} className="lineage-task-target" onClick={onInspect} type="button">
+        <span>{node?.title || task.target_asset_id}</span>
+        <code>{task.target_asset_id}</code>
+      </button>
+      <div className="lineage-task-meta">
+        <span className={`lineage-task-status ${task.status}`}>{statusLabel(task.status)}</span>
+        <span>{task.task_type}</span>
+      </div>
+      {pending ? (
+        <form className="lineage-task-form" onSubmit={saveInstructions}>
+          <label>
+            Instructions
+            <textarea aria-label={`Instructions for ${task.id}`} value={instructions} onChange={event => setInstructions(event.target.value)} />
+          </label>
+          <button disabled={busy || instructions === (task.instructions || '')} type="submit">Save instructions</button>
+        </form>
+      ) : (
+        <div className="lineage-task-locked-body">
+          <label>
+            Instructions
+            <textarea aria-label={`Locked instructions for ${task.id}`} readOnly value={instructions || 'No instructions.'} />
+          </label>
+          {locked && <ClaimLine claim={task.active_claim} />}
+          {locked && (
+            <form className="lineage-task-form" onSubmit={addComment}>
+              <label>
+                Comment
+                <textarea aria-label={`Comment for ${task.id}`} value={comment} onChange={event => setComment(event.target.value)} />
+              </label>
+              <div className="lineage-task-actions">
+                <button disabled={busy || !comment.trim()} type="submit">Add comment</button>
+                <button disabled={busy} onClick={overrideTask} type="button">Unlock</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function ClaimLine({ claim }: { claim?: LineageTask['active_claim'] }) {
+  if (!claim) return <p className="lineage-task-claim">Claimed by agent</p>;
+  const state = claim.derived_state === 'active' ? 'active' : claim.derived_state;
+  return (
+    <p className={`lineage-task-claim ${state}`}>
+      <span>{statusLabel(claim.derived_state)} claim</span>
+      <strong>{claim.agent_name}</strong>
+    </p>
+  );
+}
+
+function orderedLineageTasks(tasks: LineageTask[]): LineageTask[] {
+  return [...tasks].sort((left, right) => {
+    const leftOpen = isOpenTask(left) ? 0 : 1;
+    const rightOpen = isOpenTask(right) ? 0 : 1;
+    if (leftOpen !== rightOpen) return leftOpen - rightOpen;
+    return left.created_at.localeCompare(right.created_at);
+  });
+}
+
+function isOpenTask(task: LineageTask): boolean {
+  return task.status === 'pending' || task.status === 'claimed' || task.status === 'in_progress';
+}
+
+function statusLabel(status: string): string {
+  return status.replace(/_/g, ' ');
+}
+
+function taskLabel(task: LineageTask): string {
+  return `${task.task_type} task`;
 }
