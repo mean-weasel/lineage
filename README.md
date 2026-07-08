@@ -85,6 +85,20 @@ lineage reroll cancel --project demo-project --root <root-asset-id> --target <ta
 `lineage reroll import` updates the target node's current attempt and should
 not add a visible child edge.
 
+Lineage task queue commands expose the same work as explicit tasks that agents
+can inspect, claim, start, comment on, and cancel:
+
+```bash
+lineage tasks list --project demo-project --root <root-asset-id> --json
+lineage tasks inspect --project demo-project --task <task-id> --json
+lineage tasks claim --project demo-project --task <task-id> --agent-name "Task worker" --json
+lineage tasks start --project demo-project --task <task-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --json
+lineage tasks comment --project demo-project --task <task-id> --message "Blocked on source art review." --json
+lineage tasks cancel --project demo-project --task <task-id> --confirm-write --override --json
+lineage tasks instructions --project demo-project --task <task-id> --instructions "Preserve palette; replace unreadable text." --json
+lineage tasks override --project demo-project --task <task-id> --reason "Human is reassigning the work." --instructions "Use the updated brief." --json
+```
+
 The app-created claim-aware handoff packet includes the same token export,
 heartbeat, inspect, and write commands. Raw claim tokens are not shown in the
 read-only Agents view.

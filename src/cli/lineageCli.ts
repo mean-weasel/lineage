@@ -25,6 +25,16 @@ import {
   markLineageRerollRequest,
 } from '../server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineageHandoff';
+import {
+  addLineageTaskComment,
+  cancelLineageTask,
+  claimLineageTask,
+  getLineageTask,
+  listLineageTasks,
+  overrideLineageTask,
+  startLineageTask,
+  updateLineageTaskInstructions,
+} from '../server/assetLineageTasks';
 import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
 
 export interface LineageCliConfig {
@@ -118,6 +128,14 @@ Usage:
   ${config.binName} reroll cancel --root <asset-id> --target <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll plan --root <asset-id> --target <asset-id> --prompt <text> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll import --job-id <job-id> --file <scratch-file> --confirm-write [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks list --root <asset-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks inspect --task <task-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks claim --task <task-id> --agent-name <name> [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks start --task <task-id> --claim-token <claim-id.secret> [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks comment --task <task-id> --message <text> [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks override --task <task-id> --reason <text> [--instructions <text>] [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks instructions --task <task-id> --instructions <text> [--project <project>] [--db <path>] [--json]
   ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
   ${config.binName} agent graph --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} agent status [--project <project>] [--json]
@@ -240,6 +258,66 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
     }
     throw new Error(`Unknown reroll command: ${subcommand}`);
   }
+  if (command === 'tasks') {
+    const subcommand = positionalArgs(args)[0] || '';
+    const taskId = readOption(args, '--task');
+    if (subcommand === 'list') {
+      if (!options.rootAssetId) throw new Error('lineage tasks list requires --root');
+      return listLineageTasks(options.project, options.rootAssetId);
+    }
+    if (subcommand === 'inspect') {
+      if (!taskId) throw new Error('lineage tasks inspect requires --task');
+      return getLineageTask(options.project, taskId);
+    }
+    if (subcommand === 'claim') {
+      const agentName = readOption(args, '--agent-name');
+      if (!taskId) throw new Error('lineage tasks claim requires --task');
+      if (!agentName) throw new Error('lineage tasks claim requires --agent-name');
+      return claimLineageTask(options.project, { taskId, agentName });
+    }
+    if (subcommand === 'start') {
+      if (!taskId) throw new Error('lineage tasks start requires --task');
+      if (!options.claimToken) throw new Error('lineage tasks start requires --claim-token');
+      return startLineageTask(options.project, { taskId, claimToken: options.claimToken });
+    }
+    if (subcommand === 'comment') {
+      const message = readOption(args, '--message');
+      if (!taskId) throw new Error('lineage tasks comment requires --task');
+      if (!message) throw new Error('lineage tasks comment requires --message');
+      return addLineageTaskComment(options.project, {
+        actor: readOption(args, '--actor') || 'human',
+        message,
+        taskId,
+      });
+    }
+    if (subcommand === 'cancel') {
+      if (!taskId) throw new Error('lineage tasks cancel requires --task');
+      return cancelLineageTask(options.project, {
+        actor: readOption(args, '--actor') || 'human',
+        confirmWrite: options.confirmWrite,
+        override: args.includes('--override'),
+        taskId,
+      });
+    }
+    if (subcommand === 'override') {
+      const reason = readOption(args, '--reason');
+      if (!taskId) throw new Error('lineage tasks override requires --task');
+      if (!reason) throw new Error('lineage tasks override requires --reason');
+      return overrideLineageTask(options.project, {
+        actor: readOption(args, '--actor') || 'human',
+        instructions: readOption(args, '--instructions'),
+        reason,
+        taskId,
+      });
+    }
+    if (subcommand === 'instructions') {
+      const instructions = readOption(args, '--instructions');
+      if (!taskId) throw new Error('lineage tasks instructions requires --task');
+      if (instructions === undefined) throw new Error('lineage tasks instructions requires --instructions');
+      return updateLineageTaskInstructions(options.project, { instructions, taskId });
+    }
+    throw new Error(`Unknown tasks command: ${subcommand}`);
+  }
   throw new Error(`Unknown command: ${command}`);
 }
 
@@ -292,6 +370,25 @@ export function printDataResult(command: string, result: unknown, json: boolean)
     if ('request' in result) {
       const mutation = result as { dryRun?: boolean; request?: { node_asset_id: string; status: string } };
       console.log(`${mutation.dryRun ? 'Dry run: ' : ''}Re-roll ${mutation.request?.status || 'request'} for ${mutation.request?.node_asset_id || 'target'}`);
+      return;
+    }
+  }
+  if (command === 'tasks' && result && typeof result === 'object') {
+    if ('tasks' in result) {
+      const listed = result as { tasks: Array<{ id: string; status: string; target_asset_id: string; task_type: string }> };
+      console.log(`${listed.tasks.length} lineage task(s)`);
+      for (const task of listed.tasks) console.log(`${task.id} ${task.task_type} ${task.status} ${task.target_asset_id}`);
+      return;
+    }
+    if ('task' in result) {
+      const mutation = result as {
+        dryRun?: boolean;
+        events?: Array<{ event_type: string }>;
+        task?: { id: string; status: string; target_asset_id: string; task_type: string };
+      };
+      const prefix = mutation.dryRun ? 'Dry run: ' : '';
+      console.log(`${prefix}${mutation.task?.id || 'task'} ${mutation.task?.task_type || 'task'} ${mutation.task?.status || 'unknown'} ${mutation.task?.target_asset_id || ''}`.trim());
+      if (mutation.events && mutation.events.length > 0) console.log(`Events: ${mutation.events.map(event => event.event_type).join(', ')}`);
       return;
     }
   }
@@ -498,7 +595,7 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     return;
   }
 
-  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'link-child' || command === 'reroll') {
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'link-child' || command === 'reroll' || command === 'tasks') {
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {

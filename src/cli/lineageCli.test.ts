@@ -421,6 +421,134 @@ describe('lineage CLI handoff commands', () => {
     expect(finalList.requests).toEqual([]);
   });
 
+  it('manages lineage task queue commands from the packaged CLI contract', () => {
+    seedCliDb();
+    const marked = runLineageDataCommand('reroll', [
+      'mark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--notes', 'Fix distorted task text',
+      '--confirm-write',
+      '--json',
+    ]) as { task?: { id: string; status: string; task_type: string } };
+    const taskId = marked.task?.id || '';
+
+    const listed = runLineageDataCommand('tasks', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { tasks: Array<{ id: string; status: string; task_type: string }> };
+    expect(listed.tasks.map(task => ({ id: task.id, status: task.status, task_type: task.task_type }))).toEqual([
+      { id: taskId, status: 'pending', task_type: 'reroll' },
+    ]);
+
+    const instructed = runLineageDataCommand('tasks', [
+      'instructions',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--instructions', 'Preserve the palette while replacing unreadable text.',
+      '--json',
+    ]) as { events: Array<{ event_type: string }>; task: { instructions?: string; status: string } };
+    expect(instructed.task.instructions).toBe('Preserve the palette while replacing unreadable text.');
+    expect(instructed.events.map(event => event.event_type)).toContain('instructions_updated');
+
+    const inspected = runLineageDataCommand('tasks', [
+      'inspect',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--json',
+    ]) as { events: Array<{ event_type: string }>; task: { id: string; status: string; task_type: string } };
+    expect(inspected.task).toMatchObject({ id: taskId, status: 'pending', task_type: 'reroll' });
+    expect(inspected.events.map(event => event.event_type)).toContain('created');
+
+    const claimed = runLineageDataCommand('tasks', [
+      'claim',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--agent-name', 'CLI task worker',
+      '--json',
+    ]) as { claim_token: string; task: { status: string } };
+    expect(claimed.claim_token).toMatch(/^claim_[a-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(claimed.task.status).toBe('claimed');
+
+    const started = runLineageDataCommand('tasks', [
+      'start',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--claim-token', claimed.claim_token,
+      '--json',
+    ]) as { events: Array<{ event_type: string }>; task: { status: string } };
+    expect(started.task.status).toBe('in_progress');
+    expect(JSON.stringify(started)).not.toContain(claimed.claim_token);
+
+    const commented = runLineageDataCommand('tasks', [
+      'comment',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--message', 'Comment from the CLI contract test.',
+      '--json',
+    ]) as { events: Array<{ event_type: string; message?: string }>; task: { status: string } };
+    expect(commented.events.map(event => event.event_type)).toContain('comment_added');
+    expect(commented.events.find(event => event.event_type === 'comment_added')?.message).toBe('Comment from the CLI contract test.');
+
+    const dryCancelled = runLineageDataCommand('tasks', [
+      'cancel',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--override',
+      '--json',
+    ]) as { dryRun?: boolean; task: { status: string } };
+    expect(dryCancelled).toMatchObject({ dryRun: true, task: { status: 'cancelled' } });
+
+    const cancelled = runLineageDataCommand('tasks', [
+      'cancel',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--confirm-write',
+      '--override',
+      '--json',
+    ]) as { events: Array<{ event_type: string }>; task: { status: string } };
+    expect(cancelled.task.status).toBe('cancelled');
+    expect(cancelled.events.map(event => event.event_type)).toContain('cancelled');
+
+    expect(() => runLineageDataCommand('tasks', ['list', '--project', defaultProject, '--json'])).toThrow('lineage tasks list requires --root');
+    expect(() => runLineageDataCommand('tasks', ['inspect', '--project', defaultProject, '--json'])).toThrow('lineage tasks inspect requires --task');
+    expect(() => runLineageDataCommand('tasks', ['claim', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks claim requires --agent-name');
+    expect(() => runLineageDataCommand('tasks', ['start', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks start requires --claim-token');
+    expect(() => runLineageDataCommand('tasks', ['comment', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks comment requires --message');
+    expect(() => runLineageDataCommand('tasks', ['instructions', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks instructions requires --instructions');
+  });
+
+  it('prints readable task queue results in non-json output', () => {
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (value?: unknown) => logs.push(String(value));
+    try {
+      printDataResult('tasks', {
+        tasks: [
+          { id: 'task-1', status: 'pending', task_type: 'reroll', target_asset_id: 'asset-1' },
+          { id: 'task-2', status: 'in_progress', task_type: 'iterate', target_asset_id: 'asset-2' },
+        ],
+      }, false);
+      printDataResult('tasks', {
+        task: { id: 'task-1', status: 'claimed', task_type: 'reroll', target_asset_id: 'asset-1' },
+        events: [{ event_type: 'created' }, { event_type: 'claimed' }],
+      }, false);
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(logs).toEqual([
+      '2 lineage task(s)',
+      'task-1 reroll pending asset-1',
+      'task-2 iterate in_progress asset-2',
+      'task-1 reroll claimed asset-1',
+      'Events: created, claimed',
+    ]);
+  });
+
   it('keeps package docs aligned with claim-aware mutating command contracts', () => {
     const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
     const operator = readFileSync(join(repoRoot, 'plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md'), 'utf8');
