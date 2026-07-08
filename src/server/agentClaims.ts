@@ -62,6 +62,7 @@ export interface ValidateAgentClaimForWriteFields {
   writeKind: string;
   dangerLevel: 'claim' | 'warn' | 'enforce' | 'danger';
   confirmWrite?: boolean;
+  recordEvent?: boolean;
 }
 
 export type AgentClaimValidationResult =
@@ -447,6 +448,20 @@ export function transferAgentClaim(project: string, claimId: string, fields: { c
   }
 }
 
+export function recordAgentClaimWriteAllowed(claim: Pick<AgentClaim, 'id' | 'agent_name'>, fields: Pick<ValidateAgentClaimForWriteFields, 'dangerLevel' | 'targetId' | 'writeKind'>) {
+  const database = lineageDb();
+  try {
+    recordEvent(database, claim.id, 'write_allowed', claim.agent_name, `${fields.writeKind} allowed.`, {
+      danger_level: fields.dangerLevel,
+      target_id: fields.targetId,
+      write_kind: fields.writeKind,
+    });
+    return { ok: true as const };
+  } finally {
+    database.close();
+  }
+}
+
 export function validateAgentClaimForWrite(fields: ValidateAgentClaimForWriteFields): AgentClaimValidationResult {
   if (fields.dangerLevel === 'danger' && !fields.confirmWrite) {
     return denied('human_confirmation_required', 'Dangerous write requires explicit human confirmation.');
@@ -467,11 +482,13 @@ export function validateAgentClaimForWrite(fields: ValidateAgentClaimForWriteFie
     if (!scopeAllowsWrite(claim, fields.scopeType, fields.targetId, fields.writeKind)) {
       return denied('claim_scope_mismatch', `Claim does not cover ${fields.scopeType} ${fields.targetId}.`, [claim]);
     }
-    recordEvent(database, claim.id, 'write_allowed', claim.agent_name, `${fields.writeKind} allowed.`, {
-      danger_level: fields.dangerLevel,
-      target_id: fields.targetId,
-      write_kind: fields.writeKind,
-    });
+    if (fields.recordEvent !== false) {
+      recordEvent(database, claim.id, 'write_allowed', claim.agent_name, `${fields.writeKind} allowed.`, {
+        danger_level: fields.dangerLevel,
+        target_id: fields.targetId,
+        write_kind: fields.writeKind,
+      });
+    }
     return { ok: true, claim, warnings: [] };
   } finally {
     database.close();

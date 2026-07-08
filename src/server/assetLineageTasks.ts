@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createAgentClaim, releaseAgentClaim, validateAgentClaimForWrite, type AgentClaim } from './agentClaims';
+import { createAgentClaim, recordAgentClaimWriteAllowed, releaseAgentClaim, validateAgentClaimForWrite, type AgentClaim } from './agentClaims';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 import type {
   LineageTask,
@@ -357,10 +357,18 @@ export function claimLineageTask(project: string, fields: { taskId: string; agen
 
 export function startLineageTask(project: string, fields: { taskId: string; claimToken: string }): LineageTaskMutationResult {
   const normalizedProject = normalizeProject(project);
+  const precheckDatabase = lineageDb();
+  try {
+    const task = requireTask(precheckDatabase, normalizedProject, fields.taskId);
+    if (task.status !== 'claimed') throw new LineageTaskError('Only claimed lineage tasks can be started.', 409);
+  } finally {
+    precheckDatabase.close();
+  }
   const validation = validateAgentClaimForWrite({
     claimToken: fields.claimToken,
     dangerLevel: 'enforce',
     project: normalizedProject,
+    recordEvent: false,
     scopeType: 'lineage_task',
     targetId: fields.taskId,
     writeKind: 'lineage_task_start',
@@ -383,6 +391,11 @@ export function startLineageTask(project: string, fields: { taskId: string; clai
       `).run(timestamp, timestamp, metadataJson(metadata), task.id);
       assertChanged(result, 'Only claimed lineage tasks can be started.');
       recordEvent(database, task.id, 'started', validation.claim.agent_name, 'Lineage task started.', { claim_id: validation.claim.id });
+    });
+    recordAgentClaimWriteAllowed(validation.claim, {
+      dangerLevel: 'enforce',
+      targetId: fields.taskId,
+      writeKind: 'lineage_task_start',
     });
     return taskWithEvents(database, normalizedProject, task.id);
   } finally {

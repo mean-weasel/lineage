@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { backfillLineageTasks, lineageDb } from './assetLineageDb';
-import { listAgentClaims } from './agentClaims';
+import { inspectAgentClaim, listAgentClaims } from './agentClaims';
 import {
   addLineageTaskComment,
   cancelLineageTask,
@@ -227,6 +227,33 @@ describe('asset lineage tasks', () => {
     const inspected = getLineageTask(defaultProject, created.task.id);
     expect(inspected.task.status).toBe('claimed');
     expect(inspected.events.map(event => event.event_type)).toEqual(['created', 'claimed']);
+  });
+
+  it('records claim write permission only after a successful task start', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Start exactly once.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'Task worker',
+      taskId: created.task.id,
+    });
+
+    startLineageTask(defaultProject, {
+      claimToken: claimed.claim_token,
+      taskId: created.task.id,
+    });
+    expect(() => startLineageTask(defaultProject, {
+      claimToken: claimed.claim_token,
+      taskId: created.task.id,
+    })).toThrow('Only claimed lineage tasks can be started.');
+
+    const claimEvents = inspectAgentClaim(claimed.claim.id, defaultProject).events;
+    expect(claimEvents.filter(event => event.event_type === 'write_allowed')).toHaveLength(1);
   });
 
   it('cancels pending tasks with dry-run support and hides them from the default list', () => {
