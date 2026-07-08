@@ -22,6 +22,7 @@ import {
 } from './server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from './server/assetLineageHandoff';
 import { removeLineageNode } from './server/assetLineageRemove';
+import { isLineageTaskError } from './server/assetLineageTasks';
 import { isLineageWorkspaceError } from './server/assetLineageWorkspaces';
 import { getLedgerPageFromQuery } from './server/assetLedgerApi';
 import { isAssetReviewError, markAssetReview, markAssetReviewsFromRequestBody, requireApprovedLocalBackupPath, withLocalReviewMetadata } from './server/assetReviews';
@@ -37,6 +38,7 @@ import { contentBatchRouter } from './server/contentBatchRoutes';
 import { isContentBatchError } from './server/contentBatches';
 import { listImageGenerationJobs } from './server/generationReceiptJobs';
 import { isGenerationReceiptError } from './server/generationReceipts';
+import { registerLineageTaskRoutes } from './server/lineageTaskRoutes';
 import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes';
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
 const app = express();
@@ -134,6 +136,7 @@ app.get(
 );
 
 registerLineageWorkspaceRoutes(app, projectFrom, asyncRoute);
+registerLineageTaskRoutes(app, projectFrom, asyncRoute);
 
 app.get('/api/lineage/:rootAssetId/rerolls', asyncRoute((req, res) => {
   res.json(listLineageRerollRequests(projectFrom(req), req.params.rootAssetId));
@@ -446,6 +449,10 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     return;
   }
   if (isLineageWorkspaceError(error)) {
+    res.status(error.status).json({ error: error.message });
+    return;
+  }
+  if (isLineageTaskError(error)) {
     res.status(error.status).json({ error: error.message });
     return;
   }

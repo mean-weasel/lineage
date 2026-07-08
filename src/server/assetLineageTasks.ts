@@ -17,6 +17,10 @@ class LineageTaskError extends Error {
   }
 }
 
+export function isLineageTaskError(error: unknown): error is LineageTaskError {
+  return error instanceof LineageTaskError;
+}
+
 type Row = Record<string, unknown>;
 type LineageTaskMutationResult = Omit<LineageTaskMutationResponse, 'events'> & { project: string; events: LineageTaskEvent[] };
 type LineageTaskClaimResult = LineageTaskMutationResult & { claim: AgentClaim; claim_token: string };
@@ -35,6 +39,13 @@ function randomId(prefix: string): string {
 
 function metadataJson(metadata?: Record<string, unknown>): string | null {
   return metadata ? JSON.stringify(metadata) : null;
+}
+
+function metadataWithoutClaim(metadata?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+  const next = { ...metadata };
+  delete next.claim_id;
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 function parseMetadata(value: unknown): Record<string, unknown> | undefined {
@@ -396,6 +407,44 @@ export function startLineageTask(project: string, fields: { taskId: string; clai
       dangerLevel: 'enforce',
       targetId: fields.taskId,
       writeKind: 'lineage_task_start',
+    });
+    return taskWithEvents(database, normalizedProject, task.id);
+  } finally {
+    database.close();
+  }
+}
+
+export function overrideLineageTask(project: string, fields: {
+  actor: string;
+  instructions?: string;
+  reason: string;
+  taskId: string;
+}): LineageTaskMutationResult {
+  const normalizedProject = normalizeProject(project);
+  const actor = normalizeActor(fields.actor, 'Override actor');
+  const reason = fields.reason.trim();
+  if (!reason) throw new LineageTaskError('Override reason is required');
+  const database = lineageDb();
+  try {
+    const task = requireTask(database, normalizedProject, fields.taskId);
+    if (!['claimed', 'in_progress'].includes(task.status)) {
+      throw new LineageTaskError(`Only claimed or in-progress lineage tasks can be overridden; task is ${task.status}.`, 409);
+    }
+    const timestamp = nowIso();
+    const instructions = fields.instructions === undefined ? task.instructions : (fields.instructions.trim() || undefined);
+    const metadata = metadataWithoutClaim(task.metadata);
+    transaction(database, () => {
+      const result = database.prepare(`
+        update lineage_tasks
+        set status = 'pending', instructions = ?, claimed_at = null, started_at = null,
+          updated_at = ?, metadata_json = ?
+        where project_id = ? and id = ? and status in ('claimed', 'in_progress')
+      `).run(instructions || null, timestamp, metadataJson(metadata), normalizedProject, task.id);
+      assertChanged(result, `Only active lineage task ${task.id} could be overridden.`);
+      recordEvent(database, task.id, 'human_override', actor, reason, {
+        previous_claim_id: task.claimed_by_claim_id,
+        previous_status: task.status,
+      });
     });
     return taskWithEvents(database, normalizedProject, task.id);
   } finally {

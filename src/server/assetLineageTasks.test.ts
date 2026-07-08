@@ -1,6 +1,8 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import express from 'express';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { backfillLineageTasks, lineageDb } from './assetLineageDb';
@@ -12,16 +14,19 @@ import {
   claimLineageTask,
   getLineageTask,
   listLineageTasks,
+  overrideLineageTask,
   resolveLineageTask,
   startLineageTask,
   taskIdFor,
   updateLineageTaskInstructions,
   upsertLineageTask,
 } from './assetLineageTasks';
+import { registerLineageTaskRoutes } from './lineageTaskRoutes';
 import { fileSha256 } from './localReview';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage-tasks');
 const dbFile = join(scratchDir, 'asset-lineage-tasks.sqlite');
+let server: ReturnType<express.Express['listen']> | null = null;
 
 function localId(file: string): string {
   return `local-${fileSha256(file).slice(0, 12)}`;
@@ -58,9 +63,49 @@ function taskEventTypes(taskId: string): string[] {
   return getLineageTask(defaultProject, taskId).events.map(event => event.event_type);
 }
 
+function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {
+  const candidate = input.body?.project || input.query?.project;
+  return typeof candidate === 'string' ? candidate : defaultProject;
+}
+
+function asyncRoute(handler: (req: express.Request, res: express.Response) => Promise<void> | void): express.RequestHandler {
+  return (req, res, next) => { Promise.resolve(handler(req, res)).catch(next); };
+}
+
+function appWithLineageTaskRoutes() {
+  const app = express();
+  app.use(express.json());
+  registerLineageTaskRoutes(app, projectFrom, asyncRoute);
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const status = typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number' ? error.status : 500;
+    res.status(status).json({ error: error instanceof Error ? error.message : String(error) });
+  });
+  server = app.listen(0);
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+async function getJson<T>(baseUrl: string, path: string): Promise<{ body: T; status: number }> {
+  const response = await fetch(`${baseUrl}${path}`);
+  return { body: await response.json() as T, status: response.status };
+}
+
+async function postJson<T>(baseUrl: string, path: string, body: Record<string, unknown>): Promise<{ body: T; status: number }> {
+  const response = await fetch(`${baseUrl}${path}`, {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+  return { body: await response.json() as T, status: response.status };
+}
+
 describe('asset lineage tasks', () => {
   beforeEach(() => {
     process.env.LINEAGE_DB = dbFile;
+  });
+
+  afterEach(() => {
+    server?.close();
+    server = null;
   });
 
   it('upserts one open iterate task per target and records created then instructions_updated', () => {
@@ -256,6 +301,213 @@ describe('asset lineage tasks', () => {
 
     const claimEvents = inspectAgentClaim(claimed.claim.id, defaultProject).events;
     expect(claimEvents.filter(event => event.event_type === 'write_allowed')).toHaveLength(1);
+  });
+
+  it('returns an active claimed task to pending when a human override is recorded', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Original task instructions.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    claimLineageTask(defaultProject, {
+      agentName: 'Task worker',
+      taskId: created.task.id,
+    });
+
+    const overridden = overrideLineageTask(defaultProject, {
+      actor: 'human',
+      instructions: 'Updated after override.',
+      reason: 'Worker stopped responding.',
+      taskId: created.task.id,
+    });
+
+    expect(overridden.ok).toBe(true);
+    expect(overridden.task).toMatchObject({
+      claimed_at: undefined,
+      claimed_by_claim_id: undefined,
+      instructions: 'Updated after override.',
+      started_at: undefined,
+      status: 'pending',
+    });
+    expect(overridden.task.metadata?.claim_id).toBeUndefined();
+    expect(overridden.events.map(event => event.event_type)).toEqual(['created', 'claimed', 'human_override']);
+    expect(overridden.events.at(-1)).toMatchObject({
+      actor: 'human',
+      message: 'Worker stopped responding.',
+      metadata: { previous_status: 'claimed' },
+    });
+  });
+
+  it('does not override pending or closed lineage tasks', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+
+    expect(() => overrideLineageTask(defaultProject, {
+      actor: 'human',
+      reason: 'No active worker.',
+      taskId: created.task.id,
+    })).toThrow('claimed or in-progress');
+
+    cancelLineageTask(defaultProject, {
+      actor: 'human',
+      confirmWrite: true,
+      taskId: created.task.id,
+    });
+    expect(() => overrideLineageTask(defaultProject, {
+      actor: 'human',
+      reason: 'Closed task stays closed.',
+      taskId: created.task.id,
+    })).toThrow('claimed or in-progress');
+  });
+
+  it('serves lineage task list and update routes', async () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Initial route instructions.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const baseUrl = appWithLineageTaskRoutes();
+
+    const listed = await getJson<{ tasks: Array<{ id: string; instructions?: string }> }>(
+      baseUrl,
+      `/api/lineage/${files.rootId}/tasks?project=${encodeURIComponent(defaultProject)}`
+    );
+    const updated = await postJson<{ task: { id: string; instructions?: string } }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(created.task.id)}/instructions`,
+      { instructions: 'Route-updated instructions.', project: defaultProject }
+    );
+
+    expect(listed.status).toBe(200);
+    expect(listed.body.tasks.map(task => task.id)).toEqual([created.task.id]);
+    expect(updated.status).toBe(200);
+    expect(updated.body.task).toMatchObject({
+      id: created.task.id,
+      instructions: 'Route-updated instructions.',
+    });
+  });
+
+  it('keeps a locked task locked when adding a comment through the route', async () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'Task route worker',
+      taskId: created.task.id,
+    });
+    const baseUrl = appWithLineageTaskRoutes();
+
+    const commented = await postJson<{ task: { status: string; claimed_by_claim_id?: string }; events: Array<{ event_type: string }> }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(created.task.id)}/comment`,
+      { actor: 'human', message: 'Please keep the current palette.', project: defaultProject }
+    );
+    const empty = await postJson<{ error: string }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(created.task.id)}/comment`,
+      { actor: 'human', message: '', project: defaultProject }
+    );
+
+    expect(commented.status).toBe(200);
+    expect(commented.body.task).toMatchObject({
+      claimed_by_claim_id: claimed.claim.id,
+      status: 'claimed',
+    });
+    expect(commented.body.events.map(event => event.event_type)).toContain('comment_added');
+    expect(empty.status).toBe(400);
+    expect(empty.body.error).toBe('Comment message is required');
+  });
+
+  it('claims and starts a task through routes using snake_case and camelCase body aliases', async () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const baseUrl = appWithLineageTaskRoutes();
+
+    const claimed = await postJson<{ claim_token: string; task: { status: string; claimed_by_claim_id?: string } }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(created.task.id)}/claim`,
+      { agent_name: 'Snake route worker', project: defaultProject }
+    );
+    const started = await postJson<{ task: { status: string; claimed_by_claim_id?: string } }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(created.task.id)}/start`,
+      { claimToken: claimed.body.claim_token, project: defaultProject }
+    );
+
+    expect(claimed.status).toBe(200);
+    expect(claimed.body.task.status).toBe('claimed');
+    expect(claimed.body.claim_token).toMatch(/^claim_/);
+    expect(started.status).toBe(200);
+    expect(started.body.task).toMatchObject({
+      claimed_by_claim_id: claimed.body.task.claimed_by_claim_id,
+      status: 'in_progress',
+    });
+    expect(JSON.stringify(started.body)).not.toContain(claimed.body.claim_token);
+  });
+
+  it('routes cancellation through confirmWrite and override safeguards', async () => {
+    const files = seedLineage();
+    const pending = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.rootId,
+      taskType: 'iterate',
+    });
+    const active = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    claimLineageTask(defaultProject, {
+      agentName: 'Active route worker',
+      taskId: active.task.id,
+    });
+    const baseUrl = appWithLineageTaskRoutes();
+
+    const dryRun = await postJson<{ dryRun?: true; task: { status: string } }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(pending.task.id)}/cancel`,
+      { actor: 'human', confirmWrite: false, project: defaultProject }
+    );
+    const denied = await postJson<{ error: string }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(active.task.id)}/cancel`,
+      { actor: 'human', confirmWrite: true, project: defaultProject }
+    );
+    const cancelled = await postJson<{ task: { status: string } }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(active.task.id)}/cancel`,
+      { actor: 'human', confirmWrite: true, override: true, project: defaultProject }
+    );
+
+    expect(dryRun.status).toBe(200);
+    expect(dryRun.body).toMatchObject({ dryRun: true, task: { status: 'cancelled' } });
+    expect(getLineageTask(defaultProject, pending.task.id).task.status).toBe('pending');
+    expect(denied.status).toBe(409);
+    expect(denied.body.error).toContain('override=true');
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.task.status).toBe('cancelled');
   });
 
   it('cancels pending tasks with dry-run support and hides them from the default list', () => {
