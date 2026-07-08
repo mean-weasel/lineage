@@ -76,7 +76,7 @@ const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-package-smoke-'));
 
 function parsePackMetadata(packOutput) {
   const metadata = JSON.parse(packOutput);
-  const pack = Array.isArray(metadata) ? metadata[0] : metadata;
+  const pack = Array.isArray(metadata) ? metadata[0] : metadata?.filename ? metadata : Object.values(metadata ?? {})[0];
   if (!pack || typeof pack.filename !== 'string' || !Array.isArray(pack.files)) {
     throw new Error('npm pack returned unexpected JSON metadata');
   }
