@@ -45,6 +45,7 @@ jobs:
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-next' }}
         run: npm run release -- --tag next
         env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
       - name: Publish latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'publish-latest' }}
@@ -53,6 +54,7 @@ jobs:
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-latest' }}
         run: npm run release -- --tag latest
         env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
       - name: Promote next to latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
