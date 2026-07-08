@@ -2,6 +2,24 @@
   min-width: 120px;
 }
 
+.lineage-title p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.lineage-seed-identity {
+  border: 1px solid #bdd5dc;
+  border-radius: 999px;
+  background: #f4fafb;
+  color: #125d68;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .lineage-primary-controls {
   display: flex;
   flex-wrap: wrap;
@@ -160,7 +178,7 @@
 
 @media (max-width: 960px) {
   .lineage-primary-controls {
-    display: grid;
+    display: flex;
     min-width: 0;
   }
 
@@ -169,6 +187,6 @@
   }
 
   .lineage-direction-control {
-    flex-basis: 100%;
+    flex: 0 0 154px;
   }
 }

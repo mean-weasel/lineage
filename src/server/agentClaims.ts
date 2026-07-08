@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 
-export type AgentClaimScopeType = 'lineage_workspace' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
+export type AgentClaimScopeType = 'lineage_workspace' | 'lineage_task' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
 type AgentClaimStatus = 'active' | 'expired' | 'released' | 'revoked' | 'transferred';
 
 export interface AgentClaim {
@@ -62,6 +62,7 @@ export interface ValidateAgentClaimForWriteFields {
   writeKind: string;
   dangerLevel: 'claim' | 'warn' | 'enforce' | 'danger';
   confirmWrite?: boolean;
+  recordEvent?: boolean;
 }
 
 export type AgentClaimValidationResult =
@@ -73,7 +74,7 @@ type Row = Record<string, unknown>;
 const defaultTtlSeconds = 20 * 60;
 const idleAfterSeconds = 5 * 60;
 const staleAfterSeconds = 15 * 60;
-const scopes = new Set<AgentClaimScopeType>(['lineage_workspace', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel']);
+const scopes = new Set<AgentClaimScopeType>(['lineage_workspace', 'lineage_task', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel']);
 const claimTokenPattern = /claim_[a-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 
 export class AgentClaimError extends Error {
@@ -429,6 +430,20 @@ export function revokeAgentClaim(project: string, claimId: string, fields: { act
   }
 }
 
+export function revokeAgentClaimInDatabase(database: DatabaseSync, project: string, claimId: string, fields: { actor?: string; reason?: string }) {
+  expireActiveClaims(database);
+  const claim = findClaimById(database, claimId, project);
+  if (!claim) throw new AgentClaimError(`Unknown agent claim: ${claimId}`, 404, 'claim_not_found');
+  if (claim.status !== 'active') return claim;
+  const timestamp = nowIso();
+  database.prepare(`
+    update agent_claims set status = 'revoked', revoked_at = ?, revoked_by = ?, override_reason = ?
+    where id = ? and status = 'active'
+  `).run(timestamp, fields.actor || 'human', fields.reason || null, claim.id);
+  recordEvent(database, claim.id, 'revoked', fields.actor || 'human', fields.reason);
+  return findClaimById(database, claim.id, project);
+}
+
 export function transferAgentClaim(project: string, claimId: string, fields: { confirmWrite: boolean; toAgentName: string; actor?: string; reason?: string }) {
   if (!fields.confirmWrite) throw new AgentClaimError('Transferring an agent claim requires confirmWrite=true.', 400, 'confirm_write_required');
   const toAgentName = fields.toAgentName.trim();
@@ -442,6 +457,20 @@ export function transferAgentClaim(project: string, claimId: string, fields: { c
     database.prepare('update agent_claims set agent_name = ? where id = ?').run(toAgentName, claim.id);
     recordEvent(database, claim.id, 'transferred', fields.actor || 'human', fields.reason || `Transferred claim to ${toAgentName}.`, { to_agent_name: toAgentName });
     return { ok: true as const, claim: findClaimById(database, claim.id) };
+  } finally {
+    database.close();
+  }
+}
+
+export function recordAgentClaimWriteAllowed(claim: Pick<AgentClaim, 'id' | 'agent_name'>, fields: Pick<ValidateAgentClaimForWriteFields, 'dangerLevel' | 'targetId' | 'writeKind'>) {
+  const database = lineageDb();
+  try {
+    recordEvent(database, claim.id, 'write_allowed', claim.agent_name, `${fields.writeKind} allowed.`, {
+      danger_level: fields.dangerLevel,
+      target_id: fields.targetId,
+      write_kind: fields.writeKind,
+    });
+    return { ok: true as const };
   } finally {
     database.close();
   }
@@ -467,11 +496,13 @@ export function validateAgentClaimForWrite(fields: ValidateAgentClaimForWriteFie
     if (!scopeAllowsWrite(claim, fields.scopeType, fields.targetId, fields.writeKind)) {
       return denied('claim_scope_mismatch', `Claim does not cover ${fields.scopeType} ${fields.targetId}.`, [claim]);
     }
-    recordEvent(database, claim.id, 'write_allowed', claim.agent_name, `${fields.writeKind} allowed.`, {
-      danger_level: fields.dangerLevel,
-      target_id: fields.targetId,
-      write_kind: fields.writeKind,
-    });
+    if (fields.recordEvent !== false) {
+      recordEvent(database, claim.id, 'write_allowed', claim.agent_name, `${fields.writeKind} allowed.`, {
+        danger_level: fields.dangerLevel,
+        target_id: fields.targetId,
+        write_kind: fields.writeKind,
+      });
+    }
     return { ok: true, claim, warnings: [] };
   } finally {
     database.close();

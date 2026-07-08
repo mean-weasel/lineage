@@ -78,6 +78,15 @@ export function LineageCanvas({
             <span>Inspecting</span>
             <button aria-label="Dismiss inspecting card" onClick={() => onNodeInspect(null)} type="button">×</button>
           </div>
+          <div className="lineage-canvas-status-preview">
+            {activeNode.preview_url && (activeNode.media_type === 'image' || activeNode.media_type === 'gif') ? (
+              <img alt="" src={activeNode.preview_url} />
+            ) : activeNode.preview_url && activeNode.media_type === 'video' ? (
+              <video muted src={activeNode.preview_url} />
+            ) : (
+              <span>{activeNode.media_type}</span>
+            )}
+          </div>
           <strong data-testid="lineage-inspecting-title">{activeNode.title}</strong><code data-testid="lineage-inspecting-asset-id">{inspectingId}</code>
           <button data-testid="lineage-open-detail" onClick={() => onNodeOpenDetail(activeNode.asset_id)}>Open detail</button>
           <button data-testid="lineage-show-all" onClick={onClearFocus}>Show all</button>

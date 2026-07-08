@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
 import { LINEAGE_NEXT_VARIATION_LIMIT, normalizeSelectionInput, selectedRows, selectionId } from './assetLineageSelection';
+import { cancelLineageTask, listLineageTasks, upsertLineageTask } from './assetLineageTasks';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { requireLineageWorkspaceClaimForWrite } from './lineageClaimGuards';
 import type {
@@ -22,6 +23,7 @@ import type {
   LineageRerollRequestMutationResponse,
   LineageRerollRequestsResponse,
   LineageSnapshot,
+  LineageTask,
   ReviewFields,
   SelectionFields,
 } from '../shared/types';
@@ -206,6 +208,36 @@ function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
   };
 }
 
+function tasksByTarget(tasks: LineageTask[]): Map<string, Partial<Record<'iterate' | 'reroll', LineageTask>>> {
+  const byTarget = new Map<string, Partial<Record<'iterate' | 'reroll', LineageTask>>>();
+  for (const task of tasks) {
+    if (task.task_type !== 'iterate' && task.task_type !== 'reroll') continue;
+    const existing = byTarget.get(task.target_asset_id) || {};
+    existing[task.task_type] = task;
+    byTarget.set(task.target_asset_id, existing);
+  }
+  return byTarget;
+}
+
+function withRerollTask(request: LineageRerollRequest, task?: LineageTask): LineageRerollRequest {
+  return task ? { ...request, task_id: task.id, task } : request;
+}
+
+function taskBackedRerollRequest(project: string, rootAssetId: string, task: LineageTask): LineageRerollRequest {
+  return {
+    id: `${task.id}:request`,
+    project_id: project,
+    root_asset_id: rootAssetId,
+    node_asset_id: task.target_asset_id,
+    status: 'pending',
+    requested_by: task.created_by,
+    notes: task.instructions,
+    created_at: task.created_at,
+    task_id: task.id,
+    task,
+  };
+}
+
 function attemptFrom(row: Record<string, unknown>): LineageAttempt {
   return {
     id: String(row.id),
@@ -327,7 +359,14 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   requireAsset(database, project, assetId);
   const root = explicitWorkspaceRoot(database, project, assetId) || rootFor(database, project, assetId);
   const edges = descendants(database, project, root);
-  const ids = [...new Set([root, ...edges.flatMap(edge => [edge.parent_asset_id, edge.child_asset_id])])];
+  const selected = selectedRows(database, project, root);
+  const tasks = listLineageTasks(project, root).tasks;
+  const ids = [...new Set([
+    root,
+    ...edges.flatMap(edge => [edge.parent_asset_id, edge.child_asset_id]),
+    ...selected.map(row => row.asset_id),
+    ...tasks.map(task => task.target_asset_id),
+  ])];
   const placeholders = ids.map(() => '?').join(',');
   const rows = database.prepare(`
     select a.id asset_id, a.project_id project, a.source, a.title, a.media_type, a.status, a.channel, a.campaign,
@@ -336,7 +375,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     from assets a left join asset_reviews r on r.asset_id = a.id
       left join asset_layouts l on l.project_id = a.project_id and l.root_asset_id = ? and l.asset_id = a.id
     where a.project_id = ? and a.id in (${placeholders})
-  `).all(root, project, ...ids) as Array<Omit<LineageNode, 'attempt_count' | 'current_attempt' | 'is_latest' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
+  `).all(root, project, ...ids) as unknown as Array<Omit<LineageNode, 'attempt_count' | 'current_attempt' | 'is_latest' | 'lineage_tasks' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
   const attemptRows = ids.length > 0
     ? database.prepare(`select * from asset_attempts where project_id = ? and node_asset_id in (${placeholders}) order by node_asset_id, attempt_index desc`).all(project, ...ids) as Array<Record<string, unknown>>
     : [];
@@ -344,14 +383,14 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   for (const attempt of attemptRows.map(attemptFrom)) {
     attemptsByNode.set(attempt.node_asset_id, [...(attemptsByNode.get(attempt.node_asset_id) || []), attempt]);
   }
+  const lineageTasksByNode = tasksByTarget(tasks);
   const rerollRows = ids.length > 0
     ? database.prepare(`select * from asset_reroll_requests where project_id = ? and root_asset_id = ? and status = 'pending' and node_asset_id in (${placeholders}) order by created_at`).all(project, root, ...ids) as Array<Record<string, unknown>>
     : [];
   const rerollsByNode = new Map(rerollRows.map(row => {
     const request = rerollRequestFrom(row);
-    return [request.node_asset_id, request] as const;
+    return [request.node_asset_id, withRerollTask(request, lineageTasksByNode.get(request.node_asset_id)?.reroll)] as const;
   }));
-  const selected = selectedRows(database, project, root);
   const childIds = new Set(edges.map(edge => edge.parent_asset_id));
   const selectedIds = new Set(selected.map(row => row.asset_id));
   const selections = selected.map(row => ({
@@ -366,11 +405,13 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     const attempts = withImplicitAttempt(attemptsByNode.get(row.asset_id) || [], row);
     const currentAttempt = attempts.find(attempt => attempt.is_current) || attempts[0];
     const previewPath = currentAttempt?.file_path || row.local_path;
+    const lineageTasks = lineageTasksByNode.get(row.asset_id);
     return {
       ...node,
       attempt_count: attempts.length,
       current_attempt: currentAttempt,
       is_latest: !childIds.has(row.asset_id),
+      lineage_tasks: lineageTasks && Object.keys(lineageTasks).length > 0 ? lineageTasks : undefined,
       position,
       preview_url: canPreviewLocally(row.media_type, previewPath) ? localPreviewUrl(project, previewPath) : undefined,
       reroll_request: rerollsByNode.get(row.asset_id),
@@ -386,6 +427,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     selected: selections.map(row => row.asset_id),
     selection,
     selections,
+    tasks,
     latest: nodes.filter(node => node.is_latest).map(node => node.asset_id),
     nodes,
     edges,
@@ -434,9 +476,31 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
   const root = resolveRoot(database, project, rootAssetId);
   database.close();
   const snapshot = getLineageSnapshot(project, root);
-  const selectedNodes = snapshot.selected
+  const pendingIterateTasks = (snapshot.tasks || []).filter(task => task.task_type === 'iterate' && task.status === 'pending');
+  const taskIdsInSelectionOrder = [
+    ...snapshot.selections
+      .map(selection => selection.asset_id)
+      .filter(assetId => pendingIterateTasks.some(task => task.target_asset_id === assetId)),
+    ...pendingIterateTasks
+      .map(task => task.target_asset_id)
+      .filter(assetId => !snapshot.selections.some(selection => selection.asset_id === assetId)),
+  ];
+  const taskSelectedIds = [...new Set(taskIdsInSelectionOrder)];
+  const selectedIds = taskSelectedIds.length > 0 ? taskSelectedIds : snapshot.selected;
+  const selectedNodes = selectedIds
     .map(assetId => snapshot.nodes.find(node => node.asset_id === assetId))
     .filter((node): node is LineageNode => Boolean(node));
+  const taskSelections = taskSelectedIds.map((assetId, position) => {
+    const task = pendingIterateTasks.find(item => item.target_asset_id === assetId);
+    return {
+      asset_id: assetId,
+      notes: task?.instructions,
+      position,
+      selected_at: task?.created_at || nowIso(),
+    };
+  });
+  const selectedSelection = taskSelections.length > 0 ? taskSelections[0] : snapshot.selection;
+  const selectedSelections = taskSelections.length > 0 ? taskSelections : snapshot.selections;
   const latestNodes = snapshot.nodes.filter(node => snapshot.latest.includes(node.asset_id));
   const warnings: string[] = [];
   for (const selectedNode of selectedNodes) {
@@ -454,9 +518,9 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
       next_asset: selectedNodes[0],
       next_assets: selectedNodes,
       latest: snapshot.latest,
-      selected: snapshot.selected,
-      selection: snapshot.selection,
-      selections: snapshot.selections,
+      selected: selectedIds,
+      selection: selectedSelection,
+      selections: selectedSelections,
       candidates: latestNodes,
       warnings,
       fetchedAt: nowIso(),
@@ -473,9 +537,9 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
       next_asset: latestNodes[0],
       next_assets: [latestNodes[0]],
       latest: snapshot.latest,
-      selected: snapshot.selected,
-      selection: snapshot.selection,
-      selections: snapshot.selections,
+      selected: selectedIds,
+      selection: selectedSelection,
+      selections: selectedSelections,
       candidates: latestNodes,
       warnings,
       fetchedAt: nowIso(),
@@ -491,9 +555,9 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
     next_asset: null,
     next_assets: [],
     latest: snapshot.latest,
-    selected: snapshot.selected,
-    selection: snapshot.selection,
-    selections: snapshot.selections,
+    selected: selectedIds,
+    selection: selectedSelection,
+    selections: selectedSelections,
     candidates: latestNodes,
     warnings,
     fetchedAt: nowIso(),
@@ -515,12 +579,23 @@ export function listLineageRerollRequests(project: string, rootAssetId: string):
   const database = db();
   try {
     assertCanonicalRoot(database, project, rootAssetId);
+    const rerollTasks = listLineageTasks(project, rootAssetId).tasks.filter(task => task.task_type === 'reroll');
+    const pendingRerollTasks = listLineageTasks(project, rootAssetId, ['pending']).tasks.filter(task => task.task_type === 'reroll');
+    const rerollTaskByTarget = new Map(rerollTasks.map(task => [task.target_asset_id, task]));
     const rows = database.prepare(`
       select * from asset_reroll_requests
       where project_id = ? and root_asset_id = ? and status = 'pending'
       order by created_at, id
     `).all(project, rootAssetId) as Array<Record<string, unknown>>;
-    return { project, root_asset_id: rootAssetId, requests: rows.map(rerollRequestFrom), fetchedAt: nowIso() };
+    const requests = rows.map(row => {
+      const request = rerollRequestFrom(row);
+      return withRerollTask(request, rerollTaskByTarget.get(request.node_asset_id));
+    });
+    const legacyTargets = new Set(requests.map(request => request.node_asset_id));
+    for (const task of pendingRerollTasks) {
+      if (!legacyTargets.has(task.target_asset_id)) requests.push(taskBackedRerollRequest(project, rootAssetId, task));
+    }
+    return { project, root_asset_id: rootAssetId, requests, fetchedAt: nowIso() };
   } finally {
     database.close();
   }
@@ -705,6 +780,13 @@ export function markLineageRerollRequest(project: string, fields: { rootAssetId:
       created_at: timestamp,
     };
     if (!fields.confirmWrite) return { ok: true, dryRun: true, request };
+    const taskResult = upsertLineageTask(project, {
+      createdBy: request.requested_by,
+      instructions: request.notes,
+      rootAssetId: fields.rootAssetId,
+      targetAssetId: fields.nodeAssetId,
+      taskType: 'reroll',
+    });
     if (existing) {
       database.prepare(`
         update asset_reroll_requests
@@ -724,7 +806,12 @@ export function markLineageRerollRequest(project: string, fields: { rootAssetId:
         review_state = excluded.review_state, reviewed_at = excluded.reviewed_at,
         ignored_at = excluded.ignored_at, notes = coalesce(excluded.notes, asset_reviews.notes), updated_at = excluded.updated_at
     `).run(fields.nodeAssetId, timestamp, request.notes || null, timestamp);
-    return { ok: true, request: rerollRequestFrom(database.prepare('select * from asset_reroll_requests where id = ?').get(request.id) as Record<string, unknown>) };
+    return {
+      ok: true,
+      request: withRerollTask(rerollRequestFrom(database.prepare('select * from asset_reroll_requests where id = ?').get(request.id) as Record<string, unknown>), taskResult.task),
+      task_id: taskResult.task.id,
+      task: taskResult.task,
+    };
   } finally {
     database.close();
   }
@@ -743,12 +830,23 @@ export function clearLineageRerollRequest(project: string, fields: { rootAssetId
     const timestamp = nowIso();
     const request = { ...rerollRequestFrom(existing), status: 'cancelled' as const, resolved_at: timestamp };
     if (!fields.confirmWrite) return { ok: true, dryRun: true, request };
+    const task = listLineageTasks(project, fields.rootAssetId, ['pending']).tasks.find(item => item.task_type === 'reroll' && item.target_asset_id === fields.nodeAssetId);
+    const cancelledTask = task ? cancelLineageTask(project, {
+      actor: 'human',
+      confirmWrite: true,
+      taskId: task.id,
+    }).task : undefined;
     database.prepare(`
       update asset_reroll_requests
       set status = 'cancelled', resolved_at = ?
       where id = ?
     `).run(timestamp, request.id);
-    return { ok: true, request };
+    return {
+      ok: true,
+      request: withRerollTask(request, cancelledTask),
+      task_id: cancelledTask?.id,
+      task: cancelledTask,
+    };
   } finally {
     database.close();
   }
@@ -756,47 +854,83 @@ export function clearLineageRerollRequest(project: string, fields: { rootAssetId
 
 export function updateSelectedAsset(project: string, fields: SelectionFields) {
   const database = db();
-  const inputAssetIds = normalizeSelectionInput(fields);
-  const root = fields.rootAssetId || (inputAssetIds[0] ? rootFor(database, project, inputAssetIds[0]) : '');
-  if (!root) throw new LineageError('Selection requires rootAssetId or assetId');
-  requireAsset(database, project, root);
-  for (const assetId of inputAssetIds) requireAsset(database, project, assetId);
-  const mode = fields.mode || 'replace';
-  const limit = fields.maxSelections || LINEAGE_NEXT_VARIATION_LIMIT;
-  if (!fields.confirmWrite) {
+  let root: string;
+  let current: ReturnType<typeof selectedRows>;
+  let inputAssetIds: string[];
+  let mode: NonNullable<SelectionFields['mode']>;
+  let limit: number;
+  let nextIds: string[];
+  const notesByAsset = new Map<string, string | undefined>();
+  try {
+    inputAssetIds = normalizeSelectionInput(fields);
+    root = fields.rootAssetId || (inputAssetIds[0] ? rootFor(database, project, inputAssetIds[0]) : '');
+    if (!root) throw new LineageError('Selection requires rootAssetId or assetId');
+    requireAsset(database, project, root);
+    for (const assetId of inputAssetIds) requireAsset(database, project, assetId);
+    mode = fields.mode || 'replace';
+    limit = fields.maxSelections || LINEAGE_NEXT_VARIATION_LIMIT;
+    if (!fields.confirmWrite) {
+      return { ok: true as const, dryRun: true, root_asset_id: root, asset_ids: inputAssetIds, mode, clear: Boolean(fields.clear), max_selections: limit };
+    }
+    current = selectedRows(database, project, root);
+    nextIds = current.map(row => row.asset_id);
+    if (fields.clear) {
+      nextIds = [];
+    } else if (mode === 'replace') {
+      nextIds = inputAssetIds;
+    } else if (mode === 'add') {
+      nextIds = [...nextIds, ...inputAssetIds];
+    } else if (mode === 'remove') {
+      nextIds = nextIds.filter(assetId => !inputAssetIds.includes(assetId));
+    } else if (mode === 'toggle') {
+      for (const assetId of inputAssetIds) {
+        nextIds = nextIds.includes(assetId) ? nextIds.filter(id => id !== assetId) : [...nextIds, assetId];
+      }
+    }
+    nextIds = [...new Set(nextIds)];
+    if (!fields.clear && inputAssetIds.length === 0) throw new LineageError('Selection set requires assetId or assetIds');
+    if (nextIds.length > limit) throw new LineageError(`Select at most ${limit} assets for next variation`);
+    for (const assetId of nextIds) {
+      const existing = current.find(row => row.asset_id === assetId);
+      notesByAsset.set(assetId, inputAssetIds.includes(assetId) ? fields.notes || existing?.notes : existing?.notes);
+    }
+  } finally {
     database.close();
-    return { ok: true as const, dryRun: true, root_asset_id: root, asset_ids: inputAssetIds, mode, clear: Boolean(fields.clear), max_selections: limit };
   }
-  const current = selectedRows(database, project, root);
-  let nextIds = current.map(row => row.asset_id);
-  if (fields.clear) {
-    nextIds = [];
-  } else if (mode === 'replace') {
-    nextIds = inputAssetIds;
-  } else if (mode === 'add') {
-    nextIds = [...nextIds, ...inputAssetIds];
-  } else if (mode === 'remove') {
-    nextIds = nextIds.filter(assetId => !inputAssetIds.includes(assetId));
-  } else if (mode === 'toggle') {
-    for (const assetId of inputAssetIds) {
-      nextIds = nextIds.includes(assetId) ? nextIds.filter(id => id !== assetId) : [...nextIds, assetId];
+
+  const removedIds = current.map(row => row.asset_id).filter(assetId => !nextIds.includes(assetId));
+  const openIterateTasks = listLineageTasks(project, root, ['pending']).tasks.filter(task => task.task_type === 'iterate');
+  for (const assetId of removedIds) {
+    const task = openIterateTasks.find(item => item.target_asset_id === assetId);
+    if (task) {
+      cancelLineageTask(project, {
+        actor: 'human',
+        confirmWrite: true,
+        taskId: task.id,
+      });
     }
   }
-  nextIds = [...new Set(nextIds)];
-  if (!fields.clear && inputAssetIds.length === 0) throw new LineageError('Selection set requires assetId or assetIds');
-  if (nextIds.length > limit) throw new LineageError(`Select at most ${limit} assets for next variation`);
-  database.prepare('delete from asset_selections where project_id = ? and root_asset_id = ?').run(project, root);
+  for (const assetId of nextIds) {
+    upsertLineageTask(project, {
+      createdBy: 'human',
+      instructions: notesByAsset.get(assetId),
+      rootAssetId: root,
+      targetAssetId: assetId,
+      taskType: 'iterate',
+    });
+  }
+
+  const writeDatabase = db();
+  writeDatabase.prepare('delete from asset_selections where project_id = ? and root_asset_id = ?').run(project, root);
   const timestamp = nowIso();
-  const insert = database.prepare(`
+  const insert = writeDatabase.prepare(`
     insert into asset_selections (id, project_id, root_asset_id, asset_id, position, notes, selected_at)
     values (?, ?, ?, ?, ?, ?, ?)
   `);
   nextIds.forEach((assetId, position) => {
-    const existing = current.find(row => row.asset_id === assetId);
-    const notes = inputAssetIds.includes(assetId) ? fields.notes || existing?.notes : existing?.notes;
-    insert.run(selectionId(project, root, assetId), project, root, assetId, position, notes || null, timestamp);
+    insert.run(selectionId(project, root, assetId), project, root, assetId, position, notesByAsset.get(assetId) || null, timestamp);
   });
-  database.close();
+  writeDatabase.close();
   const message = nextIds.length === 0 ? `Cleared selected assets for ${root}` : `Selected ${nextIds.length} asset${nextIds.length === 1 ? '' : 's'} for ${root}`;
   return { ok: true as const, message, root_asset_id: root, asset_id: nextIds[0] || null, asset_ids: nextIds, mode };
 }

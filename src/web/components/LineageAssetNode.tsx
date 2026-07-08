@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import type { LineageNode } from '../../shared/types';
+import type { LineageNode, LineageTask } from '../../shared/types';
 import { storageStateFor } from '../assetUi';
 
 export type LineageFocusRole = 'active' | 'child' | 'none' | 'parent';
@@ -17,6 +17,7 @@ export type AssetFlowNode = Node<AssetNodeData, 'assetNode'>;
 
 export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const storage = storageStateFor({ hasLocal: Boolean(data.local_path), hasS3: Boolean(data.s3_key) });
+  const taskBadges = lineageTaskBadges(data.lineage_tasks);
   const openFromNode = () => {
     if ((data.attempt_count || 1) > 1) data.onOpenHistory?.(data.asset_id);
     else data.onOpenDetail?.(data.asset_id);
@@ -61,9 +62,20 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
         {data.is_latest && <span className="latest">latest</span>}
         {data.user_selected && <span className="selected">next variation</span>}
         {(data.attempt_count || 1) > 1 && <span className="attempt-stack">v{data.attempt_count}</span>}
-        {data.reroll_request?.status === 'pending' && <span className="reroll">re-roll</span>}
+        {taskBadges.map(task => (
+          <span className={`lineage-task-badge ${task.task_type} ${task.status === 'pending' ? 'pending' : 'locked'}`} key={task.id}>
+            {task.task_type} {task.status === 'pending' ? 'pending' : 'locked'}
+          </span>
+        ))}
+        {data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll && <span className="reroll">re-roll</span>}
       </div>
       <span aria-hidden="true" className="lineage-node-hint">Click to inspect</span>
     </div>
   );
+}
+
+function lineageTaskBadges(tasks: LineageNode['lineage_tasks']): LineageTask[] {
+  return (['iterate', 'reroll'] as const)
+    .map(taskType => tasks?.[taskType])
+    .filter((task): task is LineageTask => Boolean(task && ['pending', 'claimed', 'in_progress'].includes(task.status)));
 }

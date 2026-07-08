@@ -27,6 +27,29 @@
   text-transform: uppercase;
 }
 
+.lineage-canvas-status-preview {
+  display: grid;
+  width: min(240px, 100%);
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  border: 1px solid #d4dde3;
+  border-radius: 7px;
+  background: #f8fbfc;
+  color: #4f5e68;
+  overflow: hidden;
+}
+
+.lineage-canvas-status-preview img,
+.lineage-canvas-status-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lineage-canvas-status-preview span {
+  padding: 6px;
+}
+
 .lineage-canvas-status strong,
 .lineage-canvas-status code {
   overflow-wrap: anywhere;

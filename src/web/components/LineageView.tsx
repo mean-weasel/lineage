@@ -493,6 +493,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             onToast={onToast}
             project={project}
             refreshBrief={refreshBrief}
+            refreshLineage={() => refresh({ quiet: true })}
             saveRationale={saveRationale}
             replaceNextVariation={replaceNextVariation}
             selectNextBase={selectNextBase}

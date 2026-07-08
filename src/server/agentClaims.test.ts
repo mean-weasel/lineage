@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import express, { type Express } from 'express';
-import { rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { defaultProject, repoRoot } from './assetCore';
@@ -19,6 +20,7 @@ import {
 import { isAgentClaimError } from './agentClaims';
 import { registerAgentClaimRoutes } from './agentClaimRoutes';
 
+const require = createRequire(import.meta.url);
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-agent-claims');
 const dbFile = join(scratchDir, 'agent-claims.sqlite');
 const originalEnv = { ...process.env };
@@ -51,6 +53,73 @@ function ageClaimHeartbeat(claimId: string, heartbeatAt: string, expiresAt = '20
   const database = lineageDb();
   try {
     database.prepare('update agent_claims set heartbeat_at = ?, expires_at = ? where id = ?').run(heartbeatAt, expiresAt, claimId);
+  } finally {
+    database.close();
+  }
+}
+
+function createLegacyAgentClaimDb() {
+  mkdirSync(scratchDir, { recursive: true });
+  const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+  const database = new DatabaseSync(dbFile);
+  try {
+    database.exec(`
+      pragma foreign_keys = on;
+      create table projects (
+        id text primary key,
+        product text not null,
+        catalog_path text,
+        created_at text not null,
+        updated_at text not null
+      );
+      create table agent_claims (
+        id text primary key,
+        token_hash text not null,
+        project_id text not null references projects(id),
+        channel text,
+        scope_type text not null check (scope_type in ('lineage_workspace', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
+        target_id text not null,
+        target_title text,
+        agent_id text,
+        agent_name text not null,
+        agent_kind text not null,
+        thread_id text,
+        status text not null check (status in ('active', 'expired', 'released', 'revoked', 'transferred')),
+        created_at text not null,
+        heartbeat_at text not null,
+        expires_at text not null,
+        released_at text,
+        revoked_at text,
+        revoked_by text,
+        override_reason text,
+        metadata_json text
+      );
+      create unique index agent_claims_token_hash on agent_claims(token_hash);
+      create index agent_claims_project_status on agent_claims(project_id, status, heartbeat_at);
+      create index agent_claims_target on agent_claims(project_id, channel, scope_type, target_id, status);
+      create table agent_claim_events (
+        id text primary key,
+        claim_id text not null references agent_claims(id) on delete cascade,
+        event_type text not null,
+        actor text,
+        message text,
+        created_at text not null,
+        metadata_json text
+      );
+      create index agent_claim_events_claim_created on agent_claim_events(claim_id, created_at);
+      insert into projects (id, product, created_at, updated_at)
+      values ('${defaultProject}', '${defaultProject}', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+      insert into agent_claims (
+        id, token_hash, project_id, scope_type, target_id, agent_name, agent_kind, status,
+        created_at, heartbeat_at, expires_at
+      ) values (
+        'claim_legacy', 'legacy-token-hash', '${defaultProject}', 'lineage_workspace', '${defaultProject}:lineage-workspace:legacy-root',
+        'Legacy agent', 'codex', 'active', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z',
+        '2099-01-01T00:00:00.000Z'
+      );
+      insert into agent_claim_events (id, claim_id, event_type, actor, message, created_at)
+      values ('event_legacy', 'claim_legacy', 'created', 'Legacy agent', 'Legacy claim created.', '2026-01-01T00:00:00.000Z');
+    `);
   } finally {
     database.close();
   }
@@ -207,6 +276,62 @@ describe('agent claims', () => {
       targetId: 'linkedin-post',
       writeKind: 'content_post_phase',
     })).toMatchObject({ code: 'claim_channel_mismatch', ok: false });
+  });
+
+  it('supports lineage_task claims for task-level occupancy', () => {
+    process.env.LINEAGE_DB = dbFile;
+    const created = createAgentClaim({
+      agentName: 'Task agent',
+      project: defaultProject,
+      scopeType: 'lineage_task',
+      targetId: 'task_demo_root_iterate_child',
+      targetTitle: 'Iterate child image',
+    });
+
+    expect(created.claim).toMatchObject({
+      project: defaultProject,
+      scope_type: 'lineage_task',
+      target_id: 'task_demo_root_iterate_child',
+    });
+
+    expect(validateAgentClaimForWrite({
+      claimToken: created.claim_token,
+      dangerLevel: 'enforce',
+      project: defaultProject,
+      scopeType: 'lineage_task',
+      targetId: 'task_demo_root_iterate_child',
+      writeKind: 'lineage_task_start',
+    })).toMatchObject({ ok: true });
+  });
+
+  it('migrates legacy agent claim scopes without breaking claim event foreign keys', () => {
+    createLegacyAgentClaimDb();
+
+    const database = lineageDb();
+    try {
+      const eventForeignKeys = database.prepare('pragma foreign_key_list(agent_claim_events)').all() as Array<{ table: string }>;
+      const event = database.prepare('select * from agent_claim_events where id = ?').get('event_legacy') as { claim_id?: string } | undefined;
+
+      expect(eventForeignKeys.some(foreignKey => foreignKey.table === 'agent_claims')).toBe(true);
+      expect(eventForeignKeys.some(foreignKey => foreignKey.table === 'agent_claims_old')).toBe(false);
+      expect(event).toMatchObject({ claim_id: 'claim_legacy' });
+    } finally {
+      database.close();
+    }
+
+    const created = createAgentClaim({
+      agentName: 'Task agent after migration',
+      project: defaultProject,
+      scopeType: 'lineage_task',
+      targetId: 'task_legacy_root_iterate_child',
+      targetTitle: 'Iterate legacy child image',
+    });
+
+    expect(created.claim).toMatchObject({
+      project: defaultProject,
+      scope_type: 'lineage_task',
+      target_id: 'task_legacy_root_iterate_child',
+    });
   });
 
   it('requires confirmation and reason for human revocation', () => {

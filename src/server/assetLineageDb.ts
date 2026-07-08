@@ -50,6 +50,10 @@ export function lineageDb(): DatabaseSync {
     create index if not exists assets_project_source_seen on assets(project_id, source, last_seen_at);
     create index if not exists assets_project_checksum on assets(project_id, checksum_sha256);
     create index if not exists assets_project_channel_campaign on assets(project_id, channel, campaign);
+    create table if not exists lineage_schema_migrations (
+      key text primary key,
+      applied_at text not null
+    );
     create table if not exists asset_edges (
       id text primary key,
       project_id text not null references projects(id),
@@ -355,12 +359,49 @@ export function lineageDb(): DatabaseSync {
     );
     create index if not exists generation_job_receipts_job on generation_job_receipts(job_id, created_at);
     create table if not exists adapter_settings (project_id text not null references projects(id), adapter_type text not null check (adapter_type in ('cloud', 'scheduler', 'image_generator')), provider text not null, enabled integer not null check (enabled in (0, 1)), secret_ref text, safe_config_json text not null, created_at text not null, updated_at text not null, primary key(project_id, adapter_type, provider)); create index if not exists adapter_settings_project_type on adapter_settings(project_id, adapter_type);
+    create table if not exists lineage_tasks (
+      id text primary key,
+      project_id text not null references projects(id),
+      root_asset_id text not null references assets(id),
+      target_asset_id text not null references assets(id),
+      task_type text not null check (task_type in ('iterate', 'reroll')),
+      status text not null check (status in ('pending', 'claimed', 'in_progress', 'resolved', 'cancelled')),
+      instructions text,
+      created_by text not null check (created_by in ('human', 'agent', 'system')),
+      created_at text not null,
+      updated_at text not null,
+      claimed_at text,
+      started_at text,
+      resolved_at text,
+      cancelled_at text,
+      resolved_generation_job_id text,
+      resolved_asset_id text references assets(id),
+      metadata_json text
+    );
+    create unique index if not exists lineage_tasks_one_open
+      on lineage_tasks(project_id, root_asset_id, target_asset_id, task_type)
+      where status in ('pending', 'claimed', 'in_progress');
+    create index if not exists lineage_tasks_root_status
+      on lineage_tasks(project_id, root_asset_id, status, updated_at);
+    create index if not exists lineage_tasks_target
+      on lineage_tasks(project_id, root_asset_id, target_asset_id, task_type, status);
+    create table if not exists lineage_task_events (
+      id text primary key,
+      task_id text not null references lineage_tasks(id) on delete cascade,
+      event_type text not null,
+      actor text,
+      message text,
+      created_at text not null,
+      metadata_json text
+    );
+    create index if not exists lineage_task_events_task_created
+      on lineage_task_events(task_id, created_at);
     create table if not exists agent_claims (
       id text primary key,
       token_hash text not null,
       project_id text not null references projects(id),
       channel text,
-      scope_type text not null check (scope_type in ('lineage_workspace', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
+      scope_type text not null check (scope_type in ('lineage_workspace', 'lineage_task', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
       target_id text not null,
       target_title text,
       agent_id text,
@@ -394,13 +435,77 @@ export function lineageDb(): DatabaseSync {
   migrateAssetSelections(database);
   dropLegacyAssetSelectionRootUnique(database);
   ensureColumn(database, 'asset_selections', 'notes', 'text');
+  backfillLineageTasks(database);
   ensureColumn(database, 'asset_ledger_records', 'first_seen_at', 'text');
   ensureColumn(database, 'asset_ledger_records', 'indexed_by_run_id', 'text');
   ensureColumn(database, 'asset_ledger_sources', 'first_seen_at', 'text');
   ensureColumn(database, 'asset_ledger_sources', 'indexed_by_run_id', 'text');
   ensureReviewStateValues(database);
+  ensureAgentClaimScopeValues(database);
   ensureGenerationReceiptCheckValues(database);
   return database;
+}
+
+export function backfillLineageTasks(database: DatabaseSync): void {
+  database.exec(`
+    create table if not exists lineage_schema_migrations (
+      key text primary key,
+      applied_at text not null
+    )
+  `);
+  const marker = database.prepare("select key from lineage_schema_migrations where key = 'lineage_tasks_backfilled_v1'").get();
+  if (marker) return;
+
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    database.exec(`
+      insert or ignore into lineage_tasks (
+        id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+        created_by, created_at, updated_at, metadata_json
+      )
+      select
+        s.project_id || ':' || s.root_asset_id || ':lineage-task:iterate:' || s.asset_id,
+        s.project_id,
+        s.root_asset_id,
+        s.asset_id,
+        'iterate',
+        'pending',
+        s.notes,
+        'human',
+        s.selected_at,
+        s.selected_at,
+        null
+      from asset_selections s;
+
+      insert or ignore into lineage_tasks (
+        id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+        created_by, created_at, updated_at, metadata_json
+      )
+      select
+        r.project_id || ':' || r.root_asset_id || ':lineage-task:reroll:' || r.node_asset_id,
+        r.project_id,
+        r.root_asset_id,
+        r.node_asset_id,
+        'reroll',
+        'pending',
+        r.notes,
+        r.requested_by,
+        r.created_at,
+        r.created_at,
+        null
+      from asset_reroll_requests r
+      where r.status = 'pending';
+    `);
+    database.prepare(`
+      insert into lineage_schema_migrations (key, applied_at)
+      values ('lineage_tasks_backfilled_v1', ?)
+      on conflict(key) do nothing
+    `).run(nowIso());
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string): void {
@@ -470,6 +575,54 @@ function ensureReviewStateValues(database: DatabaseSync): void {
     from asset_reviews_old;
     drop table asset_reviews_old;
   `);
+}
+
+function ensureAgentClaimScopeValues(database: DatabaseSync): void {
+  const createSql = database.prepare("select sql from sqlite_master where type = 'table' and name = 'agent_claims'").get() as { sql?: string } | undefined;
+  if (createSql?.sql?.includes("'lineage_task'")) return;
+
+  database.exec('PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON; BEGIN IMMEDIATE');
+  try {
+    database.exec(`
+      alter table agent_claims rename to agent_claims_old;
+      create table agent_claims (
+        id text primary key,
+        token_hash text not null,
+        project_id text not null references projects(id),
+        channel text,
+        scope_type text not null check (scope_type in ('lineage_workspace', 'lineage_task', 'content_post', 'content_queue_lane', 'selection_set', 'project_channel')),
+        target_id text not null,
+        target_title text,
+        agent_id text,
+        agent_name text not null,
+        agent_kind text not null,
+        thread_id text,
+        status text not null check (status in ('active', 'expired', 'released', 'revoked', 'transferred')),
+        created_at text not null,
+        heartbeat_at text not null,
+        expires_at text not null,
+        released_at text,
+        revoked_at text,
+        revoked_by text,
+        override_reason text,
+        metadata_json text
+      );
+      insert into agent_claims
+      select * from agent_claims_old;
+      drop table agent_claims_old;
+      create unique index if not exists agent_claims_token_hash on agent_claims(token_hash);
+      create index if not exists agent_claims_project_status on agent_claims(project_id, status, heartbeat_at);
+      create index if not exists agent_claims_target on agent_claims(project_id, channel, scope_type, target_id, status);
+    `);
+    const violations = database.prepare('pragma foreign_key_check').all();
+    if (violations.length > 0) throw new Error(`Agent claim scope migration failed foreign key check: ${JSON.stringify(violations)}`);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA legacy_alter_table = OFF; PRAGMA foreign_keys = ON');
+  }
 }
 
 function tableCreateSql(database: DatabaseSync, table: string): string {
