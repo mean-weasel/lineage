@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7
+
+- Add a claim-aware lineage task queue for per-image iteration and re-roll work, including task instructions, comments, cancellation, and human override controls.
+- Add visible agent/task state in the lineage canvas and side panel so humans can see when a task is pending, locked, or actively claimed.
+- Add QA seed guardrails that distinguish basic SVG placeholder media from the Swissifier rich PNG demo seed.
+- Add deterministic rich-seed verification and browser coverage to fail when QA is pointed at the wrong seed or invisible placeholder previews.
+
 ## 0.1.6
 
 - Add per-image re-roll attempt history with stack inspection, previous-attempt selection, and promotion back to the current/top attempt.
