@@ -114,8 +114,8 @@ export function resolveStartOptions(config: LineageCliConfig, args: string[]): S
   };
 }
 
-function printHelp(config: LineageCliConfig): void {
-  console.log(`${config.binName} ${packageVersion()}
+export function formatLineageHelp(config: LineageCliConfig): string {
+  return `${config.binName} ${packageVersion()}
 
 Usage:
   ${config.binName} start [--port <port>] [--host <host>] [--db <path>] [--open] [--json]
@@ -133,7 +133,7 @@ Usage:
   ${config.binName} tasks claim --task <task-id> --agent-name <name> [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks start --task <task-id> --claim-token <claim-id.secret> [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks comment --task <task-id> --message <text> [--project <project>] [--db <path>] [--json]
-  ${config.binName} tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]
+  ${config.binName} tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks override --task <task-id> --reason <text> [--instructions <text>] [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks instructions --task <task-id> --instructions <text> [--project <project>] [--db <path>] [--json]
   ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
@@ -151,7 +151,11 @@ ${config.displayName} runs the bundled Lineage server for the ${config.channel} 
 
 Variation vs re-roll:
   link-child creates a new visible child variation edge.
-  reroll mark -> reroll plan -> reroll import updates the same node with a new attempt.`);
+  reroll mark -> reroll plan -> reroll import updates the same node with a new attempt.`;
+}
+
+function printHelp(config: LineageCliConfig): void {
+  console.log(formatLineageHelp(config));
 }
 
 function openBrowser(url: string): void {
@@ -388,6 +392,7 @@ export function printDataResult(command: string, result: unknown, json: boolean)
       };
       const prefix = mutation.dryRun ? 'Dry run: ' : '';
       console.log(`${prefix}${mutation.task?.id || 'task'} ${mutation.task?.task_type || 'task'} ${mutation.task?.status || 'unknown'} ${mutation.task?.target_asset_id || ''}`.trim());
+      if ('claim_token' in mutation && typeof mutation.claim_token === 'string') console.log(`Token: ${mutation.claim_token}`);
       if (mutation.events && mutation.events.length > 0) console.log(`Events: ${mutation.events.map(event => event.event_type).join(', ')}`);
       return;
     }

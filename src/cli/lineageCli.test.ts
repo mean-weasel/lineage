@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
-import { formatAgentGraphDigest, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
+import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -23,6 +23,13 @@ function seedCliDb() {
 }
 
 describe('lineage CLI start options', () => {
+  it('shows accurate task cancel help with dry-run and override options', () => {
+    const help = formatLineageHelp({ binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' });
+
+    expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
+    expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
+  });
+
   it('uses stable channel defaults with an isolated runtime home', () => {
     process.env.LINEAGE_HOME = '/tmp/lineage-home';
     delete process.env.PORT;
@@ -535,6 +542,7 @@ describe('lineage CLI handoff commands', () => {
       printDataResult('tasks', {
         task: { id: 'task-1', status: 'claimed', task_type: 'reroll', target_asset_id: 'asset-1' },
         events: [{ event_type: 'created' }, { event_type: 'claimed' }],
+        claim_token: 'claim_task.secret_123',
       }, false);
     } finally {
       console.log = originalLog;
@@ -545,6 +553,7 @@ describe('lineage CLI handoff commands', () => {
       'task-1 reroll pending asset-1',
       'task-2 iterate in_progress asset-2',
       'task-1 reroll claimed asset-1',
+      'Token: claim_task.secret_123',
       'Events: created, claimed',
     ]);
   });
