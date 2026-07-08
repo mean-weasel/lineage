@@ -969,7 +969,8 @@
   }
   .lineage-header {
     align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .lineage-state-strip {

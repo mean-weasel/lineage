@@ -64,10 +64,15 @@ export function LineageToolbar({
   workspaceRootAssetId: string;
   workspaces: LineageWorkspace[];
 }) {
-  const mediaLabel = demoSeedStatus ? `${demoSeedStatus.present}/${demoSeedStatus.total} media files` : 'Checking media';
-  const swissifierMediaLabel = swissifierDemoStatus ? `${swissifierDemoStatus.present}/${swissifierDemoStatus.total} media files` : 'Checking media';
+  const mediaLabel = demoSeedStatus ? `${demoSeedStatus.present}/${demoSeedStatus.total} SVG placeholders` : 'Checking media';
+  const swissifierMediaLabel = swissifierDemoStatus ? `${swissifierDemoStatus.present}/${swissifierDemoStatus.total} PNG images` : 'Checking media';
   const swissifierReady = Boolean(swissifierDemoStatus && swissifierDemoStatus.present === swissifierDemoStatus.total);
   const swissifierCanDownload = Boolean(swissifierDemoStatus?.download_available && !swissifierReady);
+  const activeSeedLabel = activeWorkspace?.title === 'Swissifier rich demo'
+    ? 'Rich PNG seed active'
+    : activeWorkspace?.title === 'Demo: Content iteration tree'
+      ? 'Basic SVG placeholders active'
+      : null;
   const [demoOpen, setDemoOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
 
@@ -103,7 +108,10 @@ export function LineageToolbar({
     <header className="lineage-header">
       <div className="lineage-title">
         <h2>Lineage</h2>
-        <p>{snapshot ? `${snapshot.nodes.length} nodes · ${snapshot.edges.length} links` : workspaceRootAssetId || 'Choose a lineage workspace'}</p>
+        <p>
+          <span>{snapshot ? `${snapshot.nodes.length} nodes · ${snapshot.edges.length} links` : workspaceRootAssetId || 'Choose a lineage workspace'}</span>
+          {activeSeedLabel && <span className="lineage-seed-identity">{activeSeedLabel}</span>}
+        </p>
       </div>
       <div className="lineage-primary-controls">
         <LineageWorkspacePicker
@@ -121,23 +129,23 @@ export function LineageToolbar({
         )}
         <details className="lineage-demo-menu" onToggle={event => setDemoOpen(event.currentTarget.open)} open={demoOpen}>
           <summary onKeyDown={closeMenusOnEscape} tabIndex={0}>
-            <span>Demo seed</span>
-            <strong>{mediaLabel}</strong>
+            <span>QA seed media</span>
+            <strong>{swissifierMediaLabel}</strong>
           </summary>
           <div>
             <p>
-              <strong>Demo demo lineage</strong>
+              <strong>Basic SVG demo</strong>
               <span>{mediaLabel}</span>
             </p>
             <button disabled={workspaceLoading || demoSeedStatus?.present === demoSeedStatus?.total} onClick={onRestoreDemoMedia} type="button">Restore media</button>
-            <button disabled={workspaceLoading} onClick={() => runAndClose(onSeedDemo)} type="button">Load demo lineage</button>
+            <button disabled={workspaceLoading} onClick={() => runAndClose(onSeedDemo)} type="button">Load SVG placeholder demo</button>
             <p>
               <strong>Swissifier rich demo</strong>
               <span>{swissifierMediaLabel}</span>
             </p>
-            <button disabled={workspaceLoading || !swissifierCanDownload} onClick={onDownloadSwissifierMedia} type="button">Download media</button>
+            <button disabled={workspaceLoading || !swissifierCanDownload} onClick={onDownloadSwissifierMedia} type="button">Download rich images</button>
             <button disabled={workspaceLoading || swissifierReady} onClick={onRestoreSwissifierMedia} type="button">Restore media</button>
-            <button disabled={workspaceLoading} onClick={() => runAndClose(onSeedSwissifierDemo)} type="button">Load Swissifier</button>
+            <button disabled={workspaceLoading} onClick={() => runAndClose(onSeedSwissifierDemo)} type="button">Load rich image demo</button>
             <button disabled={workspaceLoading || !activeWorkspace} onClick={() => runAndClose(onArchiveWorkspace)} type="button">Archive current lineage</button>
           </div>
         </details>
