@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createAgentClaim, recordAgentClaimWriteAllowed, releaseAgentClaim, validateAgentClaimForWrite, type AgentClaim } from './agentClaims';
+import { createAgentClaim, recordAgentClaimWriteAllowed, releaseAgentClaim, revokeAgentClaimInDatabase, validateAgentClaimForWrite, type AgentClaim } from './agentClaims';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 import type {
   LineageTask,
@@ -441,6 +441,12 @@ export function overrideLineageTask(project: string, fields: {
         where project_id = ? and id = ? and status in ('claimed', 'in_progress')
       `).run(instructions || null, timestamp, metadataJson(metadata), normalizedProject, task.id);
       assertChanged(result, `Only active lineage task ${task.id} could be overridden.`);
+      if (task.claimed_by_claim_id) {
+        revokeAgentClaimInDatabase(database, normalizedProject, task.claimed_by_claim_id, {
+          actor,
+          reason,
+        });
+      }
       recordEvent(database, task.id, 'human_override', actor, reason, {
         previous_claim_id: task.claimed_by_claim_id,
         previous_status: task.status,
@@ -468,13 +474,36 @@ export function cancelLineageTask(project: string, fields: { taskId: string; act
     const timestamp = nowIso();
     const cancelledTask = { ...task, status: 'cancelled' as const, cancelled_at: timestamp, updated_at: timestamp };
     if (!fields.confirmWrite) return { project: normalizedProject, ok: true, dryRun: true as const, task: cancelledTask, events: taskEvents(database, task.id) };
+    const overridingActiveTask = fields.override === true && task.status !== 'pending';
+    const metadata = overridingActiveTask ? metadataWithoutClaim(task.metadata) : task.metadata;
     transaction(database, () => {
       const result = database.prepare(`
         update lineage_tasks
-        set status = 'cancelled', cancelled_at = ?, updated_at = ?
+        set status = 'cancelled', cancelled_at = ?, claimed_at = ?, started_at = ?,
+          updated_at = ?, metadata_json = ?
         where id = ? and status = ?
-      `).run(timestamp, timestamp, task.id, task.status);
+      `).run(
+        timestamp,
+        overridingActiveTask ? null : task.claimed_at || null,
+        overridingActiveTask ? null : task.started_at || null,
+        timestamp,
+        metadataJson(metadata),
+        task.id,
+        task.status
+      );
       assertChanged(result, `Only ${task.status} lineage task ${task.id} could be cancelled.`);
+      if (overridingActiveTask) {
+        if (task.claimed_by_claim_id) {
+          revokeAgentClaimInDatabase(database, normalizedProject, task.claimed_by_claim_id, {
+            actor,
+            reason: 'Lineage task cancelled by human override.',
+          });
+        }
+        recordEvent(database, task.id, 'human_override', actor, 'Lineage task cancelled by human override.', {
+          previous_claim_id: task.claimed_by_claim_id,
+          previous_status: task.status,
+        });
+      }
       recordEvent(database, task.id, 'cancelled', actor, 'Lineage task cancelled.');
     });
     return taskWithEvents(database, normalizedProject, task.id);

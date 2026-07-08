@@ -312,7 +312,7 @@ describe('asset lineage tasks', () => {
       targetAssetId: files.childId,
       taskType: 'iterate',
     });
-    claimLineageTask(defaultProject, {
+    const claimed = claimLineageTask(defaultProject, {
       agentName: 'Task worker',
       taskId: created.task.id,
     });
@@ -339,6 +339,42 @@ describe('asset lineage tasks', () => {
       message: 'Worker stopped responding.',
       metadata: { previous_status: 'claimed' },
     });
+    expect(inspectAgentClaim(claimed.claim.id, defaultProject).claim.status).toBe('revoked');
+  });
+
+  it('revokes the active claim and records a human override when cancelling a locked task', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Cancel this active task.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'Task worker',
+      taskId: created.task.id,
+    });
+    startLineageTask(defaultProject, {
+      claimToken: claimed.claim_token,
+      taskId: created.task.id,
+    });
+
+    const cancelled = cancelLineageTask(defaultProject, {
+      actor: 'human',
+      confirmWrite: true,
+      override: true,
+      taskId: created.task.id,
+    });
+
+    expect(cancelled.task).toMatchObject({
+      claimed_at: undefined,
+      claimed_by_claim_id: undefined,
+      started_at: undefined,
+      status: 'cancelled',
+    });
+    expect(cancelled.events.map(event => event.event_type)).toEqual(['created', 'claimed', 'started', 'human_override', 'cancelled']);
+    expect(inspectAgentClaim(claimed.claim.id, defaultProject).claim.status).toBe('revoked');
   });
 
   it('does not override pending or closed lineage tasks', () => {
@@ -615,7 +651,7 @@ describe('asset lineage tasks', () => {
 
     expect(cancelled.task.status).toBe('cancelled');
     expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(0);
-    expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'started', 'cancelled']);
+    expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'started', 'human_override', 'cancelled']);
   });
 
   it('compat cancellation skips claimed iterate tasks', () => {

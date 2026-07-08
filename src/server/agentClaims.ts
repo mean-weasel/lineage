@@ -430,6 +430,20 @@ export function revokeAgentClaim(project: string, claimId: string, fields: { act
   }
 }
 
+export function revokeAgentClaimInDatabase(database: DatabaseSync, project: string, claimId: string, fields: { actor?: string; reason?: string }) {
+  expireActiveClaims(database);
+  const claim = findClaimById(database, claimId, project);
+  if (!claim) throw new AgentClaimError(`Unknown agent claim: ${claimId}`, 404, 'claim_not_found');
+  if (claim.status !== 'active') return claim;
+  const timestamp = nowIso();
+  database.prepare(`
+    update agent_claims set status = 'revoked', revoked_at = ?, revoked_by = ?, override_reason = ?
+    where id = ? and status = 'active'
+  `).run(timestamp, fields.actor || 'human', fields.reason || null, claim.id);
+  recordEvent(database, claim.id, 'revoked', fields.actor || 'human', fields.reason);
+  return findClaimById(database, claim.id, project);
+}
+
 export function transferAgentClaim(project: string, claimId: string, fields: { confirmWrite: boolean; toAgentName: string; actor?: string; reason?: string }) {
   if (!fields.confirmWrite) throw new AgentClaimError('Transferring an agent claim requires confirmWrite=true.', 400, 'confirm_write_required');
   const toAgentName = fields.toAgentName.trim();
