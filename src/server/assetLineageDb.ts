@@ -431,6 +431,7 @@ export function lineageDb(): DatabaseSync {
   migrateAssetSelections(database);
   dropLegacyAssetSelectionRootUnique(database);
   ensureColumn(database, 'asset_selections', 'notes', 'text');
+  backfillLineageTasks(database);
   ensureColumn(database, 'asset_ledger_records', 'first_seen_at', 'text');
   ensureColumn(database, 'asset_ledger_records', 'indexed_by_run_id', 'text');
   ensureColumn(database, 'asset_ledger_sources', 'first_seen_at', 'text');
@@ -439,6 +440,79 @@ export function lineageDb(): DatabaseSync {
   ensureAgentClaimScopeValues(database);
   ensureGenerationReceiptCheckValues(database);
   return database;
+}
+
+function lineageTaskId(project: string, rootAssetId: string, targetAssetId: string, taskType: 'iterate' | 'reroll'): string {
+  return `${project}:${rootAssetId}:lineage-task:${taskType}:${targetAssetId}`;
+}
+
+export function backfillLineageTasks(database: DatabaseSync): void {
+  const selections = database.prepare(`
+    select project_id, root_asset_id, asset_id
+    from asset_selections
+  `).all() as Array<{ project_id: string; root_asset_id: string; asset_id: string }>;
+  const insertSelection = database.prepare(`
+    insert or ignore into lineage_tasks (
+      id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+      created_by, created_at, updated_at, metadata_json
+    )
+    select
+      ?,
+      s.project_id,
+      s.root_asset_id,
+      s.asset_id,
+      'iterate',
+      'pending',
+      s.notes,
+      'human',
+      s.selected_at,
+      s.selected_at,
+      null
+    from asset_selections s
+    where s.project_id = ? and s.root_asset_id = ? and s.asset_id = ?
+  `);
+  for (const row of selections) {
+    insertSelection.run(
+      lineageTaskId(row.project_id, row.root_asset_id, row.asset_id, 'iterate'),
+      row.project_id,
+      row.root_asset_id,
+      row.asset_id
+    );
+  }
+
+  const rerolls = database.prepare(`
+    select project_id, root_asset_id, node_asset_id
+    from asset_reroll_requests
+    where status = 'pending'
+  `).all() as Array<{ project_id: string; root_asset_id: string; node_asset_id: string }>;
+  const insertReroll = database.prepare(`
+    insert or ignore into lineage_tasks (
+      id, project_id, root_asset_id, target_asset_id, task_type, status, instructions,
+      created_by, created_at, updated_at, metadata_json
+    )
+    select
+      ?,
+      r.project_id,
+      r.root_asset_id,
+      r.node_asset_id,
+      'reroll',
+      'pending',
+      r.notes,
+      r.requested_by,
+      r.created_at,
+      r.created_at,
+      null
+    from asset_reroll_requests r
+    where r.project_id = ? and r.root_asset_id = ? and r.node_asset_id = ? and r.status = 'pending'
+  `);
+  for (const row of rerolls) {
+    insertReroll.run(
+      lineageTaskId(row.project_id, row.root_asset_id, row.node_asset_id, 'reroll'),
+      row.project_id,
+      row.root_asset_id,
+      row.node_asset_id
+    );
+  }
 }
 
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string): void {
