@@ -1,4 +1,5 @@
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
+import { cancelLineageIterateTasksForAssets } from './assetLineageTasks';
 import type {
   LineageWorkspace,
   LineageWorkspaceActor,
@@ -272,6 +273,11 @@ export function archiveLineageWorkspace(project: string, workspaceId: string, co
       updated_at: timestamp,
     };
     if (!confirmWrite) return { ok: true as const, dryRun: true as const, workspace: next };
+    cancelLineageIterateTasksForAssets(project, {
+      actor: 'human',
+      confirmWrite: true,
+      rootAssetId: current.root_asset_id,
+    });
     database.prepare(`
       update lineage_workspaces
       set status = 'archived', active_at = null, updated_at = ?

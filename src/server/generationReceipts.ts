@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, listLineageRerollRequests, recordLineageRerollAttempt } from './assetLineage';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
+import { cancelLineageIterateTasksForAssets, listLineageTasks, resolveLineageTask } from './assetLineageTasks';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
 import type {
@@ -480,6 +481,11 @@ export function importImageGenerationOutputs(project = defaultProject, fields: {
   const resolved = parentFileRows.map(row => ({ ...resolveScratchFile(row.file), parentAssetId: row.parentAssetId }));
   const uniquePaths = new Set(resolved.map(file => file.relativePath));
   if (uniquePaths.size !== resolved.length) throw new GenerationReceiptError('Generation import files must be unique');
+  cancelLineageIterateTasksForAssets(project, {
+    actor: 'system',
+    confirmWrite: false,
+    rootAssetId: job.root_asset_id,
+  });
   indexLineageAssets(project);
   const writeDb = lineageDb();
   try {
@@ -513,6 +519,11 @@ export function importImageGenerationOutputs(project = defaultProject, fields: {
       writeDb.exec('ROLLBACK');
       throw error;
     }
+    cancelLineageIterateTasksForAssets(project, {
+      actor: 'system',
+      confirmWrite: true,
+      rootAssetId: job.root_asset_id,
+    });
     const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
     return { ok: true, command: 'generate image import', project, job: importedJob, imported: importedJob.outputs };
   } finally {
@@ -571,6 +582,16 @@ export function importImageRerollOutput(project = defaultProject, fields: { jobI
       checksumSha256: resolved.checksum,
       confirmWrite: true,
     });
+    const rerollTask = listLineageTasks(project, job.root_asset_id).tasks.find(task => task.task_type === 'reroll' && task.target_asset_id === target[0].asset_id);
+    if (rerollTask) {
+      resolveLineageTask(project, {
+        actor: 'agent',
+        confirmWrite: true,
+        resolvedAssetId: resolved.assetId,
+        resolvedGenerationJobId: fields.jobId,
+        taskId: rerollTask.id,
+      });
+    }
     const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
     return { ok: true, command: 'reroll import', project, job: importedJob, imported: importedJob.outputs };
   } finally {

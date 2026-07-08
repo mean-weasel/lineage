@@ -11,7 +11,7 @@ import type {
   LineageTaskType,
 } from '../shared/types';
 
-export class LineageTaskError extends Error {
+class LineageTaskError extends Error {
   constructor(message: string, public status = 400) {
     super(message);
   }
@@ -427,6 +427,68 @@ export function cancelLineageTask(project: string, fields: { taskId: string; act
       `).run(timestamp, timestamp, task.id, task.status);
       assertChanged(result, `Only ${task.status} lineage task ${task.id} could be cancelled.`);
       recordEvent(database, task.id, 'cancelled', actor, 'Lineage task cancelled.');
+    });
+    return taskWithEvents(database, normalizedProject, task.id);
+  } finally {
+    database.close();
+  }
+}
+
+export function cancelLineageIterateTasksForAssets(project: string, fields: {
+  actor: string;
+  assetIds?: string[];
+  confirmWrite: boolean;
+  rootAssetId: string;
+}): LineageTaskMutationResult[] {
+  const targetIds = fields.assetIds ? new Set(fields.assetIds) : undefined;
+  return listLineageTasks(project, fields.rootAssetId).tasks
+    .filter(task => task.task_type === 'iterate')
+    .filter(task => !targetIds || targetIds.has(task.target_asset_id))
+    .map(task => cancelLineageTask(project, {
+      actor: fields.actor,
+      confirmWrite: fields.confirmWrite,
+      taskId: task.id,
+    }));
+}
+
+export function resolveLineageTask(project: string, fields: {
+  actor: string;
+  confirmWrite: boolean;
+  resolvedAssetId?: string;
+  resolvedGenerationJobId?: string;
+  taskId: string;
+}): LineageTaskMutationResult {
+  const normalizedProject = normalizeProject(project);
+  const actor = normalizeActor(fields.actor, 'Resolve actor');
+  const database = lineageDb();
+  try {
+    const task = requireTask(database, normalizedProject, fields.taskId);
+    if (fields.resolvedAssetId) requireAsset(database, normalizedProject, fields.resolvedAssetId);
+    if (task.status === 'resolved') return { project: normalizedProject, ok: true, task, events: taskEvents(database, task.id) };
+    if (!['pending', 'claimed', 'in_progress'].includes(task.status)) {
+      throw new LineageTaskError(`Only open lineage tasks can be resolved; task is ${task.status}.`, 409);
+    }
+    const timestamp = nowIso();
+    const resolvedTask = {
+      ...task,
+      status: 'resolved' as const,
+      resolved_asset_id: fields.resolvedAssetId,
+      resolved_at: timestamp,
+      resolved_generation_job_id: fields.resolvedGenerationJobId,
+      updated_at: timestamp,
+    };
+    if (!fields.confirmWrite) return { project: normalizedProject, ok: true, dryRun: true as const, task: resolvedTask, events: taskEvents(database, task.id) };
+    transaction(database, () => {
+      const result = database.prepare(`
+        update lineage_tasks
+        set status = 'resolved', resolved_at = ?, resolved_generation_job_id = ?, resolved_asset_id = ?, updated_at = ?
+        where id = ? and status = ?
+      `).run(timestamp, fields.resolvedGenerationJobId || null, fields.resolvedAssetId || null, timestamp, task.id, task.status);
+      assertChanged(result, `Only ${task.status} lineage task ${task.id} could be resolved.`);
+      recordEvent(database, task.id, 'resolved', actor, 'Lineage task resolved.', {
+        resolved_asset_id: fields.resolvedAssetId,
+        resolved_generation_job_id: fields.resolvedGenerationJobId,
+      });
     });
     return taskWithEvents(database, normalizedProject, task.id);
   } finally {

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageAttempts, getLineageSnapshot, indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
+import { listLineageTasks } from './assetLineageTasks';
 import { createLineageWorkspace } from './assetLineageWorkspaces';
 import {
   importImageGenerationOutputs,
@@ -439,7 +440,7 @@ describe('generation receipts', () => {
 
   it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
     const lineage = setupSelectedLineage('reroll');
-    markLineageRerollRequest(defaultProject, {
+    const marked = markLineageRerollRequest(defaultProject, {
       rootAssetId: lineage.rootId,
       nodeAssetId: lineage.selectedId,
       notes: 'Fix text',
@@ -472,6 +473,12 @@ describe('generation receipts', () => {
     expect(node?.current_attempt).toMatchObject({ asset_id: localId(output), source: 'reroll', attempt_index: 2 });
     expect(node?.review_state).toBe('unreviewed');
     expect(node?.reroll_request).toBeUndefined();
+    expect(listLineageTasks(defaultProject, lineage.rootId).tasks.find(task => task.id === marked.task_id)).toBeUndefined();
+    expect(listLineageTasks(defaultProject, lineage.rootId, ['resolved']).tasks.find(task => task.id === marked.task_id)).toMatchObject({
+      resolved_asset_id: localId(output),
+      resolved_generation_job_id: plan.job.id,
+      status: 'resolved',
+    });
     expect(snapshot.edges.some(edge => edge.parent_asset_id === lineage.selectedId && edge.child_asset_id === imported.imported[0].imported_asset_id)).toBe(false);
     const attempts = getLineageAttempts(defaultProject, lineage.rootId, lineage.selectedId).attempts;
     expect(attempts.filter(attempt => attempt.is_current).map(attempt => attempt.attempt_index)).toEqual([2]);

@@ -1,5 +1,6 @@
 import { lineageDb as db, nowIso, type DatabaseSync } from './assetLineageDb';
 import { selectedRows, selectionId } from './assetLineageSelection';
+import { cancelLineageIterateTasksForAssets } from './assetLineageTasks';
 import { getLineageSnapshot, LineageError } from './assetLineage';
 import { requireLineageWorkspaceClaimForWrite } from './lineageClaimGuards';
 import type { LineageRemoveNodeFields, LineageRemoveNodeResponse } from '../shared/types';
@@ -97,6 +98,19 @@ export function removeLineageNode(project: string, fields: LineageRemoveNodeFiel
       ok: true, dryRun: true, asset_id: fields.assetId, root_asset_id: root,
       removed_edge_ids: removedIds, reparented_edges: reparentedEdges, selection_removed: selectionRemoved, asset_preserved: true,
     };
+  }
+  if (selectionRemoved) {
+    try {
+      cancelLineageIterateTasksForAssets(project, {
+        actor: 'human',
+        assetIds: [fields.assetId],
+        confirmWrite: true,
+        rootAssetId: root,
+      });
+    } catch (error) {
+      database.close();
+      throw error;
+    }
   }
   try {
     database.exec('begin immediate transaction');

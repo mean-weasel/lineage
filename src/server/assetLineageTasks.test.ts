@@ -11,6 +11,7 @@ import {
   claimLineageTask,
   getLineageTask,
   listLineageTasks,
+  resolveLineageTask,
   startLineageTask,
   taskIdFor,
   updateLineageTaskInstructions,
@@ -319,6 +320,35 @@ describe('asset lineage tasks', () => {
     expect(cancelled.task.status).toBe('cancelled');
     expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(0);
     expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'started', 'cancelled']);
+  });
+
+  it('resolves a pending task with generation and asset outputs', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Try a readable reroll.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'reroll',
+    });
+
+    const resolved = resolveLineageTask(defaultProject, {
+      actor: 'agent',
+      confirmWrite: true,
+      resolvedAssetId: files.alternateId,
+      resolvedGenerationJobId: 'job-resolve-task',
+      taskId: created.task.id,
+    });
+
+    expect(resolved.task).toMatchObject({
+      id: created.task.id,
+      resolved_asset_id: files.alternateId,
+      resolved_generation_job_id: 'job-resolve-task',
+      status: 'resolved',
+    });
+    expect(listLineageTasks(defaultProject, files.rootId).tasks).toEqual([]);
+    expect(listLineageTasks(defaultProject, files.rootId, ['resolved']).tasks.map(task => task.id)).toEqual([created.task.id]);
+    expect(taskEventTypes(created.task.id)).toEqual(['created', 'resolved']);
   });
 
   it('uses a stable task id format', () => {

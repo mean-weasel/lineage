@@ -263,6 +263,7 @@ export interface LineageNode {
   position?: LineagePosition;
   attempt_count?: number;
   current_attempt?: LineageAttempt;
+  lineage_tasks?: Partial<Record<LineageTaskType, LineageTask>>;
   reroll_request?: LineageRerollRequest;
 }
 
@@ -305,6 +306,8 @@ export interface LineageRerollRequest {
   notes?: string;
   created_at: string;
   resolved_at?: string;
+  task_id?: string;
+  task?: LineageTask;
 }
 
 export type LineageTaskType = 'iterate' | 'reroll';
@@ -369,7 +372,7 @@ export interface LineageEdge {
 export interface LineageSnapshot {
   project: string; root_asset_id: string; active_asset_id: string;
   selected: string[]; selection: LineageSelection | null; selections: LineageSelection[];
-  latest: string[]; nodes: LineageNode[]; edges: LineageEdge[]; fetchedAt: string;
+  latest: string[]; nodes: LineageNode[]; edges: LineageEdge[]; tasks?: LineageTask[]; fetchedAt: string;
 }
 
 export interface LineageNextResponse {
@@ -423,6 +426,8 @@ export interface LineageRerollRequestMutationResponse {
   ok: true;
   dryRun?: true;
   request: LineageRerollRequest;
+  task_id?: string;
+  task?: LineageTask;
 }
 
 export interface LineageBriefResponse {
