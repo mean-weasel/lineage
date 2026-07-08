@@ -31,9 +31,9 @@ jobs:
           node-version: '22.22.3'
           cache: npm
           registry-url: https://registry.npmjs.org
-      - name: Use current npm
+      - name: Use release npm
         run: |
-          npm install --global npm@latest
+          npm install --global npm@10.9.8
           node --version
           npm --version
       - run: npm ci
