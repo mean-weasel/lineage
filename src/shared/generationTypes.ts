@@ -49,7 +49,7 @@ export interface GenerationJob {
 }
 
 export interface GenerationPlanResponse {
-  ok: true; command: 'generate image plan'; project: string; dryRun?: true; wouldWrite?: true; job: GenerationJob;
+  ok: true; command: 'generate image plan' | 'reroll plan'; project: string; dryRun?: true; wouldWrite?: true; job: GenerationJob;
 }
 
 export interface GenerationInspectResponse {
@@ -61,5 +61,5 @@ export interface GenerationJobListResponse {
 }
 
 export interface GenerationImportResponse {
-  ok: true; command: 'generate image import'; project: string; job: GenerationJob; imported: GenerationJobOutput[];
+  ok: true; command: 'generate image import' | 'reroll import'; project: string; job: GenerationJob; imported: GenerationJobOutput[];
 }

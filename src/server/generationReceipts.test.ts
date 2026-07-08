@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { defaultProject, repoRoot } from './assetCore';
@@ -15,6 +16,8 @@ import {
 import { listImageGenerationJobs } from './generationReceiptJobs';
 import { fileSha256 } from './localReview';
 
+const require = createRequire(import.meta.url);
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-generation-receipts');
 const dbFile = join(scratchDir, 'generation-receipts.sqlite');
 
@@ -112,6 +115,105 @@ function setWorkspaceActiveAt(rootAssetId: string, activeAt: string): void {
       update lineage_workspaces set active_at = ?, updated_at = ?
       where project_id = ? and root_asset_id = ?
     `).run(activeAt, activeAt, defaultProject, rootAssetId);
+  } finally {
+    database.close();
+  }
+}
+
+function seedLegacyGenerationReceiptDb(file: string): void {
+  const database = new DatabaseSync(file);
+  try {
+    database.exec(`
+      PRAGMA foreign_keys = ON;
+      create table projects (
+        id text primary key,
+        product text not null,
+        catalog_path text,
+        created_at text not null,
+        updated_at text not null
+      );
+      create table assets (
+        id text primary key,
+        project_id text not null references projects(id),
+        source text not null check (source in ('local', 'catalog')),
+        local_path text,
+        s3_key text,
+        checksum_sha256 text,
+        media_type text not null,
+        title text not null,
+        status text not null,
+        channel text,
+        campaign text,
+        audience text,
+        size_bytes integer,
+        content_type text,
+        created_at text not null,
+        updated_at text not null,
+        last_seen_at text not null
+      );
+      create table generation_jobs (
+        id text primary key,
+        project_id text not null references projects(id),
+        provider text not null default 'codex-handoff',
+        adapter_version text not null,
+        source_mode text not null check (source_mode in ('lineage_selection')),
+        root_asset_id text not null references assets(id),
+        prompt text not null,
+        expected_output_count integer not null check (expected_output_count > 0),
+        status text not null check (status in ('planned', 'imported', 'failed', 'cancelled')),
+        output_dir text,
+        handoff_json text,
+        created_at text not null,
+        updated_at text not null,
+        imported_at text
+      );
+      create table generation_job_inputs (
+        id text primary key,
+        job_id text not null references generation_jobs(id) on delete cascade,
+        project_id text not null references projects(id),
+        asset_id text not null references assets(id),
+        root_asset_id text not null references assets(id),
+        role text not null check (role in ('lineage_next_base', 'reference')),
+        position integer not null,
+        selection_strategy text not null,
+        selection_snapshot_json text not null,
+        unique(job_id, asset_id, role)
+      );
+      create table generation_job_receipts (
+        id text primary key,
+        job_id text not null references generation_jobs(id) on delete cascade,
+        receipt_type text not null check (receipt_type in ('plan', 'import', 'error')),
+        status text not null check (status in ('ok', 'error')),
+        command text not null,
+        payload_json text not null,
+        created_at text not null
+      );
+    `);
+    const timestamp = '2026-01-01T00:00:00.000Z';
+    database.prepare('insert into projects (id, product, created_at, updated_at) values (?, ?, ?, ?)').run(defaultProject, defaultProject, timestamp, timestamp);
+    for (const assetId of ['legacy-root', 'legacy-target']) {
+      database.prepare(`
+        insert into assets (
+          id, project_id, source, local_path, media_type, title, status, created_at, updated_at, last_seen_at
+        ) values (?, ?, 'local', ?, 'image', ?, 'ready', ?, ?, ?)
+      `).run(assetId, defaultProject, `${assetId}.png`, assetId, timestamp, timestamp, timestamp);
+    }
+    database.prepare(`
+      insert into generation_jobs (
+        id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
+        expected_output_count, status, output_dir, handoff_json, created_at, updated_at
+      ) values ('legacy-job', ?, 'codex-handoff', 'generation-receipts-v1', 'lineage_selection', 'legacy-root', 'Legacy selection job', 1, 'planned', '.asset-scratch', '{}', ?, ?)
+    `).run(defaultProject, timestamp, timestamp);
+    database.prepare(`
+      insert into generation_job_inputs (
+        id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json
+      ) values ('legacy-input', 'legacy-job', ?, 'legacy-target', 'legacy-root', 'lineage_next_base', 0, 'selected', '{}')
+    `).run(defaultProject);
+    database.prepare(`
+      insert into generation_job_receipts (
+        id, job_id, receipt_type, status, command, payload_json, created_at
+      ) values ('legacy-receipt', 'legacy-job', 'plan', 'ok', 'generate image plan', '{}', ?)
+    `).run(timestamp);
   } finally {
     database.close();
   }
@@ -227,6 +329,46 @@ describe('generation receipts', () => {
     expect(countRows('generation_job_receipts')).toBe(0);
   });
 
+  it('migrates legacy generation receipt checks to allow re-roll jobs and targets', () => {
+    seedLegacyGenerationReceiptDb(dbFile);
+
+    const database = lineageDb();
+    try {
+      const timestamp = '2026-01-02T00:00:00.000Z';
+      database.prepare(`
+        insert into generation_jobs (
+          id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
+          expected_output_count, status, output_dir, handoff_json, created_at, updated_at
+        ) values ('legacy-reroll-job', ?, 'codex-handoff', 'generation-receipts-v1', 'lineage_reroll', 'legacy-root', 'Legacy reroll job', 1, 'planned', '.asset-scratch', '{}', ?, ?)
+      `).run(defaultProject, timestamp, timestamp);
+      database.prepare(`
+        insert into generation_job_inputs (
+          id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json
+        ) values ('legacy-reroll-input', 'legacy-reroll-job', ?, 'legacy-target', 'legacy-root', 'reroll_target', 0, 'reroll_request', '{}')
+      `).run(defaultProject);
+
+      const jobSql = database.prepare("select sql from sqlite_master where type = 'table' and name = 'generation_jobs'").get() as { sql: string };
+      const inputSql = database.prepare("select sql from sqlite_master where type = 'table' and name = 'generation_job_inputs'").get() as { sql: string };
+      const outputSql = database.prepare("select sql from sqlite_master where type = 'table' and name = 'generation_job_outputs'").get() as { sql: string };
+      const receiptSql = database.prepare("select sql from sqlite_master where type = 'table' and name = 'generation_job_receipts'").get() as { sql: string };
+      const legacyJob = database.prepare("select source_mode from generation_jobs where id = 'legacy-job'").get() as { source_mode: string };
+      const legacyReceipt = database.prepare("select job_id from generation_job_receipts where id = 'legacy-receipt'").get() as { job_id: string };
+      const violations = database.prepare('pragma foreign_key_check').all();
+
+      expect(jobSql.sql).toContain("'lineage_reroll'");
+      expect(inputSql.sql).toContain("'reroll_target'");
+      expect(outputSql.sql).toContain('references generation_jobs');
+      expect(outputSql.sql).not.toContain('generation_jobs_legacy_check');
+      expect(receiptSql.sql).toContain('references generation_jobs');
+      expect(receiptSql.sql).not.toContain('generation_jobs_legacy_check');
+      expect(legacyJob.source_mode).toBe('lineage_selection');
+      expect(legacyReceipt.job_id).toBe('legacy-job');
+      expect(violations).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
+
   it('uses the current active workspace even when older workspaces remain active', () => {
     const older = setupSelectedLineage('generation-older');
     const newer = setupSelectedLineage('generation-newer');
@@ -315,6 +457,7 @@ describe('generation receipts', () => {
     expect(plan.job.expected_output_count).toBe(1);
     expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'reroll_target' });
 
+    const beforeEdges = countRows('asset_edges');
     const imported = importImageRerollOutput(defaultProject, {
       jobId: plan.job.id,
       file: output,
@@ -324,8 +467,9 @@ describe('generation receipts', () => {
     expect(imported.imported[0].parent_asset_id).toBe(lineage.selectedId);
     const snapshot = getLineageSnapshot(defaultProject, lineage.rootId);
     const node = snapshot.nodes.find(item => item.asset_id === lineage.selectedId);
+    expect(countRows('asset_edges')).toBe(beforeEdges);
     expect(node?.attempt_count).toBe(2);
-    expect(node?.current_attempt).toMatchObject({ source: 'reroll', attempt_index: 2 });
+    expect(node?.current_attempt).toMatchObject({ asset_id: localId(output), source: 'reroll', attempt_index: 2 });
     expect(node?.review_state).toBe('unreviewed');
     expect(node?.reroll_request).toBeUndefined();
     expect(snapshot.edges.some(edge => edge.parent_asset_id === lineage.selectedId && edge.child_asset_id === imported.imported[0].imported_asset_id)).toBe(false);

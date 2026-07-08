@@ -80,7 +80,8 @@ by a second `lineage` word.
 5. Use `lineage agent claim --scope lineage_workspace --json`, export the
    returned raw token as `LINEAGE_CLAIM_TOKEN`, and heartbeat while working.
 6. Use `lineage link-child --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write
-   --json` only after the child asset is indexed and the parent/root is clear.
+   --json` only to create a new visible child variation, after the child asset
+   is indexed and the parent/root is clear. Do not use it for re-rolls.
 7. For re-rolls, use `lineage reroll mark --confirm-write --json`, then
    `lineage reroll plan --json`, and import exactly one output with
    `lineage reroll import --confirm-write --json` so the result becomes an
