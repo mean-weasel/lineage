@@ -580,6 +580,7 @@ export function listLineageRerollRequests(project: string, rootAssetId: string):
   try {
     assertCanonicalRoot(database, project, rootAssetId);
     const rerollTasks = listLineageTasks(project, rootAssetId).tasks.filter(task => task.task_type === 'reroll');
+    const pendingRerollTasks = listLineageTasks(project, rootAssetId, ['pending']).tasks.filter(task => task.task_type === 'reroll');
     const rerollTaskByTarget = new Map(rerollTasks.map(task => [task.target_asset_id, task]));
     const rows = database.prepare(`
       select * from asset_reroll_requests
@@ -591,7 +592,7 @@ export function listLineageRerollRequests(project: string, rootAssetId: string):
       return withRerollTask(request, rerollTaskByTarget.get(request.node_asset_id));
     });
     const legacyTargets = new Set(requests.map(request => request.node_asset_id));
-    for (const task of rerollTasks) {
+    for (const task of pendingRerollTasks) {
       if (!legacyTargets.has(task.target_asset_id)) requests.push(taskBackedRerollRequest(project, rootAssetId, task));
     }
     return { project, root_asset_id: rootAssetId, requests, fetchedAt: nowIso() };
@@ -829,7 +830,7 @@ export function clearLineageRerollRequest(project: string, fields: { rootAssetId
     const timestamp = nowIso();
     const request = { ...rerollRequestFrom(existing), status: 'cancelled' as const, resolved_at: timestamp };
     if (!fields.confirmWrite) return { ok: true, dryRun: true, request };
-    const task = listLineageTasks(project, fields.rootAssetId).tasks.find(item => item.task_type === 'reroll' && item.target_asset_id === fields.nodeAssetId);
+    const task = listLineageTasks(project, fields.rootAssetId, ['pending']).tasks.find(item => item.task_type === 'reroll' && item.target_asset_id === fields.nodeAssetId);
     const cancelledTask = task ? cancelLineageTask(project, {
       actor: 'human',
       confirmWrite: true,
@@ -898,7 +899,7 @@ export function updateSelectedAsset(project: string, fields: SelectionFields) {
   }
 
   const removedIds = current.map(row => row.asset_id).filter(assetId => !nextIds.includes(assetId));
-  const openIterateTasks = listLineageTasks(project, root).tasks.filter(task => task.task_type === 'iterate');
+  const openIterateTasks = listLineageTasks(project, root, ['pending']).tasks.filter(task => task.task_type === 'iterate');
   for (const assetId of removedIds) {
     const task = openIterateTasks.find(item => item.target_asset_id === assetId);
     if (task) {

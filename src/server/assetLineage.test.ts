@@ -22,7 +22,7 @@ import {
   updateSelectedAsset,
 } from './assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from './assetLineageHandoff';
-import { listLineageTasks } from './assetLineageTasks';
+import { claimLineageTask, listLineageTasks } from './assetLineageTasks';
 import { createAgentClaim } from './agentClaims';
 import { createLineageWorkspace, lineageWorkspaceId } from './assetLineageWorkspaces';
 
@@ -857,6 +857,48 @@ describe('asset lineage index', () => {
     expect(listLineageTasks(defaultProject, files.parentId).tasks).toEqual([]);
   });
 
+  it('clears legacy selection while preserving claimed iterate tasks', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    updateSelectedAsset(defaultProject, {
+      assetIds: [files.parentId, files.childId],
+      confirmWrite: true,
+      mode: 'replace',
+      rootAssetId: files.parentId,
+    });
+    const tasks = listLineageTasks(defaultProject, files.parentId).tasks;
+    const parentTask = tasks.find(task => task.target_asset_id === files.parentId)!;
+    const childTask = tasks.find(task => task.target_asset_id === files.childId)!;
+    claimLineageTask(defaultProject, { agentName: 'Iterate worker', taskId: parentTask.id });
+    claimLineageTask(defaultProject, { agentName: 'Iterate worker', taskId: childTask.id });
+
+    updateSelectedAsset(defaultProject, {
+      assetId: files.childId,
+      confirmWrite: true,
+      mode: 'remove',
+      rootAssetId: files.parentId,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).selected).toEqual([files.parentId]);
+    expect(listLineageTasks(defaultProject, files.parentId).tasks.map(task => [task.target_asset_id, task.status]).sort()).toEqual([
+      [files.childId, 'claimed'],
+      [files.parentId, 'claimed'],
+    ].sort());
+
+    updateSelectedAsset(defaultProject, {
+      clear: true,
+      confirmWrite: true,
+      rootAssetId: files.parentId,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).selected).toEqual([]);
+    expect(listLineageTasks(defaultProject, files.parentId).tasks.map(task => [task.target_asset_id, task.status]).sort()).toEqual([
+      [files.childId, 'claimed'],
+      [files.parentId, 'claimed'],
+    ].sort());
+  });
+
   it('creates a task-backed re-roll request and exposes task fields in snapshots and lists', () => {
     const files = seedFiles();
     indexLineageAssets(defaultProject);
@@ -904,6 +946,34 @@ describe('asset lineage index', () => {
 
     expect(listLineageTasks(defaultProject, files.parentId).tasks).toEqual([]);
     expect(listLineageTasks(defaultProject, files.parentId, ['cancelled']).tasks.map(task => task.id)).toEqual([marked.task_id]);
+  });
+
+  it('clears legacy reroll requests while preserving claimed reroll tasks', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    const marked = markLineageRerollRequest(defaultProject, {
+      confirmWrite: true,
+      nodeAssetId: files.parentId,
+      requestedBy: 'human',
+      rootAssetId: files.parentId,
+    });
+    claimLineageTask(defaultProject, {
+      agentName: 'Reroll worker',
+      taskId: marked.task_id!,
+    });
+
+    const cleared = clearLineageRerollRequest(defaultProject, {
+      confirmWrite: true,
+      nodeAssetId: files.parentId,
+      rootAssetId: files.parentId,
+    });
+
+    expect(cleared.request.status).toBe('cancelled');
+    expect(listLineageRerollRequests(defaultProject, files.parentId).requests).toEqual([]);
+    expect(listLineageTasks(defaultProject, files.parentId).tasks).toMatchObject([
+      { id: marked.task_id, status: 'claimed', task_type: 'reroll' },
+    ]);
   });
 
   it('uses pending iterate tasks as the next assets before legacy selected rows', () => {

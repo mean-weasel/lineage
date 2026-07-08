@@ -441,7 +441,7 @@ export function cancelLineageIterateTasksForAssets(project: string, fields: {
   rootAssetId: string;
 }): LineageTaskMutationResult[] {
   const targetIds = fields.assetIds ? new Set(fields.assetIds) : undefined;
-  return listLineageTasks(project, fields.rootAssetId).tasks
+  return listLineageTasks(project, fields.rootAssetId, ['pending']).tasks
     .filter(task => task.task_type === 'iterate')
     .filter(task => !targetIds || targetIds.has(task.target_asset_id))
     .map(task => cancelLineageTask(project, {

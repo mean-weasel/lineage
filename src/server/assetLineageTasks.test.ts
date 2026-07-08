@@ -7,6 +7,7 @@ import { backfillLineageTasks, lineageDb } from './assetLineageDb';
 import { inspectAgentClaim, listAgentClaims } from './agentClaims';
 import {
   addLineageTaskComment,
+  cancelLineageIterateTasksForAssets,
   cancelLineageTask,
   claimLineageTask,
   getLineageTask,
@@ -320,6 +321,37 @@ describe('asset lineage tasks', () => {
     expect(cancelled.task.status).toBe('cancelled');
     expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(0);
     expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'started', 'cancelled']);
+  });
+
+  it('compat cancellation skips claimed iterate tasks', () => {
+    const files = seedLineage();
+    const pending = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.rootId,
+      taskType: 'iterate',
+    });
+    const active = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    claimLineageTask(defaultProject, {
+      agentName: 'Iterate worker',
+      taskId: active.task.id,
+    });
+
+    cancelLineageIterateTasksForAssets(defaultProject, {
+      actor: 'human',
+      confirmWrite: true,
+      rootAssetId: files.rootId,
+    });
+
+    expect(listLineageTasks(defaultProject, files.rootId).tasks.map(task => [task.id, task.status])).toEqual([
+      [active.task.id, 'claimed'],
+    ]);
+    expect(listLineageTasks(defaultProject, files.rootId, ['cancelled']).tasks.map(task => task.id)).toEqual([pending.task.id]);
   });
 
   it('resolves a pending task with generation and asset outputs', () => {
