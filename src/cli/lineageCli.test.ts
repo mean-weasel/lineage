@@ -525,7 +525,54 @@ describe('lineage CLI handoff commands', () => {
     expect(() => runLineageDataCommand('tasks', ['claim', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks claim requires --agent-name');
     expect(() => runLineageDataCommand('tasks', ['start', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks start requires --claim-token');
     expect(() => runLineageDataCommand('tasks', ['comment', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks comment requires --message');
+    expect(() => runLineageDataCommand('tasks', ['cancel', '--project', defaultProject, '--json'])).toThrow('lineage tasks cancel requires --task');
+    expect(() => runLineageDataCommand('tasks', ['override', '--project', defaultProject, '--json'])).toThrow('lineage tasks override requires --task');
+    expect(() => runLineageDataCommand('tasks', ['override', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks override requires --reason');
     expect(() => runLineageDataCommand('tasks', ['instructions', '--project', defaultProject, '--task', taskId, '--json'])).toThrow('lineage tasks instructions requires --instructions');
+  });
+
+  it('overrides an active lineage task from the CLI back to pending with updated instructions', () => {
+    seedCliDb();
+    const marked = runLineageDataCommand('reroll', [
+      'mark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--target', fixtureRootAssetId,
+      '--notes', 'Original task instructions',
+      '--confirm-write',
+      '--json',
+    ]) as { task?: { id: string } };
+    const taskId = marked.task?.id || '';
+
+    const claimed = runLineageDataCommand('tasks', [
+      'claim',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--agent-name', 'CLI override worker',
+      '--json',
+    ]) as { claim_token: string };
+    runLineageDataCommand('tasks', [
+      'start',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--claim-token', claimed.claim_token,
+      '--json',
+    ]);
+
+    const overridden = runLineageDataCommand('tasks', [
+      'override',
+      '--project', defaultProject,
+      '--task', taskId,
+      '--reason', 'Human is reassigning this task.',
+      '--instructions', 'Use the updated override instructions.',
+      '--json',
+    ]) as { events: Array<{ event_type: string }>; task: { instructions?: string; status: string } };
+
+    expect(overridden.task).toMatchObject({
+      instructions: 'Use the updated override instructions.',
+      status: 'pending',
+    });
+    expect(overridden.events.map(event => event.event_type)).toContain('human_override');
   });
 
   it('prints readable task queue results in non-json output', () => {
