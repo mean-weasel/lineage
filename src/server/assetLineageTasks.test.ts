@@ -128,6 +128,79 @@ describe('asset lineage tasks', () => {
     expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'comment_added', 'started']);
   });
 
+  it('rejects upsert instruction edits for claimed and in-progress tasks', () => {
+    const files = seedLineage();
+    const claimedTask = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Keep the main branch focused.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    claimLineageTask(defaultProject, {
+      agentName: 'Claimed task worker',
+      taskId: claimedTask.task.id,
+    });
+
+    const inProgressTask = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Explore the alternate branch.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.alternateId,
+      taskType: 'iterate',
+    });
+    const claimedInProgress = claimLineageTask(defaultProject, {
+      agentName: 'Started task worker',
+      taskId: inProgressTask.task.id,
+    });
+    startLineageTask(defaultProject, {
+      claimToken: claimedInProgress.claim_token,
+      taskId: inProgressTask.task.id,
+    });
+
+    expect(() => upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Do not accept this claimed edit.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    })).toThrow('pending');
+    expect(() => upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Do not accept this in-progress edit.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.alternateId,
+      taskType: 'iterate',
+    })).toThrow('pending');
+
+    expect(getLineageTask(defaultProject, claimedTask.task.id).task.instructions).toBe('Keep the main branch focused.');
+    expect(getLineageTask(defaultProject, inProgressTask.task.id).task.instructions).toBe('Explore the alternate branch.');
+  });
+
+  it('rejects bogus claim tokens when starting and leaves the task claimed', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Only the real claim holder may start.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    claimLineageTask(defaultProject, {
+      agentName: 'Task worker',
+      taskId: created.task.id,
+    });
+
+    expect(() => startLineageTask(defaultProject, {
+      claimToken: 'claim_fake.invalid',
+      taskId: created.task.id,
+    })).toThrow('Unknown or invalid claim token');
+
+    const inspected = getLineageTask(defaultProject, created.task.id);
+    expect(inspected.task.status).toBe('claimed');
+    expect(inspected.events.map(event => event.event_type)).toEqual(['created', 'claimed']);
+  });
+
   it('cancels pending tasks with dry-run support and hides them from the default list', () => {
     const files = seedLineage();
     const created = upsertLineageTask(defaultProject, {
@@ -154,6 +227,42 @@ describe('asset lineage tasks', () => {
     expect(cancelled.task.status).toBe('cancelled');
     expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(0);
     expect(listLineageTasks(defaultProject, files.rootId, ['cancelled']).tasks.map(task => task.id)).toEqual([created.task.id]);
+  });
+
+  it('requires override to cancel active tasks', () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'Task worker',
+      taskId: created.task.id,
+    });
+    startLineageTask(defaultProject, {
+      claimToken: claimed.claim_token,
+      taskId: created.task.id,
+    });
+
+    expect(() => cancelLineageTask(defaultProject, {
+      actor: 'human',
+      confirmWrite: true,
+      taskId: created.task.id,
+    })).toThrow('override=true');
+    expect(getLineageTask(defaultProject, created.task.id).task.status).toBe('in_progress');
+
+    const cancelled = cancelLineageTask(defaultProject, {
+      actor: 'human',
+      confirmWrite: true,
+      override: true,
+      taskId: created.task.id,
+    });
+
+    expect(cancelled.task.status).toBe('cancelled');
+    expect(listLineageTasks(defaultProject, files.rootId).tasks).toHaveLength(0);
+    expect(taskEventTypes(created.task.id)).toEqual(['created', 'claimed', 'started', 'cancelled']);
   });
 
   it('uses a stable task id format', () => {
