@@ -27,6 +27,14 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
     const preview = page.locator('.lineage-canvas-status-preview img');
     await expect(preview).toBeVisible();
     await expect(preview).toHaveAttribute('src', /rich-demo-drafts.*\.png/);
+    await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth), {
+      message: 'rich seed preview image decoded width',
+      timeout: 10_000,
+    }).toBeGreaterThan(900);
+    await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalHeight), {
+      message: 'rich seed preview image decoded height',
+      timeout: 10_000,
+    }).toBeGreaterThan(900);
 
     const proof = await preview.evaluate((image: HTMLImageElement) => {
       const rect = image.getBoundingClientRect();

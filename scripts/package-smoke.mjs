@@ -74,9 +74,18 @@ async function stopServer(server) {
 
 const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-package-smoke-'));
 
+function parsePackMetadata(packOutput) {
+  const metadata = JSON.parse(packOutput);
+  const pack = Array.isArray(metadata) ? metadata[0] : metadata;
+  if (!pack || typeof pack.filename !== 'string' || !Array.isArray(pack.files)) {
+    throw new Error('npm pack returned unexpected JSON metadata');
+  }
+  return pack;
+}
+
 try {
   const packOutput = execFileSync('npm', ['pack', '--json'], { cwd: root, encoding: 'utf8' });
-  const [pack] = JSON.parse(packOutput);
+  const pack = parsePackMetadata(packOutput);
   tarball = join(root, pack.filename);
   const packedFiles = new Set(pack.files.map(file => file.path));
   const forbiddenPackedFiles = pack.files
