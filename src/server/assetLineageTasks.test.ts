@@ -465,6 +465,48 @@ describe('asset lineage tasks', () => {
     expect(JSON.stringify(started.body)).not.toContain(claimed.body.claim_token);
   });
 
+  it('overrides an active task through the route and returns it to pending', async () => {
+    const files = seedLineage();
+    const created = upsertLineageTask(defaultProject, {
+      createdBy: 'human',
+      instructions: 'Route task before override.',
+      rootAssetId: files.rootId,
+      targetAssetId: files.childId,
+      taskType: 'iterate',
+    });
+    const claimed = claimLineageTask(defaultProject, {
+      agentName: 'Override route worker',
+      taskId: created.task.id,
+    });
+    startLineageTask(defaultProject, {
+      claimToken: claimed.claim_token,
+      taskId: created.task.id,
+    });
+    const baseUrl = appWithLineageTaskRoutes();
+
+    const overridden = await postJson<{ task: { instructions?: string; status: string }; events: Array<{ event_type: string }> }>(
+      baseUrl,
+      `/api/lineage/tasks/${encodeURIComponent(created.task.id)}/override`,
+      {
+        actor: 'human',
+        instructions: 'Route task after override.',
+        project: defaultProject,
+        reason: 'Human is taking this back.',
+      }
+    );
+
+    expect(overridden.status).toBe(200);
+    expect(overridden.body.task).toMatchObject({
+      instructions: 'Route task after override.',
+      status: 'pending',
+    });
+    expect(overridden.body.events.map(event => event.event_type)).toContain('human_override');
+    expect(getLineageTask(defaultProject, created.task.id).task).toMatchObject({
+      instructions: 'Route task after override.',
+      status: 'pending',
+    });
+  });
+
   it('routes cancellation through confirmWrite and override safeguards', async () => {
     const files = seedLineage();
     const pending = upsertLineageTask(defaultProject, {
@@ -498,7 +540,7 @@ describe('asset lineage tasks', () => {
     const cancelled = await postJson<{ task: { status: string } }>(
       baseUrl,
       `/api/lineage/tasks/${encodeURIComponent(active.task.id)}/cancel`,
-      { actor: 'human', confirmWrite: true, override: true, project: defaultProject }
+      { actor: 'human', confirm_write: true, override: true, project: defaultProject }
     );
 
     expect(dryRun.status).toBe(200);
@@ -508,6 +550,7 @@ describe('asset lineage tasks', () => {
     expect(denied.body.error).toContain('override=true');
     expect(cancelled.status).toBe(200);
     expect(cancelled.body.task.status).toBe('cancelled');
+    expect(getLineageTask(defaultProject, active.task.id).task.status).toBe('cancelled');
   });
 
   it('cancels pending tasks with dry-run support and hides them from the default list', () => {

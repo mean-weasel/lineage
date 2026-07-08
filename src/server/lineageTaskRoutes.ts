@@ -63,7 +63,7 @@ export function registerLineageTaskRoutes(app: express.Express, projectFrom: Pro
   app.post('/api/lineage/tasks/:taskId/cancel', asyncRoute((req, res) => {
     res.json(cancelLineageTask(projectFrom(req), {
       actor: stringBody(req, 'actor') || '',
-      confirmWrite: boolBody(req, 'confirmWrite'),
+      confirmWrite: boolBody(req, 'confirmWrite') || boolBody(req, 'confirm_write'),
       override: boolBody(req, 'override'),
       taskId: req.params.taskId,
     }));
