@@ -48,11 +48,11 @@ jobs:
         run: cd packages/lineage-plugin-installer && npm pack --dry-run --json
 
       - name: Dry-run matching plugin artifact
-        run: node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.6 --dry-run --json
+        run: node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.7 --dry-run --json
 
       - name: Reject mismatched plugin artifact version
         run: |
-          if node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.5 --dry-run --json; then
+          if node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.6 --dry-run --json; then
             echo "::error::Mismatched plugin artifact version was accepted."
             exit 1
           fi
