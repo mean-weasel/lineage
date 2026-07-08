@@ -129,7 +129,11 @@ Usage:
   ${config.binName} --help
   ${config.binName} --version
 
-${config.displayName} runs the bundled Lineage server for the ${config.channel} channel.`);
+${config.displayName} runs the bundled Lineage server for the ${config.channel} channel.
+
+Variation vs re-roll:
+  link-child creates a new visible child variation edge.
+  reroll mark -> reroll plan -> reroll import updates the same node with a new attempt.`);
 }
 
 function openBrowser(url: string): void {
@@ -244,7 +248,7 @@ function rerollRequestedBy(value: string): 'agent' | 'human' | 'system' {
   throw new Error(`Invalid re-roll requester: ${value}`);
 }
 
-function printDataResult(command: string, result: unknown, json: boolean): void {
+export function printDataResult(command: string, result: unknown, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -268,8 +272,9 @@ function printDataResult(command: string, result: unknown, json: boolean): void 
     return;
   }
   if (command === 'link-child' && result && typeof result === 'object') {
-    const link = result as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string }; message?: string };
+    const link = result as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string }; message?: string; warning?: string };
     console.log(link.message || `${link.dryRun ? 'Dry run: ' : ''}Link ${link.edge?.child_asset_id || 'child'} from ${link.edge?.parent_asset_id || 'parent'}`);
+    if (link.warning) console.log(`Warning: ${link.warning}`);
     return;
   }
   if (command === 'reroll' && result && typeof result === 'object') {

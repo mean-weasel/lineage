@@ -1,6 +1,6 @@
 import type { LineageBriefResponse, LineageSelectedChildFields } from '../shared/types';
 import { AgentClaimError, validateAgentClaimForWrite } from './agentClaims';
-import { getLineageNextAsset, getLineageWriteClaimContext, LineageError, linkLineageAssets } from './assetLineage';
+import { getLineageNextAsset, getLineageWriteClaimContext, LineageError, linkLineageAssets, listLineageRerollRequests } from './assetLineage';
 import { lineageDbPath, nowIso } from './assetLineageDb';
 import { lineageWorkspaceId } from './assetLineageWorkspaces';
 
@@ -16,6 +16,10 @@ function lineageCommand(command: string, project: string, rootAssetId: string): 
 
 function linkChildCommand(project: string, rootAssetId: string): string {
   return `${publicPackageCommand} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --confirm-write --db ${shellQuote(lineageDbPath())} --json`;
+}
+
+function rerollImportGuidance(rootAssetId: string, targetAssetId: string): string {
+  return `Use lineage reroll plan --root ${rootAssetId} --target ${targetAssetId} and lineage reroll import instead.`;
 }
 
 export function getLineageBrief(project: string, rootAssetId?: string): LineageBriefResponse {
@@ -69,6 +73,14 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
 export function linkSelectedLineageChild(project: string, fields: LineageSelectedChildFields) {
   const next = getLineageNextAsset(project, fields.rootAssetId);
   if (!next.next_asset) throw new LineageError('Cannot link child until a next base is selected or unambiguous');
+  const rerollRequests = listLineageRerollRequests(project, next.root_asset_id).requests;
+  const pendingRerollForParent = rerollRequests.find(request => request.node_asset_id === next.next_asset?.asset_id);
+  if (pendingRerollForParent && fields.confirmWrite) {
+    throw new LineageError(
+      `Pending re-roll exists for ${pendingRerollForParent.node_asset_id}. lineage link-child creates a visible child variation edge; it does not re-roll the same node. ${rerollImportGuidance(next.root_asset_id, pendingRerollForParent.node_asset_id)} Cancel the re-roll first if you intentionally want a new child variation.`,
+      409
+    );
+  }
   if (fields.confirmWrite) {
     const claimContext = getLineageWriteClaimContext(project, next.next_asset.asset_id);
     const validation = validateAgentClaimForWrite({
@@ -95,8 +107,16 @@ export function linkSelectedLineageChild(project: string, fields: LineageSelecte
     parent_asset_id: next.next_asset.asset_id,
     child_asset_id: fields.childAssetId,
     reference_asset_ids: next.next_assets.map(asset => asset.asset_id),
-    warning: next.next_assets.length > 1
-      ? 'Linked child to the primary selected base; add explicit edges to other selected references if the child derives from them too.'
-      : undefined,
+    warning: [
+      pendingRerollForParent
+        ? `Pending re-roll exists for ${pendingRerollForParent.node_asset_id}. link-child would create a visible child variation; use reroll plan/import to update the same node attempt.`
+        : undefined,
+      rerollRequests.length > 0 && !pendingRerollForParent
+        ? `This lineage has ${rerollRequests.length} pending re-roll target(s). link-child is only for new visible child variations, not re-roll attempts.`
+        : undefined,
+      next.next_assets.length > 1
+        ? 'Linked child to the primary selected base; add explicit edges to other selected references if the child derives from them too.'
+        : undefined,
+    ].filter(Boolean).join(' ') || undefined,
   };
 }

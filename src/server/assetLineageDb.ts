@@ -399,6 +399,7 @@ export function lineageDb(): DatabaseSync {
   ensureColumn(database, 'asset_ledger_sources', 'first_seen_at', 'text');
   ensureColumn(database, 'asset_ledger_sources', 'indexed_by_run_id', 'text');
   ensureReviewStateValues(database);
+  ensureGenerationReceiptCheckValues(database);
   return database;
 }
 
@@ -468,5 +469,90 @@ function ensureReviewStateValues(database: DatabaseSync): void {
     select asset_id, review_state, reviewed_at, ignored_at, notes, updated_at
     from asset_reviews_old;
     drop table asset_reviews_old;
+  `);
+}
+
+function tableCreateSql(database: DatabaseSync, table: string): string {
+  const row = database.prepare("select sql from sqlite_master where type = 'table' and name = ?").get(table) as { sql?: string } | undefined;
+  return row?.sql || '';
+}
+
+function ensureGenerationReceiptCheckValues(database: DatabaseSync): void {
+  const jobsSql = tableCreateSql(database, 'generation_jobs');
+  const inputsSql = tableCreateSql(database, 'generation_job_inputs');
+  const needsJobsMigration = Boolean(jobsSql && !jobsSql.includes("'lineage_reroll'"));
+  const needsInputsMigration = Boolean(inputsSql && !inputsSql.includes("'reroll_target'"));
+  if (!needsJobsMigration && !needsInputsMigration) return;
+
+  database.exec('PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON; BEGIN IMMEDIATE');
+  try {
+    if (needsJobsMigration) migrateGenerationJobsCheck(database);
+    if (needsInputsMigration) migrateGenerationJobInputsCheck(database);
+    const violations = database.prepare('pragma foreign_key_check').all();
+    if (violations.length > 0) throw new Error(`Generation receipt migration failed foreign key check: ${JSON.stringify(violations)}`);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.exec('PRAGMA legacy_alter_table = OFF; PRAGMA foreign_keys = ON');
+  }
+}
+
+function migrateGenerationJobsCheck(database: DatabaseSync): void {
+  database.exec(`
+    alter table generation_jobs rename to generation_jobs_legacy_check;
+    create table generation_jobs (
+      id text primary key,
+      project_id text not null references projects(id),
+      provider text not null default 'codex-handoff',
+      adapter_version text not null,
+      source_mode text not null check (source_mode in ('lineage_selection', 'lineage_reroll')),
+      root_asset_id text not null references assets(id),
+      prompt text not null,
+      expected_output_count integer not null check (expected_output_count > 0),
+      status text not null check (status in ('planned', 'imported', 'failed', 'cancelled')),
+      output_dir text,
+      handoff_json text,
+      created_at text not null,
+      updated_at text not null,
+      imported_at text
+    );
+    insert into generation_jobs (
+      id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
+      expected_output_count, status, output_dir, handoff_json, created_at, updated_at, imported_at
+    )
+    select
+      id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
+      expected_output_count, status, output_dir, handoff_json, created_at, updated_at, imported_at
+    from generation_jobs_legacy_check;
+    drop table generation_jobs_legacy_check;
+    create index if not exists generation_jobs_project_created on generation_jobs(project_id, created_at);
+  `);
+}
+
+function migrateGenerationJobInputsCheck(database: DatabaseSync): void {
+  database.exec(`
+    alter table generation_job_inputs rename to generation_job_inputs_legacy_check;
+    create table generation_job_inputs (
+      id text primary key,
+      job_id text not null references generation_jobs(id) on delete cascade,
+      project_id text not null references projects(id),
+      asset_id text not null references assets(id),
+      root_asset_id text not null references assets(id),
+      role text not null check (role in ('lineage_next_base', 'reference', 'reroll_target')),
+      position integer not null,
+      selection_strategy text not null,
+      selection_snapshot_json text not null,
+      unique(job_id, asset_id, role)
+    );
+    insert into generation_job_inputs (
+      id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json
+    )
+    select
+      id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json
+    from generation_job_inputs_legacy_check;
+    drop table generation_job_inputs_legacy_check;
+    create index if not exists generation_job_inputs_job on generation_job_inputs(job_id, position);
   `);
 }

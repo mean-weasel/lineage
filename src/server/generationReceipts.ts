@@ -355,7 +355,7 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
       created_at: timestamp,
     }],
   };
-  if (fields.dryRun) return { ok: true, command: 'generate image plan', project, dryRun: true, wouldWrite: true, job: preview };
+  if (fields.dryRun) return { ok: true, command: 'reroll plan', project, dryRun: true, wouldWrite: true, job: preview };
   const database = lineageDb();
   try {
     database.exec('BEGIN IMMEDIATE');
@@ -374,7 +374,7 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
       database.exec('ROLLBACK');
       throw error;
     }
-    return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(database, project, id) };
+    return { ok: true, command: 'reroll plan', project, job: loadGenerationJob(database, project, id) };
   } finally {
     database.close();
   }
@@ -572,7 +572,7 @@ export function importImageRerollOutput(project = defaultProject, fields: { jobI
       confirmWrite: true,
     });
     const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
-    return { ok: true, command: 'generate image import', project, job: importedJob, imported: importedJob.outputs };
+    return { ok: true, command: 'reroll import', project, job: importedJob, imported: importedJob.outputs };
   } finally {
     writeDb.close();
   }

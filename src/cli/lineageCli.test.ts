@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
-import { formatAgentGraphDigest, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
+import { formatAgentGraphDigest, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -235,6 +235,60 @@ describe('lineage CLI handoff commands', () => {
     expect(linked.message).toContain('Linked');
   });
 
+  it('warns and blocks link-child when the selected parent has a pending re-roll', () => {
+    seedCliDb();
+    markLineageRerollRequest(defaultProject, {
+      rootAssetId: fixtureRootAssetId,
+      nodeAssetId: fixtureRootAssetId,
+      notes: 'Fix distorted headline',
+      requestedBy: 'human',
+      confirmWrite: true,
+    });
+
+    const dryRun = runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--db', cliDbFile,
+      '--json',
+    ]) as { dryRun?: boolean; warning?: string };
+
+    expect(dryRun.dryRun).toBe(true);
+    expect(dryRun.warning).toContain('Pending re-roll exists');
+    expect(dryRun.warning).toContain('link-child would create a visible child variation');
+
+    expect(() =>
+      runLineageDataCommand('link-child', [
+        '--project', defaultProject,
+        '--root', fixtureRootAssetId,
+        '--child', fixtureChildAssetId,
+        '--db', cliDbFile,
+        '--confirm-write',
+        '--json',
+      ])
+    ).toThrow('link-child creates a visible child variation edge');
+  });
+
+  it('prints link-child warnings in non-json output', () => {
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (value?: unknown) => logs.push(String(value));
+    try {
+      printDataResult('link-child', {
+        dryRun: true,
+        edge: { child_asset_id: 'local-child', parent_asset_id: 'local-parent' },
+        warning: 'Pending re-roll exists for local-parent. Use reroll plan/import.',
+      }, false);
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(logs).toEqual([
+      'Dry run: Link local-child from local-parent',
+      'Warning: Pending re-roll exists for local-parent. Use reroll plan/import.',
+    ]);
+  });
+
   it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {
     seedCliDb();
     markLineageRerollRequest(defaultProject, {
@@ -379,6 +433,9 @@ describe('lineage CLI handoff commands', () => {
     expect(readme).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json');
     expect(operator).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --db /absolute/path/to/lineage.sqlite --confirm-write --json');
     expect(operator).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --db /absolute/path/to/lineage.sqlite --confirm-write --json');
+    expect(readme).toContain('`lineage link-child` creates a new visible descendant');
+    expect(readme).toContain('`lineage reroll import` updates the target node');
+    expect(operator).toContain('Do not use it for re-rolls.');
     expect(readme).toContain('Use `project_channel` only for rare work');
     expect(operator).toContain('Use `project_channel` claims only for rare');
   });

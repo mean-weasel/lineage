@@ -68,6 +68,9 @@ lineage link-child --project demo-project --root <root-asset-id> --child <child-
 lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
+`lineage link-child` creates a new visible descendant in the lineage graph. Do
+not use it for re-rolls.
+
 For re-roll work, mark the target, have the agent plan/import one replacement
 attempt, and cancel only when the request should be abandoned:
 
@@ -78,6 +81,9 @@ lineage reroll plan --project demo-project --root <root-asset-id> --target <targ
 lineage reroll import --project demo-project --job-id <job-id> --file <.asset-scratch-file> --confirm-write --json
 lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json
 ```
+
+`lineage reroll import` updates the target node's current attempt and should
+not add a visible child edge.
 
 The app-created claim-aware handoff packet includes the same token export,
 heartbeat, inspect, and write commands. Raw claim tokens are not shown in the
