@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
-import { indexLineageAssets, markLineageRerollRequest } from '../server/assetLineage';
+import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
 
@@ -27,6 +27,7 @@ describe('lineage CLI start options', () => {
     const help = formatLineageHelp({ binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' });
 
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
+    expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
   });
 
@@ -141,6 +142,53 @@ describe('lineage CLI handoff commands', () => {
     expect(graph.active_asset_id).toBe(fixtureRootAssetId);
     expect(graph.nodes.map(node => node.asset_id)).toContain(fixtureRootAssetId);
     expect(Array.isArray(graph.edges)).toBe(true);
+  });
+
+  it('exports a durable active lineage selection packet from the CLI contract', () => {
+    seedCliDb();
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      notes: 'Use this catalog image for GrowthOps.',
+      rootAssetId: fixtureRootAssetId,
+    });
+    const out = join(cliScratchDir, 'selection-packet.json');
+
+    const packet = runLineageDataCommand('selection', [
+      'packet',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--db', cliDbFile,
+      '--channel', 'linkedin',
+      '--campaign', '2026-07-launch',
+      '--context-notes', 'Create GrowthOps posts from selected images.',
+      '--label', 'launch',
+      '--label', 'agent-ready',
+      '--out', out,
+      '--json',
+    ]) as {
+      assets: Array<{ asset_id: string; s3: { key?: string }; selection_note?: string; storage_state: string }>;
+      context: { labels: string[]; notes?: string };
+      packet_id: string;
+      schema_version: string;
+      selection: { asset_ids: string[]; count: number };
+      workspace: { root_asset_id: string };
+    };
+
+    const saved = JSON.parse(readFileSync(out, 'utf8')) as typeof packet;
+    expect(packet.schema_version).toBe('lineage.selection_packet.v1');
+    expect(packet.packet_id).toMatch(/^lineage_packet_[a-f0-9]{24}$/);
+    expect(saved.packet_id).toBe(packet.packet_id);
+    expect(packet.workspace.root_asset_id).toBe(fixtureRootAssetId);
+    expect(packet.selection).toMatchObject({ asset_ids: [fixtureRootAssetId], count: 1 });
+    expect(packet.context.labels).toEqual(['launch', 'agent-ready']);
+    expect(packet.context.notes).toBe('Create GrowthOps posts from selected images.');
+    expect(packet.assets[0]).toMatchObject({
+      asset_id: fixtureRootAssetId,
+      selection_note: 'Use this catalog image for GrowthOps.',
+      storage_state: 's3_backed',
+    });
+    expect(packet.assets[0].s3.key).toContain(fixtureRootAssetId);
   });
 
   it('formats a readable agent graph digest for non-json CLI output', () => {

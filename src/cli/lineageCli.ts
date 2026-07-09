@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -36,6 +36,7 @@ import {
   updateLineageTaskInstructions,
 } from '../server/assetLineageTasks';
 import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
+import { getLineageSelectionPacket } from '../server/lineageSelectionPacket';
 
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev';
@@ -98,6 +99,20 @@ function readOption(args: string[], name: string): string | undefined {
   return undefined;
 }
 
+function readOptions(args: string[], name: string): string[] {
+  const values: string[] = [];
+  const prefix = `${name}=`;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg.startsWith(prefix)) values.push(arg.slice(prefix.length));
+    else if (arg === name && args[index + 1] && !args[index + 1].startsWith('--')) {
+      values.push(args[index + 1]);
+      index += 1;
+    }
+  }
+  return values;
+}
+
 export function resolveStartOptions(config: LineageCliConfig, args: string[]): StartOptions {
   const runtimeDir = dataRoot(config.displayName);
   const rawPort = readOption(args, '--port') || process.env.PORT || String(config.defaultPort);
@@ -122,6 +137,7 @@ Usage:
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--out <path>] [--strict] [--db <path>] [--json]
   ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll mark --root <asset-id> --target <asset-id> [--notes <text>] [--requested-by agent|human|system] [--project <project>] [--confirm-write] [--db <path>] [--json]
@@ -201,6 +217,33 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
   if (command === 'inspect') {
     if (!options.assetId) throw new Error('lineage inspect requires --asset-id');
     return getLineageSnapshot(options.project, options.assetId);
+  }
+  if (command === 'selection') {
+    const subcommand = positionalArgs(args)[0] || '';
+    if (subcommand !== 'packet') throw new Error(`Unknown selection command: ${subcommand}`);
+    const labels = readOptions(args, '--label')
+      .flatMap(label => label.split(','))
+      .map(label => label.trim())
+      .filter(Boolean);
+    const packet = getLineageSelectionPacket(options.project, {
+      campaign: readOption(args, '--campaign'),
+      channel: readOption(args, '--channel'),
+      command: 'lineage selection packet',
+      contextNotes: readOption(args, '--context-notes') || readOption(args, '--notes'),
+      dbPath: options.dbPath,
+      labels,
+      packageVersion: packageVersion(),
+      rootAssetId: options.rootAssetId,
+      strict: args.includes('--strict'),
+      workspaceId: readOption(args, '--workspace') || readOption(args, '--workspace-id'),
+    });
+    const out = readOption(args, '--out');
+    if (out) {
+      const outPath = resolve(out);
+      mkdirSync(dirname(outPath), { recursive: true });
+      writeFileSync(outPath, `${JSON.stringify(packet, null, 2)}\n`);
+    }
+    return packet;
   }
   if (command === 'link-child') {
     if (!options.childAssetId) throw new Error('lineage link-child requires --child');
@@ -351,6 +394,13 @@ export function printDataResult(command: string, result: unknown, json: boolean)
     const snapshot = result as { active_asset_id: string; edges: unknown[]; nodes: unknown[]; root_asset_id: string };
     console.log(`${snapshot.root_asset_id}: ${snapshot.nodes.length} node(s), ${snapshot.edges.length} edge(s)`);
     console.log(`Active: ${snapshot.active_asset_id}`);
+    return;
+  }
+  if (command === 'selection' && result && typeof result === 'object' && 'packet_id' in result) {
+    const packet = result as { assets?: unknown[]; packet_id: string; selection?: { count: number }; warnings?: string[]; workspace?: { root_asset_id: string } };
+    console.log(`${packet.packet_id}: ${packet.selection?.count || packet.assets?.length || 0} selected asset(s)`);
+    if (packet.workspace?.root_asset_id) console.log(`Root: ${packet.workspace.root_asset_id}`);
+    for (const warning of packet.warnings || []) console.log(`Warning: ${warning}`);
     return;
   }
   if (command === 'link-child' && result && typeof result === 'object') {
@@ -600,7 +650,7 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     return;
   }
 
-  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'link-child' || command === 'reroll' || command === 'tasks') {
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'link-child' || command === 'reroll' || command === 'tasks') {
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {

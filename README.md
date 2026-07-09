@@ -60,6 +60,20 @@ Agents can inspect the current lineage graph without a claim:
 lineage agent graph --project demo-project --root <root-asset-id> --json
 ```
 
+Agents can also export the current active workspace selection as a durable JSON
+packet for downstream tools such as GrowthOps:
+
+```bash
+lineage selection packet --project demo-project --channel linkedin --campaign 2026-07-launch --out ./lineage-selection-packet.json --json
+```
+
+The packet is schema-versioned as `lineage.selection_packet.v1` and includes the
+workspace/root binding, selected asset IDs, local media paths when known, S3 key
+metadata when known, context labels/notes, warnings, and a stable `packet_id`.
+Lineage only exports the packet. GrowthOps or another downstream tool remains
+responsible for importing it, creating posts, checking media readiness, preparing
+public URLs, scheduling, and recording placement receipts.
+
 Keep the claim fresh and pass it to mutating commands:
 
 ```bash
