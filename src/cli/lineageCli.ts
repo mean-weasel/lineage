@@ -115,19 +115,22 @@ function readOptions(args: string[], name: string): string[] {
 }
 
 export function resolveStartOptions(config: LineageCliConfig, args: string[]): StartOptions {
-  const runtimeDir = dataRoot(config.displayName);
   const rawPort = readOption(args, '--port') || process.env.PORT || String(config.defaultPort);
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port: ${rawPort}`);
   }
   return {
-    dbPath: readOption(args, '--db') || process.env.LINEAGE_DB || join(runtimeDir, `${config.binName}.sqlite`),
+    dbPath: resolveCliDbPath(config, args),
     host: readOption(args, '--host') || process.env.HOST || config.defaultHost,
     json: args.includes('--json'),
     open: args.includes('--open'),
     port,
   };
+}
+
+function resolveCliDbPath(config: LineageCliConfig, args: string[]): string {
+  return readOption(args, '--db') || process.env.LINEAGE_DB || join(dataRoot(config.displayName), `${config.binName}.sqlite`);
 }
 
 export function formatLineageHelp(config: LineageCliConfig): string {
@@ -453,8 +456,8 @@ export function printDataResult(command: string, result: unknown, json: boolean)
 }
 
 export function runLineageDbCommand(config: LineageCliConfig, command: string, args: string[]): unknown {
-  const dbPath = readOption(args, '--db');
-  if (dbPath) process.env.LINEAGE_DB = dbPath;
+  const dbPath = resolveCliDbPath(config, args);
+  process.env.LINEAGE_DB = dbPath;
   if (command === 'info') return getLineageRuntimeInfo({ channel: config.channel, dbPath });
   throw new Error(`Unknown db command: ${command}`);
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10
+
+- Fix `lineage db info` so installed CLI checks use the same stable/dev runtime SQLite defaults as `lineage start`.
+
 ## 0.1.9
 
 - Add runtime identity diagnostics in Settings so operators can see the active channel, version, Git SHA when available, SQLite path, and database counts.
