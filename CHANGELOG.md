@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9
+
+- Add runtime identity diagnostics in Settings so operators can see the active channel, version, Git SHA when available, SQLite path, and database counts.
+- Add `lineage db info` for CLI and agent checks before touching a local Lineage database.
+- Document the stable, preview, and dev channel data policy, keeping explicit database overrides available with `--db` and `LINEAGE_DB`.
+- Add browser coverage to ensure Settings keeps surfacing the active runtime and SQLite identity.
+
 ## 0.1.8
 
 - Add durable selection packet export so agents can hand selected Lineage assets to GrowthOps without scraping UI state or copying local paths.
