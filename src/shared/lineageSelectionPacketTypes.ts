@@ -1,13 +1,13 @@
 export type LineageSelectionPacketStorageState = 'local_and_s3' | 'local_only' | 's3_backed' | 'unresolved';
 
-export interface LineageSelectionPacketContext {
+interface LineageSelectionPacketContext {
   campaign?: string;
   channel?: string;
   labels: string[];
   notes?: string;
 }
 
-export interface LineageSelectionPacketWorkspace {
+interface LineageSelectionPacketWorkspace {
   active_at?: string;
   id: string;
   notes?: string;
@@ -16,14 +16,14 @@ export interface LineageSelectionPacketWorkspace {
   title: string;
 }
 
-export interface LineageSelectionPacketSelectedItem {
+interface LineageSelectionPacketSelectedItem {
   asset_id: string;
   position: number;
   selected_at: string;
   selection_note?: string;
 }
 
-export interface LineageSelectionPacketLocalMedia {
+interface LineageSelectionPacketLocalMedia {
   absolute_path?: string;
   content_type?: string;
   exists: boolean;
@@ -31,7 +31,7 @@ export interface LineageSelectionPacketLocalMedia {
   size_bytes?: number;
 }
 
-export interface LineageSelectionPacketS3Media {
+interface LineageSelectionPacketS3Media {
   bucket?: string;
   checksum_sha256?: string;
   content_type?: string;
@@ -42,7 +42,7 @@ export interface LineageSelectionPacketS3Media {
   version_id?: string;
 }
 
-export interface LineageSelectionPacketAttempt {
+interface LineageSelectionPacketAttempt {
   asset_id: string;
   checksum_sha256?: string;
   file_path?: string;
