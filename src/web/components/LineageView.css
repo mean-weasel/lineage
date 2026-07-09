@@ -24,7 +24,7 @@
 
 .lineage-view {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   height: calc(100vh - 92px);
   min-height: 640px;
   border: 1px solid var(--line);
@@ -55,31 +55,6 @@
 .lineage-side code {
   color: var(--muted);
   font-size: 12px;
-}
-
-.lineage-scope-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  background: #f8fbfc;
-  padding: 9px 15px;
-  color: #40515d;
-  font-size: 12px;
-}
-
-.lineage-scope-bar strong {
-  color: #273743;
-  font-size: 11px;
-  text-transform: uppercase;
-}
-
-.lineage-scope-bar code {
-  max-width: 420px;
-  overflow-wrap: anywhere;
-  color: #273743;
-  font-size: 11px;
 }
 
 .lineage-panel-action-row,

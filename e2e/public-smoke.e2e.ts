@@ -19,13 +19,22 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await page.goto('/');
 
   await expect(page.locator('header.lineage-header').getByText('No workspace selected')).toBeVisible();
-  const loadDemo = page.locator('header.lineage-header').getByRole('button', { name: 'Load demo lineage' }).first();
+  await page.locator('header.lineage-header .lineage-overflow summary').click();
+  const loadDemo = page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first();
   await expect(loadDemo).toBeEnabled();
   await loadDemo.click();
 
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept', { timeout: 20_000 });
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
+  await expect(page.locator('.lineage-scope-bar')).toHaveCount(0);
+  await expect(page.locator('.lineage-selection-strip')).toHaveCount(0);
+  await expect(page.getByText('ROOT SCOPE')).toHaveCount(0);
+  await expect(page.getByText('USE FOR NEXT VARIATION')).toHaveCount(0);
+
+  await page.locator('header.lineage-header .lineage-overflow summary').click();
+  await page.getByRole('button', { name: 'Manage selection' }).click();
+  await expect(page.locator('#lineage-selection-panel')).toBeVisible();
 });
 
 test('creates a lineage workspace from a catalog asset through the modal', async ({ page }) => {
