@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Maximize2 } from 'lucide-react';
 import type { AssetReviewState, LineageNode, LineageSnapshot } from '../../shared/types';
 import type { GenerationJobListResponse } from '../../shared/generationTypes';
 import { storageStateFor } from '../assetUi';
@@ -110,12 +111,12 @@ export function LineageDetailModal({
                   <span>{node.s3_key ? 'Preview available from Assets when signed.' : storage.description}</span>
                 </div>
               )}
+              {hasExpandablePreview && (
+                <button aria-label="Expand image" className="lineage-detail-expand-preview" onClick={() => setImageExpanded(true)} title="Expand image" type="button">
+                  <Maximize2 aria-hidden="true" size={17} strokeWidth={2.4} />
+                </button>
+              )}
             </div>
-            {hasExpandablePreview && (
-              <button className="lineage-detail-expand-preview" onClick={() => setImageExpanded(true)} type="button">
-                Expand image
-              </button>
-            )}
           </div>
           <aside className="lineage-detail-sidebar" aria-label="Node details">
             <details className="lineage-detail-disclosure">

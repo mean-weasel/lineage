@@ -90,7 +90,7 @@ describe('LineageDetailModal', () => {
   it('expands an image out of the detail card and closes it with Escape', () => {
     renderModal();
 
-    act(() => button('Expand image')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    act(() => expandImageButton()?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
     const lightbox = container!.querySelector('.lineage-image-lightbox');
     expect(lightbox).toBeTruthy();
@@ -105,7 +105,7 @@ describe('LineageDetailModal', () => {
     renderModal({ node: { ...node, media_type: 'video', preview_url: '/asset.mp4' } });
 
     expect(container!.querySelector('.lineage-detail-preview video')?.getAttribute('src')).toBe('/asset.mp4');
-    expect(button('Expand image')).toBeUndefined();
+    expect(expandImageButton()).toBeNull();
   });
 
   it('keeps key footer decisions visible and groups secondary actions under More actions', () => {
@@ -162,6 +162,10 @@ function renderModal(props: Partial<Parameters<typeof LineageDetailModal>[0]> = 
 
 function button(label: string): HTMLButtonElement | undefined {
   return Array.from(container!.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === label);
+}
+
+function expandImageButton(): HTMLButtonElement | null {
+  return container!.querySelector<HTMLButtonElement>('button[aria-label="Expand image"]');
 }
 
 function actionProps(events: string[]): Pick<Parameters<typeof LineageDetailModal>[0], 'onClearAllNext' | 'onClearNext' | 'onOpenNode' | 'onRemoveFromLineage' | 'onReplaceNext' | 'onReview' | 'onSelectNext' | 'onToast'> {

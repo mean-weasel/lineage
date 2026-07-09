@@ -93,20 +93,27 @@
 }
 
 .lineage-detail-expand-preview {
-  justify-self: start;
-  min-height: 32px;
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1;
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
   border: 1px solid #bdd5dc;
-  border-radius: 7px;
-  background: #fff;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
   color: #125d68;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 900;
+  padding: 0;
+  box-shadow: 0 8px 20px rgba(14, 26, 34, 0.16);
+  backdrop-filter: blur(8px);
 }
 
 .lineage-detail-expand-preview:hover,
 .lineage-detail-expand-preview:focus-visible {
   border-color: var(--accent-2);
+  background: #fff;
   box-shadow: 0 0 0 3px rgba(13, 91, 146, 0.1);
 }
 
