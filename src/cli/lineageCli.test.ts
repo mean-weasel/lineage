@@ -77,6 +77,19 @@ describe('lineage CLI start options', () => {
     expect(info.database.projects).toBeGreaterThanOrEqual(1);
   });
 
+  it('uses the CLI runtime database default for db info', () => {
+    process.env.LINEAGE_HOME = '/tmp/lineage-runtime-info';
+    delete process.env.LINEAGE_DB;
+
+    const info = runLineageDbCommand(
+      { binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' },
+      'info',
+      ['--json']
+    ) as { database: { path: string } };
+
+    expect(info.database.path).toBe(join('/tmp/lineage-runtime-info', 'lineage-dev.sqlite'));
+  });
+
   it('accepts explicit host, port, database, and open flags', () => {
     const options = resolveStartOptions(
       { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
