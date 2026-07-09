@@ -47,6 +47,8 @@ export function LineageDetailModal({
   const [proof, setProof] = useState<GenerationJobListResponse | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
   const [proofLoading, setProofLoading] = useState(false);
+  const [imageExpanded, setImageExpanded] = useState(false);
+  const hasExpandablePreview = Boolean(node.preview_url && (node.media_type === 'image' || node.media_type === 'gif'));
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +74,15 @@ export function LineageDetailModal({
     return () => { cancelled = true; };
   }, [node.asset_id, snapshot.project, snapshot.root_asset_id]);
 
+  useEffect(() => {
+    if (!imageExpanded) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setImageExpanded(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [imageExpanded]);
+
   function openNode(assetId: string) {
     onOpenNode(assetId);
   }
@@ -87,88 +98,121 @@ export function LineageDetailModal({
           <button onClick={onClose} title="Close detail">Close</button>
         </header>
         <div className="lineage-detail-body">
-          <div className="lineage-detail-preview">
-            {node.preview_url && (node.media_type === 'image' || node.media_type === 'gif') ? (
-              <img src={node.preview_url} alt={node.title} />
-            ) : node.preview_url && node.media_type === 'video' ? (
-              <video src={node.preview_url} controls />
-            ) : (
-              <div className="lineage-preview-empty">
-                <strong>{node.media_type}</strong>
-                <span>{node.s3_key ? 'Preview available from Assets when signed.' : storage.description}</span>
-              </div>
+          <div className="lineage-detail-preview-shell">
+            <div className="lineage-detail-preview">
+              {hasExpandablePreview ? (
+                <img src={node.preview_url} alt={node.title} />
+              ) : node.preview_url && node.media_type === 'video' ? (
+                <video src={node.preview_url} controls />
+              ) : (
+                <div className="lineage-preview-empty">
+                  <strong>{node.media_type}</strong>
+                  <span>{node.s3_key ? 'Preview available from Assets when signed.' : storage.description}</span>
+                </div>
+              )}
+            </div>
+            {hasExpandablePreview && (
+              <button className="lineage-detail-expand-preview" onClick={() => setImageExpanded(true)} type="button">
+                Expand image
+              </button>
             )}
           </div>
-          <dl>
-            <div><dt>Storage</dt><dd><span className={`storage-chip ${storage.kind}`}>{storage.label}</span></dd></div>
-            <div><dt>Source</dt><dd>{node.source}</dd></div>
-            <div><dt>Channel</dt><dd>{node.channel || 'none'}</dd></div>
-            <div><dt>Campaign</dt><dd>{node.campaign || 'none'}</dd></div>
-            <div><dt>Status</dt><dd>{node.status}</dd></div>
-            <div><dt>Review</dt><dd>{node.review_state}</dd></div>
-            <div><dt>Latest</dt><dd>{node.is_latest ? 'yes' : 'no'}</dd></div>
-            <div><dt>Next variation</dt><dd>{node.user_selected ? 'yes' : 'no'}</dd></div>
-            {node.local_path && <div><dt>Local path</dt><dd>{node.local_path}</dd></div>}
-            {node.s3_key && <div><dt>S3 key</dt><dd>{node.s3_key}</dd></div>}
-            {node.selection_note && <div><dt>Rationale</dt><dd>{node.selection_note}</dd></div>}
-            {node.review_notes && <div><dt>Notes</dt><dd>{node.review_notes}</dd></div>}
-          </dl>
-          <section className="lineage-detail-context">
-            <h4>Lineage context</h4>
-            <p>{parents.length || 'No'} parent · {children.length || 'No'} children · {node.is_latest ? 'latest leaf' : 'branch point'}</p>
-            {node.user_selected && !node.is_latest && (
-              <div className="lineage-detail-warning" role="status">
-                This asset is selected for next variation but is not a latest leaf. Keep it for an intentional branch, or replace it with a newer leaf before continuing.
-              </div>
-            )}
-            <div className="lineage-relation-list">
-              {parents.map(parent => (
-                <button aria-label={`Open parent ${parent.title}`} className="lineage-relation-button" key={parent.asset_id} onClick={() => openNode(parent.asset_id)}>
-                  <span>View parent</span>
-                  <strong>{parent.title}</strong>
-                </button>
-              ))}
-              {children.map(child => (
-                <button aria-label={`Open child ${child.title}`} className="lineage-relation-button" key={child.asset_id} onClick={() => openNode(child.asset_id)}>
-                  <span>View child</span>
-                  <strong>{child.title}</strong>
-                </button>
-              ))}
-            </div>
-          </section>
-          <section className="lineage-detail-proof" data-testid="lineage-generation-proof">
-            <h4>Generation proof</h4>
-            {proofLoading && <p>Loading receipt proof...</p>}
-            {proofError && <p className="lineage-proof-error">{proofError}</p>}
-            {!proofLoading && !proofError && proof && proof.jobs.length === 0 && <p>No generation receipts for this node yet.</p>}
-            {!proofLoading && !proofError && proof?.jobs.map(job => (
-              <article className="lineage-proof-job" key={job.id}>
-                <div className="lineage-proof-job-head">
-                  <strong>{job.id}</strong>
-                  <span>{job.status}</span>
-                </div>
-                <p>{job.prompt}</p>
-                <dl>
-                  <div><dt>Receipts</dt><dd>{[...job.receipts].sort((a, b) => receiptOrder[a.receipt_type] - receiptOrder[b.receipt_type]).map(receipt => `${receipt.receipt_type}: ${receipt.status}`).join(' · ') || 'none'}</dd></div>
-                  <div><dt>Parents</dt><dd>{job.inputs.map(input => input.asset_id).join(', ')}</dd></div>
-                  <div><dt>Outputs</dt><dd>{job.outputs.length || 'none yet'}</dd></div>
-                </dl>
-                {job.outputs.length > 0 && (
-                  <div className="lineage-proof-output-list">
-                    {job.outputs.map(output => (
-                      <div className="lineage-proof-output" key={output.id}>
-                        <span>Output {output.output_index}</span>
-                        <strong>{output.imported_asset_id}</strong>
-                        <code>{output.file_path}</code>
-                        <small>parent {output.parent_asset_id}</small>
-                      </div>
-                    ))}
+          <aside className="lineage-detail-sidebar" aria-label="Node details">
+            <details className="lineage-detail-disclosure">
+              <summary>
+                <span>Asset details</span>
+                <small>{storage.label} · {node.review_state}</small>
+              </summary>
+              <dl>
+                <div><dt>Storage</dt><dd><span className={`storage-chip ${storage.kind}`}>{storage.label}</span></dd></div>
+                <div><dt>Source</dt><dd>{node.source}</dd></div>
+                <div><dt>Channel</dt><dd>{node.channel || 'none'}</dd></div>
+                <div><dt>Campaign</dt><dd>{node.campaign || 'none'}</dd></div>
+                <div><dt>Status</dt><dd>{node.status}</dd></div>
+                <div><dt>Review</dt><dd>{node.review_state}</dd></div>
+                <div><dt>Latest</dt><dd>{node.is_latest ? 'yes' : 'no'}</dd></div>
+                <div><dt>Next variation</dt><dd>{node.user_selected ? 'yes' : 'no'}</dd></div>
+                {node.local_path && <div><dt>Local path</dt><dd>{node.local_path}</dd></div>}
+                {node.s3_key && <div><dt>S3 key</dt><dd>{node.s3_key}</dd></div>}
+                {node.selection_note && <div><dt>Rationale</dt><dd>{node.selection_note}</dd></div>}
+                {node.review_notes && <div><dt>Notes</dt><dd>{node.review_notes}</dd></div>}
+              </dl>
+            </details>
+            <details className="lineage-detail-disclosure">
+              <summary>
+                <span>Lineage context</span>
+                <small>{parents.length || 'No'} parent · {children.length || 'No'} children</small>
+              </summary>
+              <section className="lineage-detail-context">
+                <p>{parents.length || 'No'} parent · {children.length || 'No'} children · {node.is_latest ? 'latest leaf' : 'branch point'}</p>
+                {node.user_selected && !node.is_latest && (
+                  <div className="lineage-detail-warning" role="status">
+                    This asset is selected for next variation but is not a latest leaf. Keep it for an intentional branch, or replace it with a newer leaf before continuing.
                   </div>
                 )}
-              </article>
-            ))}
-          </section>
+                <div className="lineage-relation-list">
+                  {parents.map(parent => (
+                    <button aria-label={`Open parent ${parent.title}`} className="lineage-relation-button" key={parent.asset_id} onClick={() => openNode(parent.asset_id)}>
+                      <span>View parent</span>
+                      <strong>{parent.title}</strong>
+                    </button>
+                  ))}
+                  {children.map(child => (
+                    <button aria-label={`Open child ${child.title}`} className="lineage-relation-button" key={child.asset_id} onClick={() => openNode(child.asset_id)}>
+                      <span>View child</span>
+                      <strong>{child.title}</strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </details>
+            <details className="lineage-detail-proof" data-testid="lineage-generation-proof">
+              <summary>
+                <span>Generation proof</span>
+                <small>{proof?.jobs.length ? `${proof.jobs.length} receipt group${proof.jobs.length === 1 ? '' : 's'}` : 'Collapsed'}</small>
+              </summary>
+              <div className="lineage-detail-proof-content">
+                {proofLoading && <p>Loading receipt proof...</p>}
+                {proofError && <p className="lineage-proof-error">{proofError}</p>}
+                {!proofLoading && !proofError && proof && proof.jobs.length === 0 && <p>No generation receipts for this node yet.</p>}
+                {!proofLoading && !proofError && proof?.jobs.map(job => (
+                  <article className="lineage-proof-job" key={job.id}>
+                    <div className="lineage-proof-job-head">
+                      <strong>{job.id}</strong>
+                      <span>{job.status}</span>
+                    </div>
+                    <p>{job.prompt}</p>
+                    <dl>
+                      <div><dt>Receipts</dt><dd>{[...job.receipts].sort((a, b) => receiptOrder[a.receipt_type] - receiptOrder[b.receipt_type]).map(receipt => `${receipt.receipt_type}: ${receipt.status}`).join(' · ') || 'none'}</dd></div>
+                      <div><dt>Parents</dt><dd>{job.inputs.map(input => input.asset_id).join(', ')}</dd></div>
+                      <div><dt>Outputs</dt><dd>{job.outputs.length || 'none yet'}</dd></div>
+                    </dl>
+                    {job.outputs.length > 0 && (
+                      <div className="lineage-proof-output-list">
+                        {job.outputs.map(output => (
+                          <div className="lineage-proof-output" key={output.id}>
+                            <span>Output {output.output_index}</span>
+                            <strong>{output.imported_asset_id}</strong>
+                            <code>{output.file_path}</code>
+                            <small>parent {output.parent_asset_id}</small>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </details>
+          </aside>
         </div>
+        {imageExpanded && hasExpandablePreview && (
+          <div aria-modal="true" className="lineage-image-lightbox" onClick={() => setImageExpanded(false)} role="dialog">
+            <div className="lineage-image-lightbox-content" onClick={event => event.stopPropagation()}>
+              <button onClick={() => setImageExpanded(false)} type="button">Close image</button>
+              <img src={node.preview_url} alt={node.title} />
+            </div>
+          </div>
+        )}
         <LineageNodeActionFooter
           canRemoveFromLineage={canRemoveFromLineage}
           node={node}

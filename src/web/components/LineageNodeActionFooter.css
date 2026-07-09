@@ -1,13 +1,30 @@
 .lineage-node-actions {
-  display: flex;
-  flex-wrap: wrap;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  align-items: center;
   border-top: 1px solid var(--line);
   padding: 14px;
 }
 
+.lineage-node-actions-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lineage-node-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .lineage-node-actions button,
-.lineage-node-actions a {
+.lineage-node-actions a,
+.lineage-node-actions summary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -22,6 +39,15 @@
   text-decoration: none;
 }
 
+.lineage-node-actions summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.lineage-node-actions summary::-webkit-details-marker {
+  display: none;
+}
+
 .lineage-node-actions .primary-lite {
   flex: 1 1 220px;
   min-height: 42px;
@@ -31,10 +57,50 @@
   font-size: 13px;
 }
 
+.lineage-node-actions .selection-lite {
+  min-height: 42px;
+  border-color: #97cbd2;
+  background: #eefbfc;
+  color: #095d66;
+}
+
 .lineage-node-actions .danger {
   border-color: #e3b7b7;
   background: #fff4f4;
   color: #8a3b3b;
+}
+
+.lineage-node-actions-menu {
+  position: relative;
+  justify-self: end;
+}
+
+.lineage-node-actions-menu[open] summary {
+  border-color: #bdd5dc;
+  background: #f4fafb;
+  color: #125d68;
+}
+
+.lineage-node-actions-menu > div {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  width: min(260px, calc(100vw - 44px));
+  border: 1px solid #d4dde3;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(14, 26, 34, 0.18);
+  padding: 8px;
+}
+
+.lineage-node-actions-menu > div button,
+.lineage-node-actions-menu > div a {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
 }
 
 .lineage-node-actions button:disabled {
@@ -46,7 +112,16 @@
   .lineage-node-actions {
     position: sticky;
     bottom: 0;
+    grid-template-columns: 1fr;
     background: var(--surface);
+  }
+
+  .lineage-node-actions-menu {
+    justify-self: stretch;
+  }
+
+  .lineage-node-actions-menu summary {
+    width: 100%;
   }
 }
 
@@ -54,5 +129,18 @@
   .lineage-node-actions button,
   .lineage-node-actions a {
     flex: 1 1 140px;
+  }
+
+  .lineage-node-review-actions,
+  .lineage-node-actions-primary {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .lineage-node-actions-menu > div {
+    left: 0;
+    right: auto;
+    width: 100%;
   }
 }

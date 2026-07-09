@@ -56,6 +56,10 @@ test('renders a 1080x1350 portrait detail preview without clipping', async ({ pa
 
   await node.dblclick();
   await expect(page.getByRole('dialog', { name: 'portrait 1080x1350' })).toBeVisible();
+  await page.waitForFunction(() => {
+    const image = document.querySelector('.lineage-detail-preview img');
+    return image instanceof HTMLImageElement && image.naturalWidth > 0 && image.naturalHeight > 0;
+  });
 
   const measurement = await page.evaluate(() => {
     const preview = document.querySelector('.lineage-detail-preview');
