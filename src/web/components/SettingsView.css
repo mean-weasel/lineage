@@ -129,7 +129,7 @@
 
 .settings-release {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 220px));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
 }
 
@@ -152,6 +152,10 @@
   color: #26343d;
   font-size: 15px;
   font-weight: 850;
+}
+
+.settings-release .settings-path {
+  overflow-wrap: anywhere;
 }
 
 .settings-meta div {

@@ -4,19 +4,20 @@ Lineage is a local-first workspace for reviewing creative assets, branching vari
 
 ## Package Channels
 
-Lineage is packaged as `@mean-weasel/lineage`. Use `latest` for the stable dogfood or production install, and use `next` when you intentionally want the development or release-candidate channel:
+Lineage is packaged as `@mean-weasel/lineage`. Use `latest` for the stable dogfood or production install, and use `next` when you intentionally want the published preview candidate:
 
 ```bash
 npm install -g @mean-weasel/lineage@latest
 npm install -g @mean-weasel/lineage@next
 ```
 
-The stable and development channels are intended to coexist conceptually:
+The stable, preview, and dev channels are intended to coexist conceptually:
 
 - `latest` is the version you should trust for day-to-day dogfooding.
-- `next` is the version to test before promotion.
+- `next` is the published preview version to test before promotion.
+- `dev` is the local GitHub checkout or branch before publication.
 - `lineage` runs with stable runtime defaults.
-- `lineage-dev` runs with development runtime defaults.
+- `lineage-dev` runs with dev runtime defaults.
 
 The package includes both CLI bridge bins for help and version checks:
 
@@ -39,6 +40,30 @@ By default, `lineage start` listens on `lineage.localhost:5197` and stores SQLit
 ```bash
 lineage start --port 6123 --db ~/.lineage/lineage.sqlite
 ```
+
+## Runtime Channels and SQLite
+
+Lineage treats app code channels and local SQLite data as separate concerns:
+
+- `stable` is npm `latest` and is the daily-use channel.
+- `preview` is the published candidate channel, normally npm `next`.
+- `dev` is a GitHub checkout or local branch before publication.
+
+Each channel should use its own default runtime directory and SQLite database.
+Do not point preview or dev code at the stable database unless you are doing an
+intentional, explicit test. Prefer copying a stable snapshot forward when a
+realistic preview/dev dataset is needed. `--db` and `LINEAGE_DB` remain the
+escape hatches for intentionally choosing a database.
+
+Check the active runtime before making changes:
+
+```bash
+lineage db info --json
+lineage-dev db info --json
+```
+
+The app also shows channel, version, Git SHA when available, and SQLite path in
+Settings.
 
 ## Agent Claims
 

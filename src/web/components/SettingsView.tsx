@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, Cloud, ImagePlus, Loader2, RefreshCcw, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AdapterSetting, AdapterSettingsSnapshot, AdapterType } from '../../shared/adapterSettingsTypes';
+import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import { api } from '../api';
 import { lineageReleaseInfo } from '../releaseInfo';
 import './SettingsView.css';
@@ -58,13 +59,19 @@ function Switch(props: { checked: boolean; disabled?: boolean; label: string; on
 
 export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'error', message: string) => void }) {
   const [snapshot, setSnapshot] = useState<AdapterSettingsSnapshot | null>(null);
+  const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState('');
 
   async function refresh() {
     setLoading(true);
     try {
-      setSnapshot(await api<AdapterSettingsSnapshot>(`/api/adapters/settings?project=${encodeURIComponent(props.project)}`));
+      const [settings, runtimeInfo] = await Promise.all([
+        api<AdapterSettingsSnapshot>(`/api/adapters/settings?project=${encodeURIComponent(props.project)}`),
+        api<{ runtime: LineageRuntimeInfo }>('/api/runtime'),
+      ]);
+      setSnapshot(settings);
+      setRuntime(runtimeInfo.runtime);
     } catch (error) {
       props.onToast('error', error instanceof Error ? error.message : String(error));
     } finally {
@@ -120,11 +127,23 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
           <dl className="settings-release">
             <div>
               <dt>Version</dt>
-              <dd>{lineageReleaseInfo.version}</dd>
+              <dd>{runtime?.version || lineageReleaseInfo.version}</dd>
             </div>
             <div>
               <dt>Channel</dt>
-              <dd>{lineageReleaseInfo.channel}</dd>
+              <dd>{runtime?.channel || lineageReleaseInfo.channel}</dd>
+            </div>
+            <div>
+              <dt>Git</dt>
+              <dd>{runtime?.git_sha || 'not available'}</dd>
+            </div>
+            <div>
+              <dt>SQLite</dt>
+              <dd className="settings-path">{runtime?.database.path || 'loading'}</dd>
+            </div>
+            <div>
+              <dt>Database</dt>
+              <dd>{runtime?.database.exists ? `${runtime.database.projects ?? 0} projects / ${runtime.database.workspaces ?? 0} workspaces` : 'not created yet'}</dd>
             </div>
           </dl>
         </section>
