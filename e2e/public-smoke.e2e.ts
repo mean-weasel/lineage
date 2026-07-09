@@ -1,5 +1,22 @@
 import { expect, test } from 'playwright/test';
 
+type WorkspaceListResponse = {
+  workspaces?: Array<{ id: string; status?: string }>;
+};
+
+test.beforeEach(async ({ request }) => {
+  const response = await request.get('/api/lineage-workspaces');
+  expect(response.ok()).toBe(true);
+  const body = await response.json() as WorkspaceListResponse;
+  for (const workspace of body.workspaces || []) {
+    if (workspace.status === 'archived') continue;
+    const archive = await request.post(`/api/lineage-workspaces/${encodeURIComponent(workspace.id)}/archive`, {
+      data: { confirmWrite: true },
+    });
+    expect(archive.ok()).toBe(true);
+  }
+});
+
 test('loads the public demo project and app shell', async ({ page, request }) => {
   const projectsResponse = await request.get('/api/projects');
   expect(projectsResponse.ok()).toBe(true);
@@ -41,9 +58,10 @@ test('creates a lineage workspace from a catalog asset through the modal', async
   await page.goto('/');
 
   await page.locator('header.lineage-header .lineage-primary-controls > button.primary-button').click();
-  await expect(page.getByRole('form', { name: 'New lineage' })).toBeVisible();
+  const modal = page.getByRole('form', { name: 'New lineage' });
+  await expect(modal).toBeVisible();
   await page.getByPlaceholder('Search by title, id, campaign, channel...').fill('meta short-form');
-  await page.getByRole('button', { name: /Meta short-form demo post static/ }).click();
+  await modal.getByRole('button', { name: /Meta short-form demo post static/ }).click();
   await page.getByLabel('Name').fill('Catalog e2e lineage');
   await page.getByRole('button', { name: 'Create lineage' }).click();
 
