@@ -40,6 +40,8 @@
     "release:next": "node scripts/release.mjs --tag next",
     "release:latest": "node scripts/release.mjs --tag latest",
     "release:promote-latest": "node scripts/release.mjs --promote-latest",
+    "release:github": "node scripts/sync-github-release.mjs",
+    "release:github:dry-run": "node scripts/sync-github-release.mjs --dry-run",
     "release:status": "node scripts/release-status.mjs"
   },
   "dependencies": {
