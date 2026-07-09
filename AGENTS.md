@@ -4,6 +4,14 @@ Use an adversarial proof standard. Before declaring work complete, state the use
 
 Do not commit private media, credentials, private campaign data, real presigned URLs, customer content, or local SQLite databases.
 
+Runtime channel memory:
+
+- `stable` is npm `latest` and daily-use data.
+- `preview` is the published npm `next` candidate.
+- `dev` is a local GitHub checkout or branch before publication.
+- Check `lineage db info --json` or `lineage-dev db info --json` before assuming which SQLite database a CLI/app session is using.
+- Do not point preview/dev code at the stable database unless it is an intentional test; prefer a copied snapshot for realistic preview/dev testing.
+
 For meaningful changes, prefer:
 
 - `npm run ci` for the full public gate.
