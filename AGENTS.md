@@ -12,6 +12,12 @@ Runtime channel memory:
 - Check `lineage db info --json` or `lineage-dev db info --json` before assuming which SQLite database a CLI/app session is using.
 - Do not point preview/dev code at the stable database unless it is an intentional test; prefer a copied snapshot for realistic preview/dev testing.
 
+Local startup memory:
+
+- `lineage start`, `lineage-dev start`, `make start-prod`, and `make start-dev` are foreground commands.
+- Prefer `make start-prod-bg` or `make start-dev-bg` when the user wants a persistent local server; these use tmux when available and fall back to nohup/PID files.
+- Use `make status-prod`/`make status-dev`, `make logs-prod`/`make logs-dev`, and `make stop-prod`/`make stop-dev` for detached servers.
+
 For meaningful changes, prefer:
 
 - `npm run ci` for the full public gate.
