@@ -22,10 +22,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: '22.22.3'
@@ -49,18 +51,32 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
       - name: Publish latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'publish-latest' }}
-        run: npm run release -- --tag latest --dry-run
+        run: |
+          npm run release -- --tag latest --dry-run
+          npm run release:github:dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Publish latest
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-latest' }}
-        run: npm run release -- --tag latest
+        run: |
+          npm run release -- --tag latest
+          npm run release:github
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+          GH_TOKEN: ${{ github.token }}
       - name: Promote next to latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: npm run release -- --promote-latest --dry-run --skip-ci
+        run: |
+          npm run release -- --promote-latest --dry-run --skip-ci
+          npm run release:github:dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Promote next to latest
         if: ${{ !inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: npm run release -- --promote-latest --skip-ci
+        run: |
+          npm run release -- --promote-latest --skip-ci
+          npm run release:github
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
