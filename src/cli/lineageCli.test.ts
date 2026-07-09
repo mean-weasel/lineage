@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
-import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand } from './lineageCli';
+import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -28,6 +28,7 @@ describe('lineage CLI start options', () => {
 
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
+    expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
   });
 
@@ -51,7 +52,7 @@ describe('lineage CLI start options', () => {
   it('keeps the development channel on a separate default port and database', () => {
     process.env.LINEAGE_HOME = '/tmp/lineage-dev-home';
 
-    const options = resolveStartOptions({ binName: 'lineage-dev', channel: 'development', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' }, ['--json']);
+    const options = resolveStartOptions({ binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' }, ['--json']);
 
     expect(options).toMatchObject({
       dbPath: join('/tmp/lineage-dev-home', 'lineage-dev.sqlite'),
@@ -59,6 +60,21 @@ describe('lineage CLI start options', () => {
       json: true,
       port: 5198,
     });
+  });
+
+  it('reports database runtime info without requiring a server', () => {
+    seedCliDb();
+
+    const info = runLineageDbCommand(
+      { binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' },
+      'info',
+      ['--db', cliDbFile, '--json']
+    ) as { channel: string; database: { exists: boolean; path: string; projects?: number }; version: string };
+
+    expect(info.channel).toBe('dev');
+    expect(info.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(info.database).toMatchObject({ exists: true, path: cliDbFile });
+    expect(info.database.projects).toBeGreaterThanOrEqual(1);
   });
 
   it('accepts explicit host, port, database, and open flags', () => {

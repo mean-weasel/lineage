@@ -32,6 +32,21 @@ test('loads the public demo project and app shell', async ({ page, request }) =>
   await expect(page.getByText('Lineage').first()).toBeVisible();
 });
 
+test('shows runtime channel and SQLite identity in settings', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Settings' }).click();
+
+  const release = page.getByLabel('Release information');
+  await expect(release).toBeVisible();
+  await expect(release.getByText('Version')).toBeVisible();
+  await expect(release.getByText('Channel')).toBeVisible();
+  await expect(release.getByText('dev')).toBeVisible();
+  await expect(release.getByText('SQLite')).toBeVisible();
+  await expect(release.getByText(/lineage-e2e-.*\.sqlite/)).toBeVisible();
+  await expect(release.getByText(/projects \/ .*workspaces/)).toBeVisible();
+});
+
 test('loads the demo lineage from first-run lineage controls', async ({ page }) => {
   await page.goto('/');
 

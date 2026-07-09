@@ -40,6 +40,7 @@ import { listImageGenerationJobs } from './server/generationReceiptJobs';
 import { isGenerationReceiptError } from './server/generationReceipts';
 import { registerLineageTaskRoutes } from './server/lineageTaskRoutes';
 import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes';
+import { getLineageRuntimeInfo } from './server/runtimeInfo';
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
 const app = express();
 const port = Number(process.env.PORT || 5173);
@@ -57,6 +58,7 @@ function asyncRoute(handler: (req: express.Request, res: express.Response) => Pr
   return (req, res, next) => { Promise.resolve(handler(req, res)).catch(next); };
 }
 app.get('/api/projects', asyncRoute((_req, res) => { res.json({ projects: listProjects() }); }));
+app.get('/api/runtime', asyncRoute((_req, res) => { res.json({ ok: true, runtime: getLineageRuntimeInfo() }); }));
 app.get(
   '/api/assets',
   asyncRoute((req, res) => {

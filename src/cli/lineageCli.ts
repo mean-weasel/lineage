@@ -37,10 +37,11 @@ import {
 } from '../server/assetLineageTasks';
 import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
 import { getLineageSelectionPacket } from '../server/lineageSelectionPacket';
+import { getLineageRuntimeInfo } from '../server/runtimeInfo';
 
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev';
-  channel: 'stable' | 'development';
+  channel: 'stable' | 'preview' | 'dev';
   defaultHost: string;
   defaultPort: number;
   displayName: string;
@@ -152,6 +153,7 @@ Usage:
   ${config.binName} tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks override --task <task-id> --reason <text> [--instructions <text>] [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks instructions --task <task-id> --instructions <text> [--project <project>] [--db <path>] [--json]
+  ${config.binName} db info [--db <path>] [--json]
   ${config.binName} agent claim --project <project> --scope <scope> --target <target-id> --agent-name <name> [--channel <channel>] [--ttl 20m] [--json]
   ${config.binName} agent graph --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} agent status [--project <project>] [--json]
@@ -450,6 +452,42 @@ export function printDataResult(command: string, result: unknown, json: boolean)
   console.log(String(result));
 }
 
+export function runLineageDbCommand(config: LineageCliConfig, command: string, args: string[]): unknown {
+  const dbPath = readOption(args, '--db');
+  if (dbPath) process.env.LINEAGE_DB = dbPath;
+  if (command === 'info') return getLineageRuntimeInfo({ channel: config.channel, dbPath });
+  throw new Error(`Unknown db command: ${command}`);
+}
+
+function printDbResult(command: string, result: unknown, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (command === 'info' && result && typeof result === 'object' && 'database' in result) {
+    const runtime = result as {
+      channel: string;
+      database: { error?: string; exists: boolean; modified_at?: string; path: string; projects?: number; size_bytes?: number; workspaces?: number };
+      git_sha?: string;
+      node_env?: string;
+      version: string;
+    };
+    console.log(`Channel: ${runtime.channel}`);
+    console.log(`Version: ${runtime.version}`);
+    if (runtime.git_sha) console.log(`Git: ${runtime.git_sha}`);
+    if (runtime.node_env) console.log(`Node env: ${runtime.node_env}`);
+    console.log(`SQLite: ${runtime.database.path}`);
+    console.log(`Exists: ${runtime.database.exists ? 'yes' : 'no'}`);
+    if (runtime.database.size_bytes !== undefined) console.log(`Size: ${runtime.database.size_bytes} bytes`);
+    if (runtime.database.modified_at) console.log(`Modified: ${runtime.database.modified_at}`);
+    if (runtime.database.projects !== undefined) console.log(`Projects: ${runtime.database.projects}`);
+    if (runtime.database.workspaces !== undefined) console.log(`Workspaces: ${runtime.database.workspaces}`);
+    if (runtime.database.error) console.log(`Warning: ${runtime.database.error}`);
+    return;
+  }
+  console.log(String(result));
+}
+
 export function runLineageAgentCommand(command: string, args: string[]): unknown {
   const dbPath = readOption(args, '--db');
   if (dbPath) process.env.LINEAGE_DB = dbPath;
@@ -663,6 +701,21 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
           : { ok: false, command, error: message };
         console.error(JSON.stringify(output, null, 2));
       }
+      else console.error(`${config.binName}: ${message}`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  if (command === 'db') {
+    const commandArgs = normalizedArgs.slice(2);
+    const dbCommand = normalizedArgs[1] || '';
+    const json = commandArgs.includes('--json');
+    try {
+      printDbResult(dbCommand, runLineageDbCommand(config, dbCommand, commandArgs), json);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (json) console.error(JSON.stringify({ ok: false, command: `db ${dbCommand}`, error: message }, null, 2));
       else console.error(`${config.binName}: ${message}`);
       process.exit(1);
     }

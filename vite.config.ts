@@ -4,7 +4,12 @@ import { readFileSync } from 'node:fs';
 
 const e2ePort = process.env.LINEAGE_E2E_PORT ? Number(process.env.LINEAGE_E2E_PORT) : undefined;
 const packageInfo = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as { version?: string };
-const releaseChannel = process.env.LINEAGE_RELEASE_CHANNEL || (process.env.NODE_ENV === 'production' ? 'production' : 'dev');
+const rawReleaseChannel = process.env.LINEAGE_RELEASE_CHANNEL || process.env.LINEAGE_CHANNEL;
+const releaseChannel = rawReleaseChannel === 'preview' || rawReleaseChannel === 'next'
+  ? 'preview'
+  : rawReleaseChannel === 'stable' || rawReleaseChannel === 'production'
+    ? 'stable'
+    : 'dev';
 
 export default defineConfig({
   root: new URL('src/web', import.meta.url).pathname,
