@@ -17,6 +17,7 @@ test('rotates lineage graph layout and handles without stale saved positions', a
     await expect(root).toBeVisible();
     await expect(child).toBeVisible();
 
+    await openLineageActions(page);
     await page.getByLabel('Lineage graph direction').selectOption('TB');
     await assertRootAboveChild(root, child);
     const topToBottomPath = await firstEdgePath(page);
@@ -71,4 +72,11 @@ async function assertRootAboveChild(root: Locator, child: Locator) {
 async function firstEdgePath(page: Page): Promise<string> {
   await expect(page.locator('.react-flow__edge-path').first()).toBeVisible();
   return await page.locator('.react-flow__edge-path').first().getAttribute('d') || '';
+}
+
+async function openLineageActions(page: Page) {
+  const actions = page.locator('header.lineage-header .lineage-overflow');
+  if (await actions.getAttribute('open') === null) {
+    await actions.locator('summary').click();
+  }
 }

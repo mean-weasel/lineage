@@ -21,8 +21,9 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
   try {
     await page.goto('/');
     await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText(richWorkspaceTitle, { timeout: 20_000 });
-    await expect(page.locator('.lineage-seed-identity')).toHaveText('Rich PNG seed active');
-    await expect(page.locator('.lineage-demo-menu summary')).toContainText('14/14 PNG images');
+    await page.locator('header.lineage-header .lineage-overflow summary').click();
+    await expect(page.locator('header.lineage-header .lineage-overflow')).toContainText('QA seed media');
+    await expect(page.locator('header.lineage-header .lineage-overflow')).toContainText('14/14 PNG images');
 
     const preview = page.locator('.lineage-canvas-status-preview img');
     await expect(preview).toBeVisible();

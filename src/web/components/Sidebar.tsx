@@ -1,31 +1,12 @@
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import type { AssetLibrarySnapshot, ProjectSummary } from '../../shared/types';
 import { appDescription, appName } from '../../shared/appConstants';
-import { formatBytes } from '../../shared/format';
 import { placementFilters, sourceFilters, statusFilters, type PlacementFilter, type SourceFilter, type StudioView, type StatusFilter } from '../assetUi';
 import { lineageReleaseInfo } from '../releaseInfo';
 import './Sidebar.css';
 
-export function Sidebar({
-  channel,
-  channels,
-  liveSync,
-  placementStatus,
-  project,
-  projects,
-  setChannel,
-  setPlacementStatus,
-  setProject,
-  setSource,
-  setStatus,
-  setView,
-  showBackupQueue,
-  source,
-  snapshot,
-  status,
-  totals,
-}: {
+export function Sidebar(props: {
   channel: string;
   channels: string[];
   liveSync: boolean;
@@ -44,13 +25,23 @@ export function Sidebar({
   status: StatusFilter;
   totals: { assets: number; live: number; orphan: number; size: number };
 }) {
+  const {
+    channel,
+    channels,
+    placementStatus,
+    project,
+    projects,
+    setChannel,
+    setPlacementStatus,
+    setProject,
+    setSource,
+    setStatus,
+    source,
+    status,
+  } = props;
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const projectValues = projects.length ? projects.map(item => item.project) : [project];
-  function showAssets(action: () => void) {
-    setView('assets');
-    action();
-  }
   return (
     <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
       <button
@@ -85,7 +76,7 @@ export function Sidebar({
         type="button"
       >
         <SlidersHorizontal size={16} />
-        Filters and quick sets
+        Filters
         <ChevronDown className={mobileFiltersOpen ? 'open' : ''} size={16} />
       </button>
       <div className="sidebar-mobile-collapse" data-open={mobileFiltersOpen} id="mobile-sidebar-controls">
@@ -99,33 +90,6 @@ export function Sidebar({
           <FilterSelect id="asset-status-filter" label="Status" value={status} values={statusFilters} onChange={value => setStatus(value as StatusFilter)} />
           <FilterSelect id="asset-channel-filter" label="Channel" value={channel} values={channels} onChange={setChannel} />
           <FilterSelect id="asset-placement-filter" label="Placement" value={placementStatus} values={placementFilters} onChange={value => setPlacementStatus(value as PlacementFilter)} />
-        </section>
-        <section className="side-section health">
-          <h2>Bucket</h2>
-          <div className="health-line"><ShieldCheck size={16} /><span>{snapshot?.identity?.account || 'not checked'}</span></div>
-          <dl>
-            <div><dt>Catalog</dt><dd>{totals.assets}</dd></div>
-            <div><dt>Live</dt><dd>{liveSync ? totals.live : 'off'}</dd></div>
-            <div><dt>Loose</dt><dd>{liveSync ? totals.orphan : 'off'}</dd></div>
-            <div><dt>Size</dt><dd>{formatBytes(totals.size)}</dd></div>
-          </dl>
-        </section>
-        <section className="side-section">
-          <h2>Quick Sets</h2>
-          <button className="text-button" onClick={() => setView('review')}>Review queue</button>
-          <button className="text-button" onClick={() => setView('ledger')}>Ledger workflow</button>
-          <button className="text-button" onClick={() => setView('content')}>Content batches</button>
-          <button className="text-button" onClick={() => setView('agents')}>Agents</button>
-          <button className="text-button" onClick={showBackupQueue}>Backup queue</button>
-          <button className="text-button" onClick={() => showAssets(() => setSource('local'))}>Local review</button>
-          <button className="text-button" onClick={() => showAssets(() => setSource('catalog'))}>Catalog assets</button>
-          <button className="text-button" onClick={() => showAssets(() => setStatus('working'))}>Working assets</button>
-          <button className="text-button" onClick={() => showAssets(() => setStatus('published'))}>Published assets</button>
-          <button className="text-button" onClick={() => showAssets(() => setPlacementStatus('scheduled'))}>Scheduled</button>
-          <button className="text-button" onClick={() => showAssets(() => setPlacementStatus('posted'))}>Posted</button>
-          <button className="text-button" onClick={() => showAssets(() => setChannel('tiktok'))}>TikTok queue</button>
-          <button className="text-button" onClick={() => showAssets(() => setChannel('x-twitter'))}>X/Twitter queue</button>
-          <button className="text-button" onClick={() => showAssets(() => setChannel('youtube'))}>YouTube queue</button>
         </section>
       </div>
     </aside>

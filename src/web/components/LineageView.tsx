@@ -12,7 +12,6 @@ import { LineageAttemptHistoryModal } from './LineageAttemptHistoryModal';
 import { LineageDetailModal } from './LineageDetailModal';
 import { LineageNewWorkspaceModal } from './LineageNewWorkspaceModal';
 import { LineageSidePanel } from './LineageSidePanel';
-import { LineageSelectionStrip } from './LineageSelectionStrip';
 import { LineageToolbar } from './LineageToolbar';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
@@ -49,12 +48,9 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const selectedNode = selectedNodes[0];
   const nextVariationLimit = 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;
-  const staleSelectedNodes = selectedNodes.filter(node => !node.is_latest);
-  const rootNode = snapshot?.nodes.find(node => node.asset_id === snapshot.root_asset_id);
   const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
   const showCanvasStatus = Boolean(activeNodeId && activeNode);
   const inspectingId = activeNode?.asset_id || 'none';
-  const nextBaseId = selectedNodes.length > 1 ? `${selectedNodes.length} selected` : selectedNode?.asset_id || 'none';
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
   const collapseTimer = useRef<number | null>(null);
   const authoritativeEdges = useRef<Edge[]>([]);
@@ -415,11 +411,9 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       <LineageToolbar
         activeWorkspace={activeWorkspace}
         closeSignal={menuCloseSignal}
-        latestCount={snapshot?.latest.length || 0}
         loading={loading}
         graphDirection={graphDirection}
         demoSeedStatus={demoSeedStatus}
-        nextVariationId={nextBaseId}
         onArchiveWorkspace={() => void archiveWorkspace()}
         onFitGraph={() => fitGraph()}
         onIndexLocal={() => void indexAndRefresh()}
@@ -442,14 +436,6 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         workspaceRootAssetId={workspaceRootAssetId}
         workspaces={visibleWorkspaces}
       />
-      {snapshot && (
-        <div className="lineage-scope-bar">
-          <strong>Root scope</strong>
-          <code>{rootNode?.title || snapshot.root_asset_id}</code>
-          <span>{snapshot.edges.length > 0 ? `${snapshot.edges.length} linked variation${snapshot.edges.length === 1 ? '' : 's'}` : 'No linked variations yet; pick another asset or link a child to grow this tree.'}</span>
-        </div>
-      )}
-      {snapshot && <LineageSelectionStrip clearSelection={() => void clearNextVariation()} limit={nextVariationLimit} openManager={toggleSidePanel} selectedCount={selectedNodes.length} staleCount={staleSelectedNodes.length} />}
       <div className="lineage-workbench" data-testid="lineage-workbench">
         <div className={`lineage-canvas ${activeNodeId ? 'focus-active' : ''}`}>
           <LineageCanvas
