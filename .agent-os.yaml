@@ -1,0 +1,140 @@
+agent_os:
+  required_version: ">=0.7.4-alpha.0 <0.8.0"
+  policy_version: 1
+  adoption_mode: observe
+  extends:
+    - agent-os/presets/web
+  pr_lifecycle:
+    mode: manual
+
+repo:
+  name: lineage
+  primary_stack:
+    - node
+    - typescript
+    - react
+    - vite
+    - express
+    - playwright
+    - sqlite
+    - github-actions
+    - npm-package
+  owner_boundary: "Lineage owns the local-first creative lineage workspace, packaged CLI/server, public-safe demo fixtures, claim-token write guards, plugin installer artifacts, and release readiness gates. Private media, credentials, customer/campaign data, live presigned URLs, and local runtime SQLite databases remain outside the public repo boundary."
+
+commands:
+  verify: "npm run ci"
+  install: "npm ci"
+  lint: "npm run lint"
+  format_check: "git diff --check"
+  typecheck: "npm run check"
+  unit_tests: "npm run test"
+  integration_tests: ""
+  e2e_smoke: "npm run e2e"
+  build: "npm run build"
+  verify_live: ""
+  verify_ui: "npm run e2e"
+  verify_release: "npm run release:dry-run -- --tag next"
+  verify_physical_preview: ""
+  public_readiness: "npm run public:readiness"
+  package_smoke: "npm run build && npm run package:smoke"
+  audit: "npm run audit"
+  dependency_prune: "npm run knip"
+
+command_applicability:
+  integration_tests:
+    status: not_applicable
+    reason: "Lineage currently runs deterministic Vitest coverage through npm run test and browser workflow coverage through npm run e2e; there is no separate integration-test command."
+
+privacy:
+  sensitive_artifacts:
+    - "private media and generated campaign assets"
+    - "credentials, API keys, npm tokens, claim tokens, and CI secret values"
+    - "private campaign data, customer content, and real presigned URLs"
+    - "local runtime SQLite databases and private demo-project catalogs"
+    - "untracked local mockups or scratch media unless explicitly reviewed and approved for public commit"
+  safe_evidence:
+    - "local command output"
+    - "GitHub Actions CI check state"
+    - "npm package dry-run and package-smoke output"
+    - "public-readiness output"
+    - "synthetic public fixture manifests and checksums"
+  redaction_rules:
+    - "Do not include tokens, private keys, claim secrets, presigned URLs, or CI secret values in receipts."
+    - "Do not include private media, private catalogs, customer content, campaign data, or local SQLite databases in commits or proof artifacts."
+    - "Use synthetic fixture IDs, checksums, and command summaries as evidence when raw assets or secrets would be exposed."
+
+ci:
+  provider: "github-actions"
+  workflow_files:
+    - ".github/workflows/ci.yml"
+    - ".github/workflows/lineage-plugin-installer.yml"
+    - ".github/workflows/lineage-plugin-release-artifact.yml"
+    - ".github/workflows/lineage-plugin-installer-publish.yml"
+    - ".github/workflows/lineage-plugin-installer-promote.yml"
+    - ".github/workflows/release.yml"
+  required_checks:
+    - "ci"
+
+deploy:
+  provider: "local-first npm package"
+  preview_url_pattern: "http://lineage.localhost:<port>"
+  production_url: ""
+  smoke_command: "npm run build && npm run package:smoke"
+
+data_and_auth:
+  database: "local SQLite runtime database outside the public repo"
+  auth_provider: "target-scoped Lineage claim tokens for mutating agent writes"
+  permission_negative_checks:
+    - "claim-token writes fail when the token is missing"
+    - "claim-token writes fail when the token does not match the claimed target"
+    - "read-only agent surfaces do not expose raw claim tokens"
+  migration_checks:
+    - "npm run test"
+    - "npm run e2e"
+
+observability:
+  analytics: ""
+  error_tracking: ""
+  logs: "local command output and GitHub Actions logs"
+  monitors: []
+
+external_integrations:
+  billing: ""
+  email: ""
+  storage: "optional S3-shaped catalog metadata and local storage adapter; live cloud delete requires explicit human-enabled environment configuration"
+  background_jobs: "local content ops and generation receipt queues"
+  other:
+    - "Buffer posting adapter supports dry-run behavior unless scheduler credentials are configured."
+
+risk_categories:
+  - category: public-package-boundary
+    proof_sources:
+      - "npm run public:readiness"
+      - "npm run build && npm run package:smoke"
+      - "npm run audit"
+    negative_cases:
+      - "private media, credentials, presigned URLs, customer content, private campaign data, and local SQLite databases must not be committed or packaged"
+      - "package smoke must fail if required public files or packaged CLI behavior are missing"
+  - category: claim-token-write-guards
+    proof_sources:
+      - "npm run test"
+      - "npm run release:claim-smoke -- --package @mean-weasel/lineage@next"
+      - "src/cli/lineageCli.test.ts"
+      - "src/server/agentClaims.test.ts"
+    negative_cases:
+      - "mutating agent writes without a matching claim token must fail"
+      - "read-only surfaces must not expose raw claim tokens"
+  - category: browser-workflow
+    proof_sources:
+      - "npm run e2e"
+      - "playwright.config.ts"
+    negative_cases:
+      - "core browser workflows must fail when UI state cannot be exercised end to end"
+  - category: release-readiness
+    proof_sources:
+      - "npm run ci"
+      - "npm run release:dry-run -- --tag next"
+      - ".github/workflows/release.yml"
+    negative_cases:
+      - "release dry runs must not publish packages"
+      - "promotion must refuse mismatched npm dist-tags or missing package evidence"
