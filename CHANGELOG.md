@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8
+
+- Add durable selection packet export so agents can hand selected Lineage assets to GrowthOps without scraping UI state or copying local paths.
+- Add Agent OS adoption guidance for Lineage agents and operators.
+- Improve popover media previews, node actions, and image expansion controls for faster asset inspection.
+- Clean up the Lineage shell navigation, toolbar, and side-panel layout for a more focused workspace.
+
 ## 0.1.7
 
 - Add a claim-aware lineage task queue for per-image iteration and re-roll work, including task instructions, comments, cancellation, and human override controls.
