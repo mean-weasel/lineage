@@ -6,6 +6,7 @@
 /.asset-scratch/
 /demo-project/
 /.lineage/
+/.agent-os/
 /*.tgz
 
 /docs/
