@@ -15,6 +15,18 @@ jobs:
         with:
           node-version: '22.22.3'
           cache: npm
-      - run: npm ci
+      - name: Install dependencies
+        env:
+          AGENT_OS_DEPLOY_KEY: ${{ secrets.AGENT_OS_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$AGENT_OS_DEPLOY_KEY"
+          key_file="$(mktemp)"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$AGENT_OS_DEPLOY_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+          GIT_SSH_COMMAND="ssh -i $key_file -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run ci
