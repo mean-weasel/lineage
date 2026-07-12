@@ -30,6 +30,7 @@ describe('runtime info', () => {
     const missing = getLineageRuntimeInfo({ channel: 'dev', dbPath: dbFile });
 
     expect(missing).toMatchObject({
+      asset_root: repoRoot,
       channel: 'dev',
       database: {
         exists: false,

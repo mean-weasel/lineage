@@ -138,6 +138,10 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
               <dd>{runtime?.git_sha || 'not available'}</dd>
             </div>
             <div>
+              <dt>Assets</dt>
+              <dd className="settings-path">{runtime?.asset_root || 'loading'}</dd>
+            </div>
+            <div>
               <dt>SQLite</dt>
               <dd className="settings-path">{runtime?.database.path || 'loading'}</dd>
             </div>

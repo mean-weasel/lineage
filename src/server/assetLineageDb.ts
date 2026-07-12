@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { repoRoot } from './assetCore';
+import { packageRoot } from './assetCore';
 
 const require = createRequire(import.meta.url);
 export type DatabaseSync = DatabaseSyncType;
@@ -12,7 +12,7 @@ export function nowIso(): string {
 }
 
 export function lineageDbPath(): string {
-  return process.env.LINEAGE_DB || join(repoRoot, '.lineage', 'asset-lineage.sqlite');
+  return process.env.LINEAGE_DB || join(packageRoot, '.lineage', 'asset-lineage.sqlite');
 }
 
 export function lineageDb(): DatabaseSync {

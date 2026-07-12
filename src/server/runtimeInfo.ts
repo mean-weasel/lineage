@@ -3,14 +3,14 @@ import { createRequire } from 'node:module';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
-import { repoRoot } from './assetCore';
+import { packageRoot, repoRoot } from './assetCore';
 import type { LineageRuntimeChannel, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 
 const require = createRequire(import.meta.url);
 
 function packageInfo(): { name: string; version: string } {
   try {
-    const info = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as { name?: string; version?: string };
+    const info = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { name?: string; version?: string };
     return { name: info.name || '@mean-weasel/lineage', version: info.version || '0.0.0' };
   } catch {
     return { name: '@mean-weasel/lineage', version: '0.0.0' };
@@ -28,8 +28,8 @@ export function normalizeRuntimeChannel(value?: string): LineageRuntimeChannel {
 function gitSha(): string | undefined {
   const envSha = process.env.LINEAGE_GIT_SHA || process.env.GITHUB_SHA;
   if (envSha) return envSha.slice(0, 40);
-  if (!existsSync(join(repoRoot, '.git'))) return undefined;
-  const result = spawnSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
+  if (!existsSync(join(packageRoot, '.git'))) return undefined;
+  const result = spawnSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: packageRoot, encoding: 'utf8' });
   return result.status === 0 ? result.stdout.trim() || undefined : undefined;
 }
 
@@ -67,6 +67,7 @@ export function getLineageRuntimeInfo(options: { channel?: string; dbPath?: stri
   }
 
   return {
+    asset_root: repoRoot,
     channel: normalizeRuntimeChannel(options.channel || process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL),
     database: databaseInfo,
     fetchedAt: nowIso(),

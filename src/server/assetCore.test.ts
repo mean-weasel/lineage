@@ -1,10 +1,49 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { defaultProject, defaultProduct, listAssets, listProjects, loadCatalog, localPreviewPath, presignAsset, previewPlacement, repoRoot } from './assetCore';
+import { defaultProject, defaultProduct, listAssets, listProjects, loadCatalog, localPreviewPath, packageRoot, presignAsset, previewPlacement, repoRoot, setLineageAssetRoot } from './assetCore';
 import { initProject } from './assetProjects';
+import { lineageDbPath } from './assetLineageDb';
+
+const defaultAssetRoot = repoRoot;
+
+afterEach(() => {
+  setLineageAssetRoot(defaultAssetRoot);
+});
 
 describe('asset core catalog listing', () => {
+  it('loads a non-demo project catalog from an explicit external asset root', () => {
+    const externalRoot = join(defaultAssetRoot, '.asset-scratch', 'vitest-external-asset-root');
+    const project = 'external-consumer-project';
+    const catalogFile = join(externalRoot, project, 'assets', 'catalog.json');
+    rmSync(externalRoot, { force: true, recursive: true });
+    mkdirSync(join(externalRoot, project, 'assets'), { recursive: true });
+    writeFileSync(catalogFile, `${JSON.stringify({
+      assets: [],
+      default_bucket: '',
+      default_region: '',
+      product: 'External Consumer Project',
+      project,
+    }, null, 2)}\n`);
+
+    try {
+      setLineageAssetRoot(externalRoot);
+
+      expect(loadCatalog(project)).toMatchObject({ product: 'External Consumer Project', project });
+      expect(listProjects()).toContainEqual(expect.objectContaining({ catalogPath: catalogFile, project }));
+    } finally {
+      setLineageAssetRoot(defaultAssetRoot);
+      rmSync(externalRoot, { force: true, recursive: true });
+    }
+  });
+
+  it('keeps the fallback SQLite path independent from the external asset root', () => {
+    delete process.env.LINEAGE_DB;
+    setLineageAssetRoot('/tmp/external-lineage-assets');
+
+    expect(lineageDbPath()).toBe(join(packageRoot, '.lineage', 'asset-lineage.sqlite'));
+  });
+
   it('loads the public demo fixture when no root project catalog exists', () => {
     const projectDir = join(repoRoot, defaultProject);
     if (existsSync(projectDir)) throw new Error(`Expected no root fixture override at ${projectDir}`);

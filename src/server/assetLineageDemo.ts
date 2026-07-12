@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { dirname, join, posix } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { defaultProject, repoRoot } from './assetCore';
+import { defaultProject, packageRoot, repoRoot } from './assetCore';
 import { linkLineageAssets, updateLineageLayout, updateSelectedAsset } from './assetLineage';
 import { lineageDb, nowIso } from './assetLineageDb';
 import { archiveLineageWorkspace, createLineageWorkspace, isLineageWorkspaceError, lineageWorkspaceId } from './assetLineageWorkspaces';
@@ -12,7 +12,7 @@ import { fileSha256 } from './localReview';
 const demoWorkspaceTitle = 'Demo: Content iteration tree';
 const demoWorkspaceNotes = 'Repeatable sample lineage for demos and onboarding. Archive it when reviewing real work.';
 const demoBasePath = ['lineage-demo', '2026-06-lineage-demo'];
-const swissifierManifestPath = join(repoRoot, 'fixtures', defaultProject, 'lineage', 'swissifier-rich-demo.json');
+const swissifierManifestPath = join(packageRoot, 'fixtures', defaultProject, 'lineage', 'swissifier-rich-demo.json');
 
 interface SwissifierManifestAsset {
   asset_id: string;

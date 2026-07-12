@@ -29,6 +29,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
+    expect(help).toContain('--asset-root <path>');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
   });
 
@@ -93,10 +94,11 @@ describe('lineage CLI start options', () => {
   it('accepts explicit host, port, database, and open flags', () => {
     const options = resolveStartOptions(
       { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
-      ['--host', '0.0.0.0', '--port=6123', '--db', '/tmp/custom.sqlite', '--open']
+      ['--host', '0.0.0.0', '--port=6123', '--db', '/tmp/custom.sqlite', '--asset-root', '/tmp/growth-ops', '--open']
     );
 
     expect(options).toMatchObject({
+      assetRoot: '/tmp/growth-ops',
       dbPath: '/tmp/custom.sqlite',
       host: '0.0.0.0',
       open: true,

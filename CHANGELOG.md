@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11
+
+- Add `--asset-root` / `LINEAGE_ASSET_ROOT` so installed Lineage packages can use external project catalogs and local media independently from the SQLite path.
+- Show the active asset root in CLI startup, `db info`, and Settings alongside the active SQLite identity.
+- Extend the packed-tarball smoke to prove an unrelated npm consumer can start Lineage and export a real external-project selection packet.
+
 ## 0.1.10
 
 - Fix `lineage db info` so installed CLI checks use the same stable/dev runtime SQLite defaults as `lineage start`.

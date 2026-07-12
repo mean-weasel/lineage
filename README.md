@@ -38,8 +38,15 @@ lineage-dev start
 By default, `lineage start` listens on `lineage.localhost:5197` and stores SQLite state in a stable Lineage runtime directory. `lineage-dev start` listens on `lineage-dev.localhost:5198` and uses a separate development SQLite file. Override those defaults with `--port`, `--host`, `--db`, or `LINEAGE_HOME`:
 
 ```bash
-lineage start --port 6123 --db ~/.lineage/lineage.sqlite
+lineage start --port 6123 --db ~/.lineage/lineage.sqlite --asset-root /absolute/path/to/asset-repo
 ```
+
+`--db` selects the SQLite state file. `--asset-root` (or
+`LINEAGE_ASSET_ROOT`) independently selects the external repository root that
+contains `<project>/assets/catalog.json` and `.asset-scratch` media. Keep these
+arguments explicit when Lineage is installed as a dependency of another repo;
+the installed package directory remains responsible only for bundled code,
+web assets, and public demo fixtures.
 
 ## Runtime Channels and SQLite
 
@@ -89,7 +96,9 @@ Agents can also export the current active workspace selection as a durable JSON
 packet for downstream tools such as GrowthOps:
 
 ```bash
-lineage selection packet --project demo-project --channel linkedin --campaign 2026-07-launch --out ./lineage-selection-packet.json --json
+lineage selection packet --project demo-project --channel linkedin --campaign 2026-07-launch \
+  --db /absolute/path/to/lineage.sqlite --asset-root /absolute/path/to/asset-repo \
+  --out ./lineage-selection-packet.json --json
 ```
 
 The packet is schema-versioned as `lineage.selection_packet.v1` and includes the
