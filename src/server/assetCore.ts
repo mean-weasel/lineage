@@ -34,7 +34,7 @@ function isPackageRoot(path: string): boolean {
   }
 }
 
-function resolveRepoRoot(): string {
+function resolvePackageRoot(): string {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     process.env.LINEAGE_REPO_ROOT,
@@ -47,7 +47,13 @@ function resolveRepoRoot(): string {
   return root;
 }
 
-export const repoRoot = resolveRepoRoot();
+export const packageRoot = resolvePackageRoot();
+export let repoRoot = resolve(process.env.LINEAGE_ASSET_ROOT || packageRoot);
+
+export function setLineageAssetRoot(path?: string): string {
+  repoRoot = resolve(path || packageRoot);
+  return repoRoot;
+}
 export const defaultProject = 'demo-project';
 export const defaultProduct = process.env.LINEAGE_DEFAULT_PRODUCT || defaultProject;
 const publicFallbackBucket = 'lineage-demo-assets';
@@ -84,7 +90,7 @@ export function catalogPath(project = defaultProject): string {
 }
 
 function fixtureCatalogPath(project = defaultProject): string {
-  return join(repoRoot, 'fixtures', cleanProject(project), 'assets', 'catalog.json');
+  return join(packageRoot, 'fixtures', cleanProject(project), 'assets', 'catalog.json');
 }
 
 function resolvedCatalogPath(project = defaultProject): string {

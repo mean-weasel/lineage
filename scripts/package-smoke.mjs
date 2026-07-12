@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +38,7 @@ function freePort() {
   });
 }
 
-async function waitForProjects(url) {
+async function waitForProjects(url, project = 'demo-project') {
   const deadline = Date.now() + 15_000;
   let lastError;
   while (Date.now() < deadline) {
@@ -46,7 +46,7 @@ async function waitForProjects(url) {
       const response = await fetch(url);
       if (response.ok) {
         const body = await response.json();
-        if (Array.isArray(body.projects) && body.projects.some(project => project.project === 'demo-project')) return;
+        if (Array.isArray(body.projects) && body.projects.some(item => item.project === project)) return;
       }
     } catch (error) {
       lastError = error;
@@ -56,8 +56,12 @@ async function waitForProjects(url) {
   throw lastError || new Error(`Timed out waiting for ${url}`);
 }
 
-async function postJson(url) {
-  const response = await fetch(url, { method: 'POST' });
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    body: body ? JSON.stringify(body) : undefined,
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    method: 'POST',
+  });
   if (!response.ok) throw new Error(`POST ${url} failed with ${response.status}`);
   return response.json();
 }
@@ -103,6 +107,31 @@ try {
   execFileSync('npm', ['init', '-y'], { cwd: tmpProject, stdio: 'ignore' });
   execFileSync('npm', ['install', tarball], { cwd: tmpProject, stdio: 'ignore' });
 
+  const externalAssetRoot = join(tmpProject, 'external-assets');
+  const externalProject = 'consumer-project';
+  const externalAssetId = 'consumer-linkedin-selection';
+  const externalCatalogDir = join(externalAssetRoot, externalProject, 'assets');
+  mkdirSync(externalCatalogDir, { recursive: true });
+  writeFileSync(join(externalCatalogDir, 'catalog.json'), `${JSON.stringify({
+    assets: [{
+      asset_id: externalAssetId,
+      audience: 'operators',
+      campaign: 'package-smoke',
+      channel: 'linkedin',
+      content_type: 'image',
+      product: externalProject,
+      project: externalProject,
+      s3: { bucket: 'example-bucket', key: 'consumer/selection.png', region: 'us-east-1' },
+      source: 'catalog',
+      status: 'approved',
+      title: 'External package consumer selection',
+    }],
+    default_bucket: 'example-bucket',
+    default_region: 'us-east-1',
+    product: 'External Package Consumer',
+    project: externalProject,
+  }, null, 2)}\n`);
+
   const binDir = join(tmpProject, 'node_modules', '.bin');
   execFileSync(join(binDir, 'lineage'), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
   execFileSync(join(binDir, 'lineage-dev'), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
@@ -112,7 +141,7 @@ try {
     const dbPath = join(tmpProject, `${binName}-smoke.sqlite`);
     let stdout = '';
     let stderr = '';
-    const server = spawn(join(binDir, binName), ['start', '--host', '127.0.0.1', '--port', String(port), '--db', dbPath, '--json'], {
+    const server = spawn(join(binDir, binName), ['start', '--host', '127.0.0.1', '--port', String(port), '--db', dbPath, '--asset-root', externalAssetRoot, '--json'], {
       cwd: tmpProject,
       env: { ...process.env, LINEAGE_HOME: join(tmpProject, `${binName}-home`) },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -121,8 +150,21 @@ try {
     server.stderr?.on('data', chunk => { stderr += chunk.toString(); });
     try {
       const baseUrl = `http://127.0.0.1:${port}`;
-      await waitForProjects(`${baseUrl}/api/projects`);
+      await waitForProjects(`${baseUrl}/api/projects`, externalProject);
       await postJson(`${baseUrl}/api/index/local?project=demo-project`);
+      await postJson(`${baseUrl}/api/lineage-workspaces`, {
+        activate: true,
+        confirmWrite: true,
+        project: externalProject,
+        rootAssetId: externalAssetId,
+        title: 'External package consumer workspace',
+      });
+      await postJson(`${baseUrl}/api/selection`, {
+        assetId: externalAssetId,
+        confirmWrite: true,
+        project: externalProject,
+        rootAssetId: externalAssetId,
+      });
 
       const rootAsset = 'demo-meta-short-form-upload-demo-post-static';
       const childAsset = 'demo-linkedin-ledger-catalog-shared';
@@ -141,6 +183,19 @@ try {
       if (binName === 'lineage') {
         const legacy = JSON.parse(execFileSync(join(binDir, binName), ['lineage', 'next', '--project', 'demo-project', '--root', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
         if (legacy.root_asset_id !== rootAsset) throw new Error('legacy lineage namespace compatibility failed');
+      }
+      const packet = JSON.parse(execFileSync(join(binDir, binName), [
+        'selection', 'packet',
+        '--project', externalProject,
+        '--root', externalAssetId,
+        '--db', dbPath,
+        '--asset-root', externalAssetRoot,
+        '--channel', 'linkedin',
+        '--campaign', 'package-smoke',
+        '--json',
+      ], { cwd: tmpProject, encoding: 'utf8' }));
+      if (packet.schema_version !== 'lineage.selection_packet.v1' || packet.selection?.asset_ids?.[0] !== externalAssetId) {
+        throw new Error(`${binName} did not export the external package consumer selection`);
       }
     } catch (error) {
       console.error(`${binName} stdout:\n${stdout.trim() || '(empty)'}`);

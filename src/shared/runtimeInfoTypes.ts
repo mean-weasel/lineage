@@ -11,6 +11,7 @@ interface LineageRuntimeDatabaseInfo {
 }
 
 export interface LineageRuntimeInfo {
+  asset_root: string;
   channel: LineageRuntimeChannel;
   database: LineageRuntimeDatabaseInfo;
   fetchedAt: string;

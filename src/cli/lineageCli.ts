@@ -16,7 +16,7 @@ import {
   transferAgentClaim,
   type AgentClaimScopeType,
 } from '../server/agentClaims';
-import { defaultProduct } from '../server/assetCore';
+import { defaultProduct, packageRoot as lineagePackageRoot, setLineageAssetRoot } from '../server/assetCore';
 import {
   clearLineageRerollRequest,
   getLineageNextAsset,
@@ -48,6 +48,7 @@ export interface LineageCliConfig {
 }
 
 interface StartOptions {
+  assetRoot: string;
   dbPath: string;
   host: string;
   json: boolean;
@@ -121,12 +122,23 @@ export function resolveStartOptions(config: LineageCliConfig, args: string[]): S
     throw new Error(`Invalid port: ${rawPort}`);
   }
   return {
+    assetRoot: resolveCliAssetRoot(args),
     dbPath: resolveCliDbPath(config, args),
     host: readOption(args, '--host') || process.env.HOST || config.defaultHost,
     json: args.includes('--json'),
     open: args.includes('--open'),
     port,
   };
+}
+
+function resolveCliAssetRoot(args: string[]): string {
+  return resolve(readOption(args, '--asset-root') || process.env.LINEAGE_ASSET_ROOT || lineagePackageRoot);
+}
+
+function configureCliAssetRoot(args: string[]): string {
+  const assetRoot = resolveCliAssetRoot(args);
+  process.env.LINEAGE_ASSET_ROOT = assetRoot;
+  return setLineageAssetRoot(assetRoot);
 }
 
 function resolveCliDbPath(config: LineageCliConfig, args: string[]): string {
@@ -137,7 +149,7 @@ export function formatLineageHelp(config: LineageCliConfig): string {
   return `${config.binName} ${packageVersion()}
 
 Usage:
-  ${config.binName} start [--port <port>] [--host <host>] [--db <path>] [--open] [--json]
+  ${config.binName} start [--port <port>] [--host <host>] [--db <path>] [--asset-root <path>] [--open] [--json]
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
@@ -170,6 +182,9 @@ Usage:
 
 ${config.displayName} runs the bundled Lineage server for the ${config.channel} channel.
 
+Asset catalogs and local media default to the installed package root. Pass
+--asset-root <path> or LINEAGE_ASSET_ROOT to use an external project root.
+
 Variation vs re-roll:
   link-child creates a new visible child variation edge.
   reroll mark -> reroll plan -> reroll import updates the same node with a new attempt.`;
@@ -200,6 +215,7 @@ function positionalArgs(args: string[]): string[] {
 }
 
 function resolveDataCommandOptions(args: string[]): DataCommandOptions {
+  configureCliAssetRoot(args);
   const positions = positionalArgs(args);
   const options = {
     assetId: readOption(args, '--asset-id') || positions[0],
@@ -456,6 +472,7 @@ export function printDataResult(command: string, result: unknown, json: boolean)
 }
 
 export function runLineageDbCommand(config: LineageCliConfig, command: string, args: string[]): unknown {
+  configureCliAssetRoot(args);
   const dbPath = resolveCliDbPath(config, args);
   process.env.LINEAGE_DB = dbPath;
   if (command === 'info') return getLineageRuntimeInfo({ channel: config.channel, dbPath });
@@ -469,6 +486,7 @@ function printDbResult(command: string, result: unknown, json: boolean): void {
   }
   if (command === 'info' && result && typeof result === 'object' && 'database' in result) {
     const runtime = result as {
+      asset_root: string;
       channel: string;
       database: { error?: string; exists: boolean; modified_at?: string; path: string; projects?: number; size_bytes?: number; workspaces?: number };
       git_sha?: string;
@@ -479,6 +497,7 @@ function printDbResult(command: string, result: unknown, json: boolean): void {
     console.log(`Version: ${runtime.version}`);
     if (runtime.git_sha) console.log(`Git: ${runtime.git_sha}`);
     if (runtime.node_env) console.log(`Node env: ${runtime.node_env}`);
+    console.log(`Assets: ${runtime.asset_root}`);
     console.log(`SQLite: ${runtime.database.path}`);
     console.log(`Exists: ${runtime.database.exists ? 'yes' : 'no'}`);
     if (runtime.database.size_bytes !== undefined) console.log(`Size: ${runtime.database.size_bytes} bytes`);
@@ -492,6 +511,7 @@ function printDbResult(command: string, result: unknown, json: boolean): void {
 }
 
 export function runLineageAgentCommand(command: string, args: string[]): unknown {
+  configureCliAssetRoot(args);
   const dbPath = readOption(args, '--db');
   if (dbPath) process.env.LINEAGE_DB = dbPath;
   const project = readOption(args, '--project') || process.env.LINEAGE_DEFAULT_PRODUCT || defaultProduct;
@@ -640,10 +660,11 @@ function start(config: LineageCliConfig, args: string[]): void {
   mkdirSync(dirname(options.dbPath), { recursive: true });
   const url = `http://${options.host}:${options.port}`;
   if (options.json) {
-    console.log(JSON.stringify({ channel: config.channel, dbPath: options.dbPath, host: options.host, port: options.port, status: 'starting', url }, null, 2));
+    console.log(JSON.stringify({ assetRoot: options.assetRoot, channel: config.channel, dbPath: options.dbPath, host: options.host, port: options.port, status: 'starting', url }, null, 2));
   } else {
     console.log(`${config.displayName} starting at ${url}`);
     console.log(`SQLite: ${options.dbPath}`);
+    console.log(`Assets: ${options.assetRoot}`);
   }
   if (options.open) openBrowser(url);
 
@@ -651,6 +672,7 @@ function start(config: LineageCliConfig, args: string[]): void {
     env: {
       ...process.env,
       HOST: options.host,
+      LINEAGE_ASSET_ROOT: options.assetRoot,
       LINEAGE_CHANNEL: config.channel,
       LINEAGE_DB: options.dbPath,
       NODE_ENV: 'production',

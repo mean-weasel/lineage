@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { archiveAsset, cleanupUploadedTemp, defaultProduct, deleteObjectGuarded, ensureUploadDir, isLineageAssetError, listAssets, listProjects, localPreviewPath, presignAsset, pullAsset, promoteAsset, repoRoot, uploadAsset, updatePlacement } from './server/assetCore';
+import { archiveAsset, cleanupUploadedTemp, defaultProduct, deleteObjectGuarded, ensureUploadDir, isLineageAssetError, listAssets, listProjects, localPreviewPath, packageRoot, presignAsset, pullAsset, promoteAsset, uploadAsset, updatePlacement } from './server/assetCore';
 import { isAssetLookupError, lookupAssets } from './server/assetLookup';
 import {
   clearLineageRerollRequest,
@@ -399,7 +399,7 @@ app.post(
   })
 );
 if (isProduction) {
-  const dist = join(repoRoot, 'dist', 'web');
+  const dist = join(packageRoot, 'dist', 'web');
   if (existsSync(dist)) {
     app.use(express.static(dist)); app.get('*', (_req, res) => res.sendFile(join(dist, 'index.html')));
   }
@@ -407,7 +407,7 @@ if (isProduction) {
   const { createServer: createViteServer } = await import('vite');
   const e2ePort = process.env.LINEAGE_E2E_PORT ? Number(process.env.LINEAGE_E2E_PORT) : undefined;
   const vite = await createViteServer({
-    configFile: join(repoRoot, 'vite.config.ts'),
+    configFile: join(packageRoot, 'vite.config.ts'),
     server: {
       middlewareMode: true,
       ...(e2ePort ? { ws: { port: e2ePort + 1000 } } : {}),
