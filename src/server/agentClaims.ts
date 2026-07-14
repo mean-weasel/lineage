@@ -148,6 +148,12 @@ function derivedState(row: { status: AgentClaimStatus; heartbeat_at: string; exp
 
 function rowToClaim(row: Row, now = new Date()): AgentClaim {
   const heartbeatAt = String(row.heartbeat_at);
+  const persistedStatus = String(row.status) as AgentClaimStatus;
+  const state = derivedState({
+    expires_at: String(row.expires_at),
+    heartbeat_at: heartbeatAt,
+    status: persistedStatus,
+  }, now);
   return {
     id: String(row.id),
     project: String(row.project_id),
@@ -159,7 +165,7 @@ function rowToClaim(row: Row, now = new Date()): AgentClaim {
     agent_name: String(row.agent_name),
     agent_kind: String(row.agent_kind),
     thread_id: typeof row.thread_id === 'string' ? row.thread_id : undefined,
-    status: String(row.status) as AgentClaimStatus,
+    status: persistedStatus === 'active' && state === 'expired' ? 'expired' : persistedStatus,
     created_at: String(row.created_at),
     heartbeat_at: heartbeatAt,
     expires_at: String(row.expires_at),
@@ -169,11 +175,7 @@ function rowToClaim(row: Row, now = new Date()): AgentClaim {
     override_reason: typeof row.override_reason === 'string' ? row.override_reason : undefined,
     metadata: parseMetadata(row.metadata_json),
     heartbeat_age_seconds: Math.max(0, Math.floor((now.getTime() - new Date(heartbeatAt).getTime()) / 1000)),
-    derived_state: derivedState({
-      expires_at: String(row.expires_at),
-      heartbeat_at: heartbeatAt,
-      status: String(row.status) as AgentClaimStatus,
-    }, now),
+    derived_state: state,
   };
 }
 
@@ -333,7 +335,7 @@ export function createAgentClaim(fields: CreateAgentClaimFields) {
 export function listAgentClaims(project?: string) {
   const database = lineageDb();
   try {
-    expireActiveClaims(database);
+    if (process.env.LINEAGE_DB_ACCESS !== 'read-only') expireActiveClaims(database);
     const rows = project
       ? database.prepare('select * from agent_claims where project_id = ? order by status, heartbeat_at desc').all(project)
       : database.prepare('select * from agent_claims order by project_id, status, heartbeat_at desc').all();
@@ -346,7 +348,7 @@ export function listAgentClaims(project?: string) {
 export function inspectAgentClaim(claimId: string, project?: string) {
   const database = lineageDb();
   try {
-    expireActiveClaims(database);
+    if (process.env.LINEAGE_DB_ACCESS !== 'read-only') expireActiveClaims(database);
     const claim = findClaimById(database, claimId, project);
     if (!claim) throw new AgentClaimError(`Unknown agent claim: ${claimId}`, 404, 'claim_not_found');
     const events = database.prepare('select * from agent_claim_events where claim_id = ? order by created_at').all(claim.id) as Row[];

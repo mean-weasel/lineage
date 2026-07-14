@@ -1066,6 +1066,26 @@ describe('asset lineage index', () => {
     expect(brief.handoff.link_child_command).toContain('lineage link-child');
   });
 
+  it('uses the resolved profile manifest instead of a direct database path in generated handoffs', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    updateSelectedAsset(defaultProject, { assetId: files.parentId, confirmWrite: true, rootAssetId: files.parentId });
+    process.env.LINEAGE_PROFILE_MANIFEST = '/tmp/lineage profiles/development-main/profile.json';
+    process.env.LINEAGE_CHANNEL = 'dev';
+
+    const handoff = getLineageBrief(defaultProject, files.parentId).handoff;
+
+    for (const command of [handoff.next_command, handoff.inspect_command, handoff.link_child_command]) {
+      expect(command).toContain("--profile '/tmp/lineage profiles/development-main/profile.json'");
+      expect(command).toContain(" --import '");
+      expect(command).toContain('/node_modules/tsx/dist/loader.mjs');
+      expect(command).toContain('/src/cli/lineage-dev.ts');
+      expect(command).not.toContain('--db');
+    }
+    delete process.env.LINEAGE_PROFILE_MANIFEST;
+    delete process.env.LINEAGE_CHANNEL;
+  });
+
   it('creates an agent brief and links a generated child from the selected base', () => {
     const files = seedFiles();
     indexLineageAssets(defaultProject);

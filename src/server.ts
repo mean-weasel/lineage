@@ -24,6 +24,7 @@ import { getLineageBrief, linkSelectedLineageChild } from './server/assetLineage
 import { removeLineageNode } from './server/assetLineageRemove';
 import { isLineageTaskError } from './server/assetLineageTasks';
 import { isLineageWorkspaceError } from './server/assetLineageWorkspaces';
+import { lineageDb } from './server/assetLineageDb';
 import { getLedgerPageFromQuery } from './server/assetLedgerApi';
 import { isAssetReviewError, markAssetReview, markAssetReviewsFromRequestBody, requireApprovedLocalBackupPath, withLocalReviewMetadata } from './server/assetReviews';
 import { getReviewQueue } from './server/assetReviewQueue';
@@ -41,7 +42,41 @@ import { isGenerationReceiptError } from './server/generationReceipts';
 import { registerLineageTaskRoutes } from './server/lineageTaskRoutes';
 import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes';
 import { getLineageRuntimeInfo } from './server/runtimeInfo';
+import { normalizeRuntimeChannel } from './server/runtimeInfo';
+import { assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, doctorLineageProfile } from './server/lineageProfiles';
+import { registerManagedWriterRoute, isManagedWriterRoutingError } from './server/managedWriterRouting';
+import { acquireProfileWriterLease } from './server/profileWriterLease';
+import { executeDelegatedLineageMutation, lineageCliCanDelegateMutation } from './cli/lineageCli';
+import type { ResolvedLineageProfile } from './shared/lineageProfileTypes';
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
+const runtimeChannel = normalizeRuntimeChannel(process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL);
+assertRuntimeProfileSafety(runtimeChannel);
+const startupRuntime = getLineageRuntimeInfo({ channel: runtimeChannel });
+if (!process.env.LINEAGE_PROFILE) assertUnselectedDatabaseIsUnbound(startupRuntime);
+let startupProfile: ResolvedLineageProfile | undefined;
+if (process.env.LINEAGE_PROFILE) {
+  if (!process.env.LINEAGE_PROFILE_ID || !process.env.LINEAGE_PROFILE_ENVIRONMENT || !process.env.LINEAGE_PROFILE_MANIFEST) {
+    throw new Error('LINEAGE_PROFILE must be resolved by the Lineage CLI before server startup; use lineage start --profile or lineage-dev start --profile');
+  }
+  const doctor = doctorLineageProfile(process.env.LINEAGE_PROFILE, { channel: runtimeChannel, gitSha: startupRuntime.git_sha, version: startupRuntime.version });
+  if (!doctor.ok) {
+    const failures = doctor.checks.filter(check => check.status === 'fail').map(check => `${check.id}: ${check.message}`).join('; ');
+    throw new Error(`Configured Lineage profile failed doctor: ${failures}`);
+  }
+  assertResolvedRuntimeProfileEnvironment(doctor.profile!);
+  startupProfile = doctor.profile!;
+}
+const writerLease = startupProfile ? acquireProfileWriterLease(startupProfile, runtimeChannel, 'service') : undefined;
+delete process.env.LINEAGE_DB_ACCESS;
+if (writerLease) {
+  try {
+    const startupDatabase = lineageDb();
+    startupDatabase.close();
+  } catch (error) {
+    writerLease.release();
+    throw error;
+  }
+}
 const app = express();
 const port = Number(process.env.PORT || 5173);
 const host = process.env.HOST || 'lineage.localhost';
@@ -49,6 +84,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 const maxUploadBytes = Number(process.env.LINEAGE_MAX_UPLOAD_MB || 200) * 1024 * 1024;
 const upload = multer({ dest: ensureUploadDir(), limits: { fileSize: maxUploadBytes } });
 app.use(express.json({ limit: '1mb' }));
+registerManagedWriterRoute(app, {
+  accepts: lineageCliCanDelegateMutation,
+  channel: runtimeChannel,
+  execute: executeDelegatedLineageMutation,
+  profile: startupProfile,
+  writerLease,
+});
 function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {
   const candidate = input.body?.project || input.body?.product || input.query?.project || input.query?.product;
   return typeof candidate === 'string' ? candidate : defaultProduct;
@@ -446,6 +488,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     return;
   }
   if (isGenerationReceiptError(error)) { res.status(error.status).json({ error: error.message }); return; }
+  if (isManagedWriterRoutingError(error)) { res.status(error.status).json({ error: error.message }); return; }
   if (isAgentClaimError(error)) {
     res.status(error.status).json({ error: error.code, message: error.message, conflicts: error.conflicts });
     return;
@@ -466,4 +509,14 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ error: message });
 });
 
-app.listen(port, host, () => { console.log(`Lineage listening on http://${host}:${port}`); });
+const listenOrigin = `http://${host.includes(':') ? `[${host}]` : host}:${port}`;
+const server = app.listen(port, host, () => { console.log(`Lineage listening on ${listenOrigin}`); });
+const releaseWriterLease = () => writerLease?.release();
+process.once('exit', releaseWriterLease);
+process.once('SIGINT', () => { releaseWriterLease(); process.exit(130); });
+process.once('SIGTERM', () => { releaseWriterLease(); process.exit(143); });
+server.once('error', error => {
+  releaseWriterLease();
+  console.error(`Lineage failed to listen on ${listenOrigin}: ${error.message}`);
+  process.exit(1);
+});

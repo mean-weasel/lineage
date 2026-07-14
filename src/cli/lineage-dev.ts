@@ -2,4 +2,11 @@
 
 import { runLineageCli } from './lineageCli';
 
-runLineageCli({ binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' });
+const preview = process.env.LINEAGE_CHANNEL === 'preview';
+await runLineageCli({
+  binName: 'lineage-dev',
+  channel: preview ? 'preview' : 'dev',
+  defaultHost: preview ? 'lineage-preview.localhost' : 'lineage-dev.localhost',
+  defaultPort: preview ? 5199 : 5198,
+  displayName: preview ? 'Lineage Preview' : 'Lineage Dev',
+});

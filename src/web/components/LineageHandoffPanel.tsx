@@ -155,9 +155,14 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-function dbFlagFromCommand(command: string): string {
-  const match = /\s--db\s+('[^']*(?:'\\''[^']*)*'|"[^"]*"|\S+)/.exec(command);
-  return match ? ` --db ${match[1]}` : '';
+function runtimeFlagFromCommand(command: string): string {
+  const match = /\s--(db|profile)\s+('[^']*(?:'\\''[^']*)*'|"[^"]*"|\S+)/.exec(command);
+  return match ? ` --${match[1]} ${match[2]}` : '';
+}
+
+function cliLauncherFromCommand(command: string): string {
+  const marker = /\s(?:next|inspect|link-child)\s/.exec(command);
+  return marker ? command.slice(0, marker.index) : 'npx @mean-weasel/lineage';
 }
 
 function withClaimToken(command: string): string {
@@ -167,8 +172,9 @@ function withClaimToken(command: string): string {
 }
 
 function claimAwareHandoffPacket(claimToken: string, nextCommand: string, brief: LineageBriefResponse | null, fullBrief: string): string {
-  const dbFlag = dbFlagFromCommand(brief?.handoff?.link_child_command || brief?.handoff?.next_command || nextCommand);
-  const heartbeatCommand = `npx @mean-weasel/lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN"${dbFlag} --json`;
+  const sourceCommand = brief?.handoff?.link_child_command || brief?.handoff?.next_command || nextCommand;
+  const runtimeFlag = runtimeFlagFromCommand(sourceCommand);
+  const heartbeatCommand = `${cliLauncherFromCommand(sourceCommand)} agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN"${runtimeFlag} --json`;
   return [
     `export LINEAGE_CLAIM_TOKEN=${shellQuote(claimToken)}`,
     heartbeatCommand,

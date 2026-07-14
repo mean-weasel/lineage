@@ -225,10 +225,14 @@ describe('generation receipts', () => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
     process.env.LINEAGE_DB = dbFile;
+    delete process.env.LINEAGE_CHANNEL;
+    delete process.env.LINEAGE_PROFILE_MANIFEST;
   });
 
   it('plans, inspects, and imports local generation outputs as lineage children', () => {
     const lineage = setupSelectedLineage();
+    process.env.LINEAGE_CHANNEL = 'dev';
+    process.env.LINEAGE_PROFILE_MANIFEST = '/tmp/lineage profiles/development-main/profile.json';
     const plan = planImageGeneration(defaultProject, {
       count: 2,
       fromLineageSelection: true,
@@ -239,6 +243,7 @@ describe('generation receipts', () => {
     expect(plan.job.inputs).toHaveLength(1);
     expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'lineage_next_base' });
     expect(plan.job.handoff.provider).toBe('codex-handoff');
+    expect(plan.job.handoff.import_command).toContain("--profile '/tmp/lineage profiles/development-main/profile.json'");
     expect(plan.job.receipts[0]).toMatchObject({ receipt_type: 'plan', status: 'ok' });
 
     const inspected = inspectImageGeneration(defaultProject, plan.job.id);
@@ -440,6 +445,8 @@ describe('generation receipts', () => {
 
   it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
     const lineage = setupSelectedLineage('reroll');
+    process.env.LINEAGE_CHANNEL = 'dev';
+    process.env.LINEAGE_PROFILE_MANIFEST = '/tmp/lineage profiles/development-main/profile.json';
     const marked = markLineageRerollRequest(defaultProject, {
       rootAssetId: lineage.rootId,
       nodeAssetId: lineage.selectedId,
@@ -457,6 +464,7 @@ describe('generation receipts', () => {
     expect(plan.job.source_mode).toBe('lineage_reroll');
     expect(plan.job.expected_output_count).toBe(1);
     expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'reroll_target' });
+    expect(plan.job.handoff.import_command).toContain("--profile '/tmp/lineage profiles/development-main/profile.json'");
 
     const beforeEdges = countRows('asset_edges');
     const imported = importImageRerollOutput(defaultProject, {

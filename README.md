@@ -62,6 +62,58 @@ intentional, explicit test. Prefer copying a stable snapshot forward when a
 realistic preview/dev dataset is needed. `--db` and `LINEAGE_DB` remain the
 escape hatches for intentionally choosing a database.
 
+For repeatable or multi-session work, prefer a named profile over those legacy
+path defaults. A profile is an immutable identity contract for one Lineage
+service and its data:
+
+```json
+{
+  "schema_version": "lineage.profile.v1",
+  "profile_id": "team-production",
+  "environment": "production",
+  "database_path": "./lineage.sqlite",
+  "asset_root": "./media",
+  "service_origin": "http://lineage.localhost:5197"
+}
+```
+
+Named profiles live at `$LINEAGE_PROFILE_ROOT/<profile-id>/profile.json` by
+default, or can be selected with an explicit manifest path. Relative database
+and asset paths resolve from the manifest directory. Inspect a profile without
+creating or migrating anything:
+
+```bash
+lineage profile doctor --profile team-production --json
+lineage profile bind --profile team-production --confirm-write --json
+lineage start --profile team-production
+```
+
+`LINEAGE_PROFILE` is equivalent to `--profile`. Profile commands reject direct
+`--db` and `--asset-root` overrides, and a dev or preview runtime refuses to
+open a production profile. Doctor also requires the existing SQLite database
+to have one matching `lineage_profile_identity` binding; `profile bind` creates
+that identity for a new database or explicitly adopts a legacy database, and
+requires `--confirm-write`. Profile creation and database binding remain
+separate migration operations. A
+command without a profile remains compatible but is labeled `legacy-unbound`.
+
+A named profile has one cross-process writer lease at
+`<resolved-database-path>.writer.lock`. The managed service holds that lease for its
+lifetime, so a second service is refused while it is running. Named-profile
+mutating CLI commands, including generated claim, heartbeat, link-child, and
+re-roll import handoffs, use an authenticated profile-bound route through that
+service instead of opening SQLite as a competing writer. The request and
+response identities must match the selected profile, environment, channel, and
+configured localhost origin; an unavailable or mismatched service fails closed
+without a direct-write fallback. A CLI data command may hold the same lease
+directly only while the service is offline. Lineage verifies lease ownership
+before opening a named-profile database for writes and configures SQLite with
+WAL journaling and a five-second busy timeout. If an owner was killed, the next
+writer may reclaim the lock only after the recorded PID is no longer alive;
+malformed or mismatched lock metadata is left in place for manual inspection.
+`profile doctor` never acquires or modifies the lease. Legacy-unbound databases
+retain their existing compatibility behavior and also use WAL.
+
 Check the active runtime before making changes:
 
 ```bash
@@ -69,8 +121,9 @@ lineage db info --json
 lineage-dev db info --json
 ```
 
-The app also shows channel, version, Git SHA when available, and SQLite path in
-Settings.
+The app shows a persistent environment/profile badge, and Settings includes the
+profile binding, channel, version, Git SHA when available, schema markers, and
+SQLite path.
 
 ## Agent Claims
 
@@ -107,6 +160,22 @@ metadata when known, context labels/notes, warnings, and a stable `packet_id`.
 Lineage only exports the packet. GrowthOps or another downstream tool remains
 responsible for importing it, creating posts, checking media readiness, preparing
 public URLs, scheduling, and recording placement receipts.
+
+Version 1 remains the default for compatibility. Opt in to the current-attempt-
+bound contract with `--schema v2`:
+
+```bash
+lineage selection packet --project demo-project --schema v2 \
+  --out ./lineage-selection-packet-v2.json --json
+```
+
+The `lineage.selection_packet.v2` packet requires a verifiable current attempt
+and lowercase SHA-256 checksum for every selected asset. Its full
+`identity_sha256` and derived `packet_id` bind only the canonical semantic
+selection: project/product, workspace/root, context, ordered selected assets and
+their current attempts, and stable diagnostics. Timestamps, local paths, storage
+details, source metadata, generation job IDs, and human-readable warning/error
+text stay in the envelope but do not change v2 identity.
 
 Keep the claim fresh and pass it to mutating commands:
 

@@ -52,6 +52,11 @@ interface LineageSelectionPacketAttempt {
   source: string;
 }
 
+export interface LineageSelectionPacketV2Attempt extends LineageSelectionPacketAttempt {
+  attempt_index: number;
+  checksum_sha256: string;
+}
+
 export interface LineageSelectionPacketAsset {
   asset_id: string;
   campaign?: string;
@@ -75,8 +80,12 @@ export interface LineageSelectionPacketAsset {
   title: string;
 }
 
-export interface LineageSelectionPacket {
-  assets: LineageSelectionPacketAsset[];
+export interface LineageSelectionPacketV2Asset extends Omit<LineageSelectionPacketAsset, 'checksum_sha256' | 'current_attempt'> {
+  checksum_sha256: string;
+  current_attempt: LineageSelectionPacketV2Attempt;
+}
+
+interface LineageSelectionPacketBase {
   context: LineageSelectionPacketContext;
   created_at: string;
   errors: string[];
@@ -84,7 +93,6 @@ export interface LineageSelectionPacket {
   packet_id: string;
   product: string;
   project: string;
-  schema_version: 'lineage.selection_packet.v1';
   selection: {
     asset_ids: string[];
     count: number;
@@ -100,3 +108,48 @@ export interface LineageSelectionPacket {
   warnings: string[];
   workspace: LineageSelectionPacketWorkspace;
 }
+
+export interface LineageSelectionPacketV1 extends LineageSelectionPacketBase {
+  assets: LineageSelectionPacketAsset[];
+  schema_version: 'lineage.selection_packet.v1';
+}
+
+type LineageSelectionPacketDiagnosticSeverity = 'error' | 'warning';
+
+export interface LineageSelectionPacketDiagnostic {
+  asset_id?: string;
+  code: string;
+  severity: LineageSelectionPacketDiagnosticSeverity;
+}
+
+export interface LineageSelectionPacketV2 extends LineageSelectionPacketBase {
+  assets: LineageSelectionPacketV2Asset[];
+  diagnostics: LineageSelectionPacketDiagnostic[];
+  identity_sha256: string;
+  schema_version: 'lineage.selection_packet.v2';
+}
+
+export interface LineageSelectionPacketV2IdentityProjection {
+  context: LineageSelectionPacketContext;
+  diagnostics: LineageSelectionPacketDiagnostic[];
+  product: string;
+  project: string;
+  schema_version: 'lineage.selection_packet.v2';
+  selection: Array<{
+    asset_id: string;
+    campaign?: string;
+    channel?: string;
+    current_attempt: Pick<LineageSelectionPacketV2Attempt, 'asset_id' | 'attempt_index' | 'checksum_sha256' | 'id' | 'source'>;
+    media_type?: string;
+    mime_type?: string;
+    position: number;
+    selection_note?: string;
+    title: string;
+  }>;
+  workspace: {
+    id: string;
+    root_asset_id: string;
+  };
+}
+
+export type LineageSelectionPacket = LineageSelectionPacketV1 | LineageSelectionPacketV2;

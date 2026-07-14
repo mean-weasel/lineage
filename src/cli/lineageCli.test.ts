@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
-import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand } from './lineageCli';
+import { fileSha256 } from '../server/localReview';
+import { lineagePublicPackageCommand } from '../server/lineageRuntimeCommand';
+import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageCli, runLineageDataCommand, runLineageDbCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -13,6 +15,7 @@ const fixtureRootAssetId = 'demo-meta-short-form-upload-demo-post-static';
 const fixtureChildAssetId = 'demo-linkedin-ledger-catalog-shared';
 
 afterEach(() => {
+  vi.restoreAllMocks();
   process.env = { ...originalEnv };
 });
 
@@ -23,11 +26,33 @@ function seedCliDb() {
 }
 
 describe('lineage CLI start options', () => {
+  it('sets the configured channel before direct dev commands generate handoffs', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('process.exit:0'); });
+
+    await expect(runLineageCli(
+      { binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' },
+      ['--help'],
+    )).rejects.toThrow('process.exit:0');
+
+    expect(process.env.LINEAGE_CHANNEL).toBe('dev');
+    expect(lineagePublicPackageCommand()).toContain(" --import '");
+    expect(lineagePublicPackageCommand()).toContain('/node_modules/tsx/dist/loader.mjs');
+    expect(lineagePublicPackageCommand()).toContain('/src/cli/lineage-dev.ts');
+  });
+
+  it('pins generated preview handoffs to the published next channel', () => {
+    process.env.LINEAGE_CHANNEL = 'preview';
+
+    expect(lineagePublicPackageCommand()).toBe('LINEAGE_CHANNEL=preview npx --package @mean-weasel/lineage@next lineage-dev');
+  });
+
   it('shows accurate task cancel help with dry-run and override options', () => {
     const help = formatLineageHelp({ binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' });
 
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
+    expect(help).toContain('[--schema v2]');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('--asset-root <path>');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
@@ -220,6 +245,39 @@ describe('lineage CLI handoff commands', () => {
       storage_state: 's3_backed',
     });
     expect(packet.assets[0].s3.key).toContain(fixtureRootAssetId);
+  });
+
+  it('exports v2 only when explicitly selected and rejects unsupported packet schemas', () => {
+    seedCliDb();
+    const localFile = join(cliScratchDir, 'v2-cli-selection.png');
+    writeFileSync(localFile, Buffer.from('v2-cli-selection'));
+    indexLineageAssets(defaultProject);
+    const localAssetId = `local-${fileSha256(localFile).slice(0, 12)}`;
+    updateSelectedAsset(defaultProject, {
+      assetId: localAssetId,
+      confirmWrite: true,
+      rootAssetId: localAssetId,
+    });
+
+    const packet = runLineageDataCommand('selection', [
+      'packet',
+      '--project', defaultProject,
+      '--root', localAssetId,
+      '--db', cliDbFile,
+      '--schema', 'v2',
+      '--json',
+    ]) as { identity_sha256: string; packet_id: string; schema_version: string };
+
+    expect(packet.schema_version).toBe('lineage.selection_packet.v2');
+    expect(packet.identity_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(packet.packet_id).toBe(`lineage_packet_${packet.identity_sha256.slice(0, 24)}`);
+    expect(() => runLineageDataCommand('selection', [
+      'packet',
+      '--project', defaultProject,
+      '--root', localAssetId,
+      '--db', cliDbFile,
+      '--schema', 'v1',
+    ])).toThrow('Unsupported selection packet schema: v1');
   });
 
   it('formats a readable agent graph digest for non-json CLI output', () => {

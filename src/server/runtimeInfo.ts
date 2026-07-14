@@ -4,6 +4,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
 import { packageRoot, repoRoot } from './assetCore';
+import { runtimeProfileIdentity } from './lineageProfiles';
 import type { LineageRuntimeChannel, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 
 const require = createRequire(import.meta.url);
@@ -43,10 +44,17 @@ function tableCount(database: DatabaseSync, table: string): number | undefined {
   return typeof row?.count === 'number' ? row.count : undefined;
 }
 
+function migrationKeys(database: DatabaseSync): string[] {
+  if (!tableExists(database, 'lineage_schema_migrations')) return [];
+  return (database.prepare('select key from lineage_schema_migrations order by key').all() as Array<{ key: string }>).map(row => row.key);
+}
+
 export function getLineageRuntimeInfo(options: { channel?: string; dbPath?: string } = {}): LineageRuntimeInfo {
   const info = packageInfo();
   const dbPath = options.dbPath || lineageDbPath();
+  const channel = normalizeRuntimeChannel(options.channel || process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL);
   const databaseInfo: LineageRuntimeInfo['database'] = { exists: existsSync(dbPath), path: dbPath };
+  const schema: LineageRuntimeInfo['schema'] = { migration_keys: [] };
 
   if (databaseInfo.exists) {
     try {
@@ -58,6 +66,15 @@ export function getLineageRuntimeInfo(options: { channel?: string; dbPath?: stri
       try {
         databaseInfo.projects = tableCount(database, 'projects');
         databaseInfo.workspaces = tableCount(database, 'lineage_workspaces');
+        schema.migration_keys = migrationKeys(database);
+        if (tableExists(database, 'lineage_profile_identity')) {
+          const rows = database.prepare('select profile_id, environment from lineage_profile_identity').all() as Array<{ environment: LineageRuntimeInfo['profile']['environment']; profile_id: string }>;
+          schema.profile_identity_rows = rows.length;
+          if (rows.length === 1) {
+            schema.profile_id = rows[0].profile_id;
+            schema.profile_environment = rows[0].environment;
+          }
+        }
       } finally {
         database.close();
       }
@@ -68,12 +85,14 @@ export function getLineageRuntimeInfo(options: { channel?: string; dbPath?: stri
 
   return {
     asset_root: repoRoot,
-    channel: normalizeRuntimeChannel(options.channel || process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL),
+    channel,
     database: databaseInfo,
     fetchedAt: nowIso(),
     git_sha: gitSha(),
     node_env: process.env.NODE_ENV,
     package_name: info.name,
+    profile: runtimeProfileIdentity(channel),
+    schema,
     version: info.version,
   };
 }
