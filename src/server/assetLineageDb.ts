@@ -1,8 +1,10 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { packageRoot } from './assetCore';
+import { resolveLineageProfile } from './lineageProfiles';
+import { assertProfileWriterLeaseHeld } from './profileWriterLease';
 
 const require = createRequire(import.meta.url);
 export type DatabaseSync = DatabaseSyncType;
@@ -15,11 +17,49 @@ export function lineageDbPath(): string {
   return process.env.LINEAGE_DB || join(packageRoot, '.lineage', 'asset-lineage.sqlite');
 }
 
+function assertOpenedProfileIdentity(database: DatabaseSync, databasePath: string): void {
+  const selector = process.env.LINEAGE_PROFILE;
+  if (!selector) return;
+  const profile = resolveLineageProfile(selector);
+  if (resolve(databasePath) !== profile.database_path) {
+    throw new Error(`Profile ${profile.profile_id} requires database ${profile.database_path}, not ${databasePath}`);
+  }
+  const table = database.prepare("select 1 from sqlite_master where type = 'table' and name = 'lineage_profile_identity'").get();
+  if (!table) throw new Error(`Profile database ${databasePath} is not bound to a Lineage profile identity`);
+  const rows = database.prepare('select profile_id, environment from lineage_profile_identity').all() as Array<{
+    environment: string;
+    profile_id: string;
+  }>;
+  if (rows.length !== 1) {
+    throw new Error(`Profile database ${databasePath} has invalid Lineage profile identity row count ${rows.length}`);
+  }
+  if (rows[0].profile_id !== profile.profile_id || rows[0].environment !== profile.environment) {
+    throw new Error(
+      `Profile database ${databasePath} is bound to ${rows[0].profile_id}/${rows[0].environment}, not ${profile.profile_id}/${profile.environment}`
+    );
+  }
+}
+
 export function lineageDb(): DatabaseSync {
-  mkdirSync(join(lineageDbPath(), '..'), { recursive: true });
+  const readOnly = process.env.LINEAGE_DB_ACCESS === 'read-only';
+  const databasePath = lineageDbPath();
+  if (!readOnly) assertProfileWriterLeaseHeld();
+  if (process.env.LINEAGE_PROFILE && !existsSync(databasePath)) {
+    throw new Error(`Profile database does not exist: ${databasePath}; bind the profile before opening it`);
+  }
+  if (!readOnly) mkdirSync(join(databasePath, '..'), { recursive: true });
   const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
-  const database = new DatabaseSync(lineageDbPath());
-  database.exec('PRAGMA foreign_keys = ON'); database.exec('PRAGMA busy_timeout = 5000');
+  const database = readOnly ? new DatabaseSync(databasePath, { readOnly: true }) : new DatabaseSync(databasePath);
+  try {
+    assertOpenedProfileIdentity(database, databasePath);
+    database.exec('PRAGMA foreign_keys = ON');
+    database.exec('PRAGMA busy_timeout = 5000');
+    if (readOnly) return database;
+  } catch (error) {
+    database.close();
+    throw error;
+  }
+  database.exec('PRAGMA journal_mode = WAL');
   database.exec(`
     create table if not exists projects (
       id text primary key,

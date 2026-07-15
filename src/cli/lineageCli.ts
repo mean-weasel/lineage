@@ -38,6 +38,10 @@ import {
 import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
 import { getLineageSelectionPacket } from '../server/lineageSelectionPacket';
 import { getLineageRuntimeInfo } from '../server/runtimeInfo';
+import { assertProfileChannel, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, doctorLineageProfile, resolveLineageProfile, type LineageProfileBindResult } from '../server/lineageProfiles';
+import { executeManagedWriterCommand } from '../server/managedWriterRouting';
+import { acquireProfileWriterLease, ProfileWriterLeaseConflictError } from '../server/profileWriterLease';
+import type { LineageProfileDoctorResult, ResolvedLineageProfile } from '../shared/lineageProfileTypes';
 
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev';
@@ -54,6 +58,7 @@ interface StartOptions {
   json: boolean;
   open: boolean;
   port: number;
+  profile?: ResolvedLineageProfile;
 }
 
 interface DataCommandOptions {
@@ -116,19 +121,36 @@ function readOptions(args: string[], name: string): string[] {
 }
 
 export function resolveStartOptions(config: LineageCliConfig, args: string[]): StartOptions {
-  const rawPort = readOption(args, '--port') || process.env.PORT || String(config.defaultPort);
+  const profile = prepareCliProfile(config, args);
+  const serviceUrl = profile ? new URL(profile.service_origin) : undefined;
+  const rawPort = readOption(args, '--port') || process.env.PORT || serviceUrl?.port || String(config.defaultPort);
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port: ${rawPort}`);
   }
+  const profileHost = serviceUrl ? normalizeListenHost(serviceUrl.hostname) : undefined;
+  const host = normalizeListenHost(readOption(args, '--host') || process.env.HOST || profileHost || config.defaultHost);
+  if (profile && serviceUrl && (host !== profileHost || port !== Number(serviceUrl.port || 80))) {
+    throw new Error(`Profile ${profile.profile_id} service_origin ${profile.service_origin} conflicts with requested host/port ${host}:${port}`);
+  }
   return {
-    assetRoot: resolveCliAssetRoot(args),
-    dbPath: resolveCliDbPath(config, args),
-    host: readOption(args, '--host') || process.env.HOST || config.defaultHost,
+    assetRoot: profile?.asset_root || resolveCliAssetRoot(args),
+    dbPath: profile?.database_path || resolveCliDbPath(config, args),
+    host,
     json: args.includes('--json'),
     open: args.includes('--open'),
     port,
+    profile,
   };
+}
+
+function normalizeListenHost(host: string): string {
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+}
+
+export function lineageServiceUrl(host: string, port: number): string {
+  const urlHost = host.includes(':') ? `[${normalizeListenHost(host)}]` : host;
+  return `http://${urlHost}:${port}`;
 }
 
 function resolveCliAssetRoot(args: string[]): string {
@@ -145,15 +167,70 @@ function resolveCliDbPath(config: LineageCliConfig, args: string[]): string {
   return readOption(args, '--db') || process.env.LINEAGE_DB || join(dataRoot(config.displayName), `${config.binName}.sqlite`);
 }
 
+function hasOption(args: string[], name: string): boolean {
+  return args.includes(name) || args.some(arg => arg.startsWith(`${name}=`));
+}
+
+function profileSelector(args: string[]): string | undefined {
+  const option = readOption(args, '--profile');
+  if (hasOption(args, '--profile') && !option?.trim()) {
+    throw new Error('--profile requires a non-empty profile ID or manifest path');
+  }
+  if (option && process.env.LINEAGE_PROFILE) {
+    const optionProfile = resolveLineageProfile(option);
+    const environmentProfile = resolveLineageProfile(process.env.LINEAGE_PROFILE);
+    if (optionProfile.manifest_path !== environmentProfile.manifest_path) {
+      throw new Error(`--profile ${option} conflicts with LINEAGE_PROFILE ${process.env.LINEAGE_PROFILE}`);
+    }
+  }
+  return option || process.env.LINEAGE_PROFILE;
+}
+
+function doctorFailures(result: LineageProfileDoctorResult): string {
+  return result.checks.filter(check => check.status === 'fail').map(check => `${check.id}: ${check.message}`).join('; ');
+}
+
+function prepareCliProfile(config: LineageCliConfig, args: string[]): ResolvedLineageProfile | undefined {
+  const selector = profileSelector(args);
+  if (!selector) {
+    assertUnselectedDatabaseIsUnbound(getLineageRuntimeInfo({ channel: config.channel, dbPath: resolveCliDbPath(config, args) }));
+    return undefined;
+  }
+  if (hasOption(args, '--db')) throw new Error('A named profile cannot be combined with --db');
+  if (hasOption(args, '--asset-root')) throw new Error('A named profile cannot be combined with --asset-root');
+  const profile = resolveLineageProfile(selector);
+  if (process.env.LINEAGE_DB && resolve(process.env.LINEAGE_DB) !== profile.database_path) {
+    throw new Error(`Profile ${profile.profile_id} database_path conflicts with LINEAGE_DB`);
+  }
+  if (process.env.LINEAGE_ASSET_ROOT && resolve(process.env.LINEAGE_ASSET_ROOT) !== profile.asset_root) {
+    throw new Error(`Profile ${profile.profile_id} asset_root conflicts with LINEAGE_ASSET_ROOT`);
+  }
+  assertProfileChannel(profile, config.channel);
+  const runtime = getLineageRuntimeInfo({ channel: config.channel, dbPath: profile.database_path });
+  const doctor = doctorLineageProfile(selector, { channel: config.channel, gitSha: runtime.git_sha, version: runtime.version });
+  if (!doctor.ok) throw new Error(`Profile ${profile.profile_id} failed doctor: ${doctorFailures(doctor)}`);
+  process.env.LINEAGE_ASSET_ROOT = profile.asset_root;
+  process.env.LINEAGE_DB = profile.database_path;
+  process.env.LINEAGE_PROFILE = selector;
+  process.env.LINEAGE_PROFILE_ENVIRONMENT = profile.environment;
+  process.env.LINEAGE_PROFILE_ID = profile.profile_id;
+  process.env.LINEAGE_PROFILE_MANIFEST = profile.manifest_path;
+  process.env.LINEAGE_PROFILE_SERVICE_ORIGIN = profile.service_origin;
+  setLineageAssetRoot(profile.asset_root);
+  return profile;
+}
+
 export function formatLineageHelp(config: LineageCliConfig): string {
   return `${config.binName} ${packageVersion()}
 
 Usage:
-  ${config.binName} start [--port <port>] [--host <host>] [--db <path>] [--asset-root <path>] [--open] [--json]
+  ${config.binName} start [--profile <id-or-manifest>] [--port <port>] [--host <host>] [--db <path>] [--asset-root <path>] [--open] [--json]
+  ${config.binName} profile doctor --profile <id-or-manifest> [--json]
+  ${config.binName} profile bind --profile <id-or-manifest> [--confirm-write] [--json]
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
-  ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--out <path>] [--strict] [--db <path>] [--json]
+  ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--schema v2] [--out <path>] [--strict] [--db <path>] [--json]
   ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll mark --root <asset-id> --target <asset-id> [--notes <text>] [--requested-by agent|human|system] [--project <project>] [--confirm-write] [--db <path>] [--json]
@@ -184,6 +261,11 @@ ${config.displayName} runs the bundled Lineage server for the ${config.channel} 
 
 Asset catalogs and local media default to the installed package root. Pass
 --asset-root <path> or LINEAGE_ASSET_ROOT to use an external project root.
+
+All commands accept --profile <id-or-manifest> or LINEAGE_PROFILE. Named
+profiles are authoritative for database, asset root, environment, and origin;
+they cannot be combined with direct --db or --asset-root overrides. Commands
+without a profile run in legacy-unbound compatibility mode.
 
 Variation vs re-roll:
   link-child creates a new visible child variation edge.
@@ -242,6 +324,8 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
   if (command === 'selection') {
     const subcommand = positionalArgs(args)[0] || '';
     if (subcommand !== 'packet') throw new Error(`Unknown selection command: ${subcommand}`);
+    const schema = readOption(args, '--schema');
+    if (schema && schema !== 'v2') throw new Error(`Unsupported selection packet schema: ${schema}. Omit --schema for v1 or pass --schema v2.`);
     const labels = readOptions(args, '--label')
       .flatMap(label => label.split(','))
       .map(label => label.trim())
@@ -255,6 +339,7 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
       labels,
       packageVersion: packageVersion(),
       rootAssetId: options.rootAssetId,
+      schema: schema === 'v2' ? 'v2' : undefined,
       strict: args.includes('--strict'),
       workspaceId: readOption(args, '--workspace') || readOption(args, '--workspace-id'),
     });
@@ -479,6 +564,87 @@ export function runLineageDbCommand(config: LineageCliConfig, command: string, a
   throw new Error(`Unknown db command: ${command}`);
 }
 
+export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileBindResult {
+  if (command !== 'doctor' && command !== 'bind') throw new Error(`Unknown profile command: ${command}`);
+  if (hasOption(args, '--db')) throw new Error(`Profile ${command} cannot be combined with --db`);
+  if (hasOption(args, '--asset-root')) throw new Error(`Profile ${command} cannot be combined with --asset-root`);
+  const selector = profileSelector(args);
+  if (!selector) throw new Error(`lineage profile ${command} requires --profile or LINEAGE_PROFILE`);
+  if (command === 'bind') {
+    const profile = resolveLineageProfile(selector);
+    assertProfileChannel(profile, config.channel);
+    if (!args.includes('--confirm-write')) return bindLineageProfileDatabase(profile, false);
+    mkdirSync(dirname(profile.database_path), { recursive: true });
+    const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
+    try {
+      return bindLineageProfileDatabase(profile, true);
+    } finally {
+      writerLease.release();
+    }
+  }
+  const runtime = getLineageRuntimeInfo({ channel: config.channel });
+  return doctorLineageProfile(selector, { channel: config.channel, gitSha: runtime.git_sha, version: runtime.version });
+}
+
+function printProfileResult(result: LineageProfileDoctorResult | LineageProfileBindResult, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (result.schema_version === 'lineage.profile_bind.v1') {
+    console.log(`${result.dryRun ? 'Would bind' : result.already_bound ? 'Already bound' : 'Bound'} ${result.profile_id} to ${result.database_path}`);
+    return;
+  }
+  console.log(`Profile doctor: ${result.ok ? 'ok' : 'failed'}`);
+  for (const check of result.checks) console.log(`${check.status.toUpperCase()} ${check.id}: ${check.message}`);
+}
+
+export function lineageProfileDoctorExitCode(result: LineageProfileDoctorResult | LineageProfileBindResult): 0 | 1 {
+  return result.ok ? 0 : 1;
+}
+
+export function lineageCliRequiresWriterLease(command: string, args: string[]): boolean {
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection') return false;
+  const subcommand = positionalArgs(args)[0] || '';
+  if (command === 'reroll') return subcommand !== 'list';
+  if (command === 'tasks') return subcommand !== 'list' && subcommand !== 'inspect';
+  if (command === 'db') return subcommand !== 'info';
+  if (command === 'agent') return subcommand !== 'status' && subcommand !== 'graph' && subcommand !== 'inspect';
+  return true;
+}
+
+export function lineageCliCanDelegateMutation(command: string, args: string[]): boolean {
+  const subcommand = positionalArgs(args)[0] || '';
+  if (command === 'link-child') return true;
+  if (command === 'reroll') return ['mark', 'cancel', 'plan', 'import'].includes(subcommand);
+  if (command === 'tasks') return ['claim', 'start', 'comment', 'cancel', 'override', 'instructions'].includes(subcommand);
+  if (command === 'agent') return ['claim', 'heartbeat', 'release', 'revoke', 'transfer'].includes(subcommand);
+  return false;
+}
+
+function argsWithoutProfileSelector(args: string[]): string[] {
+  const filtered: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--profile') {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--profile=')) continue;
+    filtered.push(arg);
+  }
+  return filtered;
+}
+
+export function executeDelegatedLineageMutation(command: string, args: string[]): unknown {
+  if (!lineageCliCanDelegateMutation(command, args)) throw new Error(`Unsupported managed writer command: ${command}`);
+  if (command === 'agent') {
+    const agentCommand = args[0] || '';
+    return runLineageAgentCommand(agentCommand, args.slice(1));
+  }
+  return runLineageDataCommand(command, args);
+}
+
 function printDbResult(command: string, result: unknown, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
@@ -658,11 +824,13 @@ function start(config: LineageCliConfig, args: string[]): void {
   }
 
   mkdirSync(dirname(options.dbPath), { recursive: true });
-  const url = `http://${options.host}:${options.port}`;
+  const url = lineageServiceUrl(options.host, options.port);
   if (options.json) {
-    console.log(JSON.stringify({ assetRoot: options.assetRoot, channel: config.channel, dbPath: options.dbPath, host: options.host, port: options.port, status: 'starting', url }, null, 2));
+    console.log(JSON.stringify({ assetRoot: options.assetRoot, channel: config.channel, dbPath: options.dbPath, host: options.host, port: options.port, profile: options.profile ? { environment: options.profile.environment, id: options.profile.profile_id } : { bound: false, id: 'legacy-unbound' }, status: 'starting', url }, null, 2));
   } else {
     console.log(`${config.displayName} starting at ${url}`);
+    if (options.profile) console.log(`Profile: ${options.profile.profile_id} (${options.profile.environment})`);
+    else console.warn('Warning: legacy-unbound runtime; database and asset paths are not protected by a named profile.');
     console.log(`SQLite: ${options.dbPath}`);
     console.log(`Assets: ${options.assetRoot}`);
   }
@@ -675,6 +843,12 @@ function start(config: LineageCliConfig, args: string[]): void {
       LINEAGE_ASSET_ROOT: options.assetRoot,
       LINEAGE_CHANNEL: config.channel,
       LINEAGE_DB: options.dbPath,
+      LINEAGE_PROFILE: options.profile ? process.env.LINEAGE_PROFILE : undefined,
+      LINEAGE_PROFILE_ENVIRONMENT: options.profile?.environment,
+      LINEAGE_PROFILE_ID: options.profile?.profile_id,
+      LINEAGE_PROFILE_MANIFEST: options.profile?.manifest_path,
+      LINEAGE_PROFILE_SERVICE_ORIGIN: options.profile?.service_origin,
+      LINEAGE_DB_ACCESS: undefined,
       NODE_ENV: 'production',
       PORT: String(options.port),
     },
@@ -695,7 +869,8 @@ function start(config: LineageCliConfig, args: string[]): void {
   });
 }
 
-export function runLineageCli(config: LineageCliConfig, args = process.argv.slice(2)): void {
+export async function runLineageCli(config: LineageCliConfig, args = process.argv.slice(2)): Promise<void> {
+  process.env.LINEAGE_CHANNEL = config.channel;
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
     printHelp(config);
     process.exit(0);
@@ -713,11 +888,56 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     return;
   }
 
+  if (command === 'profile') {
+    const commandArgs = normalizedArgs.slice(2);
+    const profileCommand = normalizedArgs[1] || '';
+    const json = commandArgs.includes('--json');
+    try {
+      const result = runLineageProfileCommand(config, profileCommand, commandArgs);
+      printProfileResult(result, json);
+      process.exit(lineageProfileDoctorExitCode(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (json) console.error(JSON.stringify({ ok: false, command: `profile ${profileCommand}`, error: message }, null, 2));
+      else console.error(`${config.binName}: ${message}`);
+      process.exit(1);
+    }
+  }
+
+  let managedWriterProfile: ResolvedLineageProfile | undefined;
+  try {
+    const profile = prepareCliProfile(config, normalizedArgs.slice(1));
+    if (profile) {
+      if (lineageCliRequiresWriterLease(command, normalizedArgs.slice(1))) {
+        delete process.env.LINEAGE_DB_ACCESS;
+        try {
+          const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
+          process.once('exit', writerLease.release);
+        } catch (error) {
+          if (!(error instanceof ProfileWriterLeaseConflictError) || error.owner.role !== 'service') throw error;
+          process.env.LINEAGE_DB_ACCESS = 'read-only';
+          managedWriterProfile = profile;
+        }
+      } else {
+        process.env.LINEAGE_DB_ACCESS = 'read-only';
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const json = normalizedArgs.includes('--json');
+    if (json) console.error(JSON.stringify({ ok: false, command, error: message }, null, 2));
+    else console.error(`${config.binName}: ${message}`);
+    process.exit(1);
+  }
+
   if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'link-child' || command === 'reroll' || command === 'tasks') {
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {
-      printDataResult(command, runLineageDataCommand(command, commandArgs), json);
+      const result = managedWriterProfile
+        ? await executeManagedWriterCommand(managedWriterProfile, config.channel, command, argsWithoutProfileSelector(commandArgs))
+        : runLineageDataCommand(command, commandArgs);
+      printDataResult(command, result, json);
     } catch (error) {
       const message = redactAgentClaimTokens(error instanceof Error ? error.message : String(error));
       if (json) {
@@ -752,7 +972,15 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     const agentCommand = normalizedArgs[1] || '';
     const json = commandArgs.includes('--json');
     try {
-      printAgentResult(agentCommand, runLineageAgentCommand(agentCommand, commandArgs), json);
+      const result = managedWriterProfile
+        ? await executeManagedWriterCommand(
+          managedWriterProfile,
+          config.channel,
+          'agent',
+          argsWithoutProfileSelector([agentCommand, ...commandArgs]),
+        )
+        : runLineageAgentCommand(agentCommand, commandArgs);
+      printAgentResult(agentCommand, result, json);
     } catch (error) {
       const message = redactAgentClaimTokens(error instanceof Error ? error.message : String(error));
       if (json) {

@@ -1,6 +1,7 @@
 import { ChevronDown, FileSearch, Loader2, MoreHorizontal, RefreshCcw, Search, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { appName } from '../../shared/appConstants';
+import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import type { StudioView } from '../assetUi';
 import { primaryViews, secondaryViews } from './Topbar.navigation';
 import './Topbar.css';
@@ -11,6 +12,8 @@ export function Topbar(props: {
   loading: boolean;
   query: string;
   refresh: () => Promise<void>;
+  runtime: LineageRuntimeInfo | null;
+  runtimeIdentityUnavailable: boolean;
   setAssetDetailsOpen: (value: boolean) => void;
   setQuery: (value: string) => void;
   setUploadOpen: (value: boolean) => void;
@@ -72,6 +75,7 @@ export function Topbar(props: {
           )}
         </div>
       </div>
+      <RuntimeIdentityBadge runtime={props.runtime} unavailable={props.runtimeIdentityUnavailable} />
       <div className="searchbox">
         <Search size={17} />
         <input onChange={event => props.setQuery(event.target.value)} placeholder="Search assets, campaigns, hooks" value={props.query} />
@@ -99,5 +103,33 @@ export function Topbar(props: {
         Upload
       </button>
     </header>
+  );
+}
+
+export function RuntimeIdentityBadge(props: { runtime: LineageRuntimeInfo | null; unavailable?: boolean }) {
+  if (props.unavailable) {
+    return <div aria-label="Lineage runtime identity unavailable" className="runtime-identity-badge unavailable">IDENTITY UNAVAILABLE</div>;
+  }
+  if (!props.runtime) {
+    return <div aria-label="Loading Lineage runtime identity" className="runtime-identity-badge loading">IDENTITY LOADING</div>;
+  }
+  const { profile } = props.runtime;
+  const binding = profile.bound ? '' : ' · UNBOUND';
+  const title = [
+    `${profile.environment.toUpperCase()} profile ${profile.id}${profile.bound ? '' : ' (unbound)'}`,
+    `Channel ${props.runtime.channel}`,
+    `Version ${props.runtime.version}`,
+    profile.warning,
+  ].filter(Boolean).join(' · ');
+  return (
+    <div
+      aria-label={`Lineage ${profile.environment} profile ${profile.id}${profile.bound ? '' : ' unbound'}`}
+      className={`runtime-identity-badge ${profile.environment} ${profile.bound ? 'bound' : 'unbound'}`}
+      data-profile-id={profile.id}
+      title={title}
+    >
+      <strong>{profile.environment.toUpperCase()}</strong>
+      <span>{profile.id}{binding}</span>
+    </div>
   );
 }

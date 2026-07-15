@@ -7,6 +7,67 @@
   background: var(--surface);
 }
 
+.runtime-identity-badge {
+  display: grid;
+  flex: 0 0 auto;
+  min-width: 132px;
+  min-height: 40px;
+  align-content: center;
+  border: 1px solid #9fb5bf;
+  border-radius: 8px;
+  background: #edf4f6;
+  color: #28434d;
+  padding: 4px 9px;
+  line-height: 1.05;
+}
+
+.runtime-identity-badge strong {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.runtime-identity-badge span {
+  max-width: 180px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-identity-badge.production {
+  border-color: #b72f3d;
+  background: #fff0f1;
+  color: #8d1f2c;
+}
+
+.runtime-identity-badge.preview {
+  border-color: #c68b23;
+  background: #fff8e8;
+  color: #7d5512;
+}
+
+.runtime-identity-badge.development {
+  border-color: #347a91;
+  background: #edf8fb;
+  color: #15586d;
+}
+
+.runtime-identity-badge.unbound,
+.runtime-identity-badge.unavailable {
+  border-style: dashed;
+}
+
+.runtime-identity-badge.loading,
+.runtime-identity-badge.unavailable {
+  display: flex;
+  align-items: center;
+  color: #6a4b10;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
 .view-tabs button {
   min-height: 40px;
   border: 0;
@@ -77,6 +138,9 @@
 }
 
 @media (max-width: 760px) {
+  .runtime-identity-badge {
+    width: 100%;
+  }
   .view-tabs {
     display: flex;
     width: 100%;

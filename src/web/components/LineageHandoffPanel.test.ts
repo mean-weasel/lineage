@@ -173,8 +173,16 @@ describe('LineageHandoffPanel', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const toasts: string[] = [];
+    const profileBrief = {
+      ...brief,
+      handoff: {
+        inspect_command: "npx --package @mean-weasel/lineage lineage-dev inspect --project demo-project --asset-id local-selected-base --profile '/tmp/dev profile/profile.json' --json",
+        link_child_command: "npx --package @mean-weasel/lineage lineage-dev link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile '/tmp/dev profile/profile.json' --json",
+        next_command: "npx --package @mean-weasel/lineage lineage-dev next --project demo-project --root local-root --profile '/tmp/dev profile/profile.json' --json",
+      },
+    } satisfies LineageBriefResponse;
     const panel = LineageHandoffPanel({
-      brief,
+      brief: profileBrief,
       nextBase,
       onRefreshBrief: () => undefined,
       onToast: (_type, message) => { toasts.push(message); },
@@ -199,8 +207,8 @@ describe('LineageHandoffPanel', () => {
     }));
     expect(copied).toHaveLength(1);
     expect(copied[0]).toContain("export LINEAGE_CLAIM_TOKEN='claim_test.secret_123'");
-    expect(copied[0]).toContain('npx @mean-weasel/lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --db /tmp/lineage.sqlite --json');
-    expect(copied[0]).toContain('npx @mean-weasel/lineage link-child --project demo-project --root local-root --child <asset-id> --confirm-write --db /tmp/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --json');
+    expect(copied[0]).toContain('npx --package @mean-weasel/lineage lineage-dev agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --profile \'/tmp/dev profile/profile.json\' --json');
+    expect(copied[0]).toContain('npx --package @mean-weasel/lineage lineage-dev link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile \'/tmp/dev profile/profile.json\' --claim-token "$LINEAGE_CLAIM_TOKEN" --json');
     expect(toasts).toContain('Copied claim-aware handoff for claim_test');
   });
 });

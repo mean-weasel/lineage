@@ -134,6 +134,18 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
               <dd>{runtime?.channel || lineageReleaseInfo.channel}</dd>
             </div>
             <div>
+              <dt>Profile</dt>
+              <dd>{runtime?.profile.id || 'loading'}</dd>
+            </div>
+            <div>
+              <dt>Environment</dt>
+              <dd>{runtime?.profile.environment || 'loading'}</dd>
+            </div>
+            <div>
+              <dt>Binding</dt>
+              <dd>{runtime ? (runtime.profile.bound ? 'bound' : 'legacy unbound') : 'loading'}</dd>
+            </div>
+            <div>
               <dt>Git</dt>
               <dd>{runtime?.git_sha || 'not available'}</dd>
             </div>
@@ -148,6 +160,10 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
             <div>
               <dt>Database</dt>
               <dd>{runtime?.database.exists ? `${runtime.database.projects ?? 0} projects / ${runtime.database.workspaces ?? 0} workspaces` : 'not created yet'}</dd>
+            </div>
+            <div>
+              <dt>Schema</dt>
+              <dd>{runtime ? `${runtime.schema.migration_keys.length} migration marker(s)` : 'loading'}</dd>
             </div>
           </dl>
         </section>

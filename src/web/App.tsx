@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AssetLibrarySnapshot, GrowthAsset, MutationResponse, PresignResponse, ProjectSummary } from '../shared/types';
+import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import { api } from './api';
 import { normalizePlacementValues, postMutation } from './assetMutations';
 import { AssetDetailDrawer } from './components/AssetDetailDrawer';
@@ -54,6 +55,8 @@ export function App() {
   const [assetDetailsOpen, setAssetDetailsOpen] = useState(false);
   const [inspectedAsset, setInspectedAsset] = useState<GrowthAsset | null>(null);
   const [workTargetRefreshKey, setWorkTargetRefreshKey] = useState(0);
+  const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
+  const [runtimeIdentityUnavailable, setRuntimeIdentityUnavailable] = useState(false);
 
   const projectSnapshot = snapshot?.catalog.project === project ? snapshot : null;
   const assets = projectSnapshot?.assets || [];
@@ -82,6 +85,16 @@ export function App() {
       setProject(current => (result.projects.some(item => item.project === current) ? current : result.projects[0]?.project || defaultProject));
     } catch (error) {
       setToast({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  async function refreshRuntimeIdentity() {
+    try {
+      const result = await api<{ runtime: LineageRuntimeInfo }>('/api/runtime');
+      setRuntime(result.runtime);
+      setRuntimeIdentityUnavailable(false);
+    } catch {
+      setRuntime(null);
+      setRuntimeIdentityUnavailable(true);
     }
   }
   async function refresh() {
@@ -230,6 +243,7 @@ export function App() {
   }
   useEffect(() => {
     void refreshProjects();
+    void refreshRuntimeIdentity();
   }, []);
 
   useEffect(() => {
@@ -287,6 +301,8 @@ export function App() {
           loading={loading}
           query={query}
           refresh={refresh}
+          runtime={runtime}
+          runtimeIdentityUnavailable={runtimeIdentityUnavailable}
           setAssetDetailsOpen={setAssetDetailsOpen}
           setQuery={setQuery}
           setUploadOpen={setUploadOpen}

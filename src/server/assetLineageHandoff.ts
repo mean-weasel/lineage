@@ -1,21 +1,16 @@
 import type { LineageBriefResponse, LineageSelectedChildFields } from '../shared/types';
 import { AgentClaimError, validateAgentClaimForWrite } from './agentClaims';
 import { getLineageNextAsset, getLineageWriteClaimContext, LineageError, linkLineageAssets, listLineageRerollRequests } from './assetLineage';
-import { lineageDbPath, nowIso } from './assetLineageDb';
+import { nowIso } from './assetLineageDb';
 import { lineageWorkspaceId } from './assetLineageWorkspaces';
-
-const publicPackageCommand = 'npx @mean-weasel/lineage';
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
+import { lineagePublicPackageCommand, lineageRuntimeSelector, shellQuote } from './lineageRuntimeCommand';
 
 function lineageCommand(command: string, project: string, rootAssetId: string): string {
-  return `${publicPackageCommand} ${command} --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --db ${shellQuote(lineageDbPath())} --json`;
+  return `${lineagePublicPackageCommand()} ${command} --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} ${lineageRuntimeSelector()} --json`;
 }
 
 function linkChildCommand(project: string, rootAssetId: string): string {
-  return `${publicPackageCommand} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --confirm-write --db ${shellQuote(lineageDbPath())} --json`;
+  return `${lineagePublicPackageCommand()} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --confirm-write ${lineageRuntimeSelector()} --json`;
 }
 
 function rerollImportGuidance(rootAssetId: string, targetAssetId: string): string {
@@ -63,7 +58,7 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
     },
     handoff: {
       next_command: lineageCommand('next', project, next.root_asset_id),
-      inspect_command: asset ? `${publicPackageCommand} inspect --project ${shellQuote(project)} --asset-id ${shellQuote(asset.asset_id)} --db ${shellQuote(lineageDbPath())} --json` : undefined,
+      inspect_command: asset ? `${lineagePublicPackageCommand()} inspect --project ${shellQuote(project)} --asset-id ${shellQuote(asset.asset_id)} ${lineageRuntimeSelector()} --json` : undefined,
       link_child_command: asset ? linkChildCommand(project, next.root_asset_id) : undefined,
     },
     fetchedAt: nowIso(),
