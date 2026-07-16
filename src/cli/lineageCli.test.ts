@@ -9,6 +9,7 @@ import { fileSha256 } from '../server/localReview';
 import { acquireProfileWriterLease, type ProfileWriterLease } from '../server/profileWriterLease';
 import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
+import { parseRegistryPackageMetadata } from './lineage-channel';
 import { formatAgentGraphDigest, formatLineageHelp, lineageServiceIdentityErrors, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand, runLineageRuntimeCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
@@ -56,6 +57,25 @@ function seedCliDb() {
   cliTestLease = acquireProfileWriterLease(profile, 'dev', 'cli');
   indexLineageAssets(defaultProject);
 }
+
+describe('lineage channel registry metadata', () => {
+  it('accepts flat and nested npm integrity output while rejecting missing or conflicting identity', () => {
+    expect(parseRegistryPackageMetadata({ version: '0.1.13', 'dist.integrity': 'sha512-flat' })).toEqual({
+      integrity: 'sha512-flat',
+      version: '0.1.13',
+    });
+    expect(parseRegistryPackageMetadata({ version: '0.1.13', dist: { integrity: 'sha512-nested' } })).toEqual({
+      integrity: 'sha512-nested',
+      version: '0.1.13',
+    });
+    expect(() => parseRegistryPackageMetadata({ version: '0.1.13' })).toThrow('exact version and integrity');
+    expect(() => parseRegistryPackageMetadata({
+      version: '0.1.13',
+      dist: { integrity: 'sha512-nested' },
+      'dist.integrity': 'sha512-flat',
+    })).toThrow('conflicting integrity');
+  });
+});
 
 describe('lineage CLI start options', () => {
   it('shows accurate task cancel help with dry-run and override options', () => {

@@ -10,6 +10,7 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -31,6 +32,12 @@ interface ResolvedPackageSpec {
   integrity: string;
   requestedSpec: string;
   source: LineageRuntimeInstallReceipt['package_source'];
+}
+
+interface RegistryPackageMetadata {
+  dist?: { integrity?: unknown };
+  'dist.integrity'?: unknown;
+  version?: unknown;
 }
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -109,6 +116,27 @@ function validateBuild(root: string, installed: { name: string; version: string 
   return build;
 }
 
+export function parseRegistryPackageMetadata(value: unknown): { integrity: string; version: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('npm metadata was not a JSON object');
+  }
+  const metadata = value as RegistryPackageMetadata;
+  const nestedIntegrity = metadata.dist?.integrity;
+  const flatIntegrity = metadata['dist.integrity'];
+  if (
+    typeof nestedIntegrity === 'string'
+    && typeof flatIntegrity === 'string'
+    && nestedIntegrity !== flatIntegrity
+  ) {
+    throw new Error('npm metadata returned conflicting integrity values');
+  }
+  const integrity = typeof nestedIntegrity === 'string' ? nestedIntegrity : flatIntegrity;
+  if (typeof metadata.version !== 'string' || !metadata.version || typeof integrity !== 'string' || !integrity) {
+    throw new Error('npm metadata did not include exact version and integrity');
+  }
+  return { integrity, version: metadata.version };
+}
+
 function resolveSpec(spec: string, allowLocalPackage: boolean): ResolvedPackageSpec {
   const localPath = resolve(spec.replace(/^file:/, ''));
   if (existsSync(localPath)) {
@@ -122,15 +150,16 @@ function resolveSpec(spec: string, allowLocalPackage: boolean): ResolvedPackageS
       source: 'local',
     };
   }
-  const metadata = JSON.parse(execFileSync('npm', ['view', spec, 'version', 'dist.integrity', '--json'], { encoding: 'utf8' })) as {
-    dist?: { integrity?: string };
-    version?: string;
-  };
-  if (!metadata.version || !metadata.dist?.integrity) throw new Error(`npm metadata for ${spec} did not include exact version and integrity`);
+  let metadata: { integrity: string; version: string };
+  try {
+    metadata = parseRegistryPackageMetadata(JSON.parse(execFileSync('npm', ['view', spec, 'version', 'dist.integrity', '--json'], { encoding: 'utf8' })));
+  } catch (error) {
+    throw new Error(`npm metadata for ${spec} did not include exact version and integrity`, { cause: error });
+  }
   const name = spec.startsWith('@') ? spec.slice(0, spec.indexOf('@', 1)) : spec.split('@')[0];
   return {
     installSpec: `${name}@${metadata.version}`,
-    integrity: metadata.dist.integrity,
+    integrity: metadata.integrity,
     expectedVersion: metadata.version,
     requestedSpec: spec,
     source: 'registry',
@@ -280,23 +309,26 @@ function print(value: unknown, json: boolean): void {
   } else console.log(JSON.stringify(value, null, 2));
 }
 
-const args = process.argv.slice(2);
-const json = args.includes('--json');
-try {
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
-    console.log(usage());
-  } else if (args.includes('--version') || args.includes('-v')) {
-    console.log(packageInfo.version);
-  } else if (args[0] === 'install') {
-    print(install(parseChannel(args[1] || readOption(args, '--channel')), args.slice(2)), json);
-  } else if (args[0] === 'status') {
-    print(status(args.slice(1)), json);
-  } else {
-    throw new Error(`Unknown lineage-channel command: ${args[0]}`);
+export function runLineageChannel(args = process.argv.slice(2)): void {
+  const json = args.includes('--json');
+  try {
+    if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+      console.log(usage());
+    } else if (args.includes('--version') || args.includes('-v')) {
+      console.log(packageInfo.version);
+    } else if (args[0] === 'install') {
+      print(install(parseChannel(args[1] || readOption(args, '--channel')), args.slice(2)), json);
+    } else if (args[0] === 'status') {
+      print(status(args.slice(1)), json);
+    } else {
+      throw new Error(`Unknown lineage-channel command: ${args[0]}`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) console.error(JSON.stringify({ error: message, ok: false }, null, 2));
+    else console.error(`lineage-channel: ${message}`);
+    process.exitCode = 1;
   }
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  if (json) console.error(JSON.stringify({ error: message, ok: false }, null, 2));
-  else console.error(`lineage-channel: ${message}`);
-  process.exitCode = 1;
 }
+
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) runLineageChannel();
