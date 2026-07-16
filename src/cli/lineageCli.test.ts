@@ -177,6 +177,9 @@ describe('lineage CLI start options', () => {
   });
 
   it('rejects invalid ports before spawning a server', () => {
+    process.env.LINEAGE_HOME = join(cliScratchDir, 'invalid-port-home');
+    delete process.env.LINEAGE_DB;
+
     expect(() =>
       resolveStartOptions(
         { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
