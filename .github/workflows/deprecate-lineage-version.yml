@@ -1,0 +1,79 @@
+name: Deprecate Lineage Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published Lineage version to deprecate"
+        required: true
+        type: string
+      dry_run:
+        description: "Verify the version and tags without changing npm"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: lineage-deprecate-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deprecate:
+    name: Deprecate Published Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      DEPRECATION_MESSAGE: "Cannot bootstrap isolated channel installs with affected npm metadata output. Upgrade to >=0.1.14."
+      PACKAGE_NAME: "@mean-weasel/lineage"
+      TARGET_VERSION: ${{ inputs.version }}
+
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify exact published version is not tagged
+        run: |
+          if ! printf '%s' "$TARGET_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::Invalid package version: ${TARGET_VERSION}"
+            exit 1
+          fi
+
+          resolved="$(npm view "${PACKAGE_NAME}@${TARGET_VERSION}" version --json | tr -d '"')"
+          if [ "$resolved" != "$TARGET_VERSION" ]; then
+            echo "::error::Expected ${PACKAGE_NAME}@${TARGET_VERSION}, got ${resolved:-<missing>}."
+            exit 1
+          fi
+
+          latest="$(npm view "$PACKAGE_NAME" dist-tags.latest --json | tr -d '"')"
+          next="$(npm view "$PACKAGE_NAME" dist-tags.next --json | tr -d '"')"
+          if [ "$latest" = "$TARGET_VERSION" ] || [ "$next" = "$TARGET_VERSION" ]; then
+            echo "::error::Refusing to deprecate tagged version ${TARGET_VERSION}; latest=${latest:-<missing>} next=${next:-<missing>}."
+            exit 1
+          fi
+
+      - name: Dry-run deprecation
+        if: ${{ inputs.dry_run }}
+        run: echo "Dry-run would deprecate ${PACKAGE_NAME}@${TARGET_VERSION} after confirming no dist-tag points to it."
+
+      - name: Deprecate exact version
+        if: ${{ !inputs.dry_run }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm deprecate "${PACKAGE_NAME}@${TARGET_VERSION}" "$DEPRECATION_MESSAGE"
+
+      - name: Verify deprecation message
+        if: ${{ !inputs.dry_run }}
+        run: |
+          deprecated="$(npm view "${PACKAGE_NAME}@${TARGET_VERSION}" deprecated --json | tr -d '"')"
+          if [ "$deprecated" != "$DEPRECATION_MESSAGE" ]; then
+            echo "::error::Deprecation verification failed for ${PACKAGE_NAME}@${TARGET_VERSION}."
+            exit 1
+          fi
+          npm view "${PACKAGE_NAME}@${TARGET_VERSION}" version deprecated --json

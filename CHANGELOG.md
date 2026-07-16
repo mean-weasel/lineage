@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.14
+
+- Fix isolated channel installs against npm clients that return registry integrity as a flat `dist.integrity` field, while rejecting missing or conflicting identity metadata.
+- Run promotion claim verification through an exact receipt-bound registry install, named production profile, external asset root, and managed writer.
+- Supersede the `0.1.13` candidate, whose packaged channel installer cannot bootstrap registry installs with the affected npm metadata shape.
+
 ## 0.1.13
 
 - Isolate stable, preview, and checkout-only development code into attested channel-specific roots with runtime doctor and tamper detection.

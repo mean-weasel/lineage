@@ -20,8 +20,9 @@ import {
 } from "../src/installer.mjs";
 
 const cliPath = path.resolve("bin/lineage-plugin-installer.mjs");
-const installerVersion = "0.1.2";
-const releaseFixtureVersion = "0.1.13";
+const pluginFixturePath = path.resolve("../../plugins/lineage-codex-plugin");
+const installerVersion = JSON.parse(await readFile(path.resolve("package.json"), "utf8")).version;
+const releaseFixtureVersion = JSON.parse(await readFile(path.join(pluginFixturePath, ".codex-plugin", "plugin.json"), "utf8")).version;
 
 test("parseLineageVersion accepts JSON strings and CLI output", () => {
   assert.equal(parseLineageVersion('"0.1.11"'), "0.1.11");
@@ -43,7 +44,7 @@ test("CLI preserves install --version as the Lineage compatibility selector", ()
     cliPath,
     "install",
     "--plugin",
-    path.resolve("../../plugins/lineage-codex-plugin"),
+    pluginFixturePath,
     "--version",
     releaseFixtureVersion,
     "--target-dir",
@@ -424,7 +425,7 @@ async function createPluginArtifactFixture() {
   const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-artifact-"));
   const outDir = path.join(temp, "dist");
   const targetRoot = path.join(temp, "target");
-  const plugin = path.resolve("../../plugins/lineage-codex-plugin");
+  const plugin = pluginFixturePath;
   const result = await packPlugin({
     plugin,
     version: releaseFixtureVersion,
