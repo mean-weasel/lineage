@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { packageRoot } from './assetCore';
+import { assertProfileWriterLeaseHeld, assertSelectedProfileDatabaseIdentity } from './profileWriterLease';
 
 const require = createRequire(import.meta.url);
 export type DatabaseSync = DatabaseSyncType;
@@ -16,10 +17,19 @@ export function lineageDbPath(): string {
 }
 
 export function lineageDb(): DatabaseSync {
-  mkdirSync(join(lineageDbPath(), '..'), { recursive: true });
+  const readOnly = process.env.LINEAGE_DB_ACCESS === 'read-only';
+  if (!readOnly) assertProfileWriterLeaseHeld();
+  if (!readOnly && !existsSync(lineageDbPath())) {
+    throw new Error(`Refusing writable open of missing profile database ${lineageDbPath()}; bind an existing database or create a non-production clone first`);
+  }
+  if (!readOnly) mkdirSync(join(lineageDbPath(), '..'), { recursive: true });
   const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
-  const database = new DatabaseSync(lineageDbPath());
-  database.exec('PRAGMA foreign_keys = ON'); database.exec('PRAGMA busy_timeout = 5000');
+  const database = readOnly ? new DatabaseSync(lineageDbPath(), { readOnly: true }) : new DatabaseSync(lineageDbPath());
+  if (process.env.LINEAGE_PROFILE) assertSelectedProfileDatabaseIdentity(database);
+  database.exec('PRAGMA foreign_keys = ON');
+  database.exec('PRAGMA busy_timeout = 5000');
+  if (readOnly) return database;
+  database.exec('PRAGMA journal_mode = WAL');
   database.exec(`
     create table if not exists projects (
       id text primary key,

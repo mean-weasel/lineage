@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { lineageDb } from './assetLineageDb';
 import { fileSha256 } from './localReview';
@@ -34,7 +35,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const parent = join(scratchDir, 'demo-linkedin-lineage-parent.png');
   const child = join(scratchDir, 'demo-linkedin-lineage-child.png');
@@ -90,7 +90,8 @@ function seedRerollAttempts() {
 
 describe('asset lineage index', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   it('indexes local assets, links lineage, and computes latest leaves', () => {

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { cp, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -132,11 +132,49 @@ export async function installPluginDirectory({
   if (dryRun) return plan;
 
   await mkdir(targetRoot, { recursive: true });
-  await cp(pluginDir, destination, {
-    recursive: true,
-    force: true,
-    filter: isAllowedInstallPath,
-  });
+  const lock = path.join(targetRoot, `.${manifest.name}.install.lock`);
+  const staging = path.join(targetRoot, `.${manifest.name}.staging-${randomUUID()}`);
+  const backup = path.join(targetRoot, `.${manifest.name}.install-backup`);
+  const lockOwner = `${process.pid}:${randomUUID()}`;
+  await acquireInstallLock(lock, lockOwner, manifest.name, targetRoot);
+  let movedExisting = false;
+  let placedDestination = false;
+  try {
+    const backupExists = await pathExists(backup);
+    const destinationExists = await pathExists(destination);
+    if (backupExists && !destinationExists) {
+      await rename(backup, destination);
+    } else if (backupExists) {
+      assertPluginManifest(await loadPluginManifest(destination), expectedVersion);
+      await rm(backup, { recursive: true, force: true });
+    }
+    await cp(pluginDir, staging, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      filter: isAllowedInstallPath,
+    });
+    assertPluginManifest(await loadPluginManifest(staging), expectedVersion);
+    try {
+      await rename(destination, backup);
+      movedExisting = true;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await rename(staging, destination);
+    placedDestination = true;
+    assertPluginManifest(await loadPluginManifest(destination), expectedVersion);
+    if (movedExisting) await rm(backup, { recursive: true, force: true });
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true });
+    if (placedDestination) await rm(destination, { recursive: true, force: true });
+    if (movedExisting) {
+      await rename(backup, destination);
+    }
+    throw error;
+  } finally {
+    await releaseInstallLock(lock, lockOwner);
+  }
 
   return plan;
 }
@@ -294,6 +332,56 @@ function safeJsonParse(text) {
     return JSON.parse(text);
   } catch {
     return null;
+  }
+}
+
+async function acquireInstallLock(lock, owner, pluginName, targetRoot) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await symlink(owner, lock);
+      return;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      let existingOwner;
+      try {
+        existingOwner = await readlink(lock);
+      } catch (readError) {
+        throw new Error(`Another ${pluginName} install is already active at ${targetRoot}.`, { cause: readError });
+      }
+      const pid = Number.parseInt(existingOwner.split(":", 1)[0], 10);
+      if (!Number.isInteger(pid) || pid <= 0 || isProcessAlive(pid)) {
+        throw new Error(`Another ${pluginName} install is already active at ${targetRoot}.`, { cause: error });
+      }
+      await rm(lock, { force: true });
+    }
+  }
+  throw new Error(`Could not acquire the ${pluginName} install lock at ${targetRoot}.`);
+}
+
+async function releaseInstallLock(lock, owner) {
+  try {
+    if ((await readlink(lock)) === owner) await rm(lock, { force: true });
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== "ESRCH";
+  }
+}
+
+async function pathExists(target) {
+  try {
+    await stat(target);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
   }
 }
 

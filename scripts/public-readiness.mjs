@@ -24,6 +24,8 @@ const filesToScan = [
   'src',
   'e2e',
   'scripts',
+  'plugins/lineage-codex-plugin',
+  'packages/lineage-plugin-installer',
 ];
 
 const privatePatterns = [
@@ -77,6 +79,35 @@ for (const file of files) {
       hits.push(`${relative(root, file)} contains forbidden public-readiness pattern`);
     }
   }
+}
+
+const packageInfo = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const pluginPackage = JSON.parse(readFileSync(join(root, 'plugins', 'lineage-codex-plugin', 'package.json'), 'utf8'));
+const pluginManifest = JSON.parse(readFileSync(join(root, 'plugins', 'lineage-codex-plugin', '.codex-plugin', 'plugin.json'), 'utf8'));
+if (pluginPackage.version !== packageInfo.version) hits.push('plugin package version does not match Lineage package version');
+if (pluginManifest.version !== packageInfo.version || pluginManifest.lineage?.version !== packageInfo.version) {
+  hits.push('plugin manifest compatibility version does not match Lineage package version');
+}
+if (pluginManifest.lineage?.package !== packageInfo.name) hits.push('plugin manifest package identity does not match Lineage');
+const operatorSkill = readFileSync(join(root, 'plugins', 'lineage-codex-plugin', 'skills', 'lineage-package-operator', 'SKILL.md'), 'utf8');
+if (operatorSkill.split('\n').some(line => {
+  const command = line.trim();
+  return /^(lineage-|npm run lineage:dev)/.test(command)
+    && command.includes('--db')
+    && command.includes('--confirm-write');
+})) hits.push('plugin operator skill contains a direct-database confirmed-write example');
+for (const required of [
+  'runtime doctor --json',
+  'profile doctor --profile',
+  'db info --profile',
+  'agent heartbeat --profile',
+  'agent release --profile',
+  'link-child --profile',
+  'profile clone --source-db',
+  'profile clone-assets --source-asset-root',
+  'lineage-stable-service',
+]) {
+  if (!operatorSkill.includes(required)) hits.push(`plugin operator skill is missing ${required}`);
 }
 
 if (hits.length > 0) {

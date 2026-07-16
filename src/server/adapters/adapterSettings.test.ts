@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../../test/lineageTestProfile';
 import { defaultProject, repoRoot } from '../assetCore';
 import { getAdapterSettings, updateAdapterSetting } from './adapterSettings';
 
@@ -10,7 +11,7 @@ const dbFile = join(scratchDir, 'adapter-settings.sqlite');
 describe('adapter settings', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
   });
 
   it('creates safe default settings for each adapter type', () => {

@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { fileSha256 } from './localReview';
 import { attachContentPostAsset, createContentBatch, createContentPost } from './contentBatches';
@@ -15,7 +16,7 @@ const dbFile = join(scratchDir, 'content-agent-intent.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.LINEAGE_DB = dbFile;
+  useLineageTestProfile(dbFile);
 }
 
 function seedLocalAsset(): string {

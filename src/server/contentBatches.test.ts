@@ -1,6 +1,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { lineageDb } from './assetLineageDb';
 import { createAgentClaim } from './agentClaims';
@@ -21,7 +22,7 @@ const dbFile = join(scratchDir, 'content-batches.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.LINEAGE_DB = dbFile;
+  useLineageTestProfile(dbFile);
 }
 
 function seedBatch(batchId = 'demo-priority-june') {
@@ -75,6 +76,7 @@ describe('content batch ledger', () => {
   beforeEach(resetDb);
 
   it('previews writes without creating a SQLite file', () => {
+    rmSync(dbFile, { force: true });
     const batch = createContentBatch(defaultProject, {
       batchId: 'dry-run-batch',
       confirmWrite: false,

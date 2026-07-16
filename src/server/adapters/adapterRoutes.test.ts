@@ -3,6 +3,7 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../../test/lineageTestProfile';
 import { defaultProject, repoRoot } from '../assetCore';
 import { createContentBatch, createContentPost } from '../contentBatches';
 import { registerAdapterRoutes } from './adapterRoutes';
@@ -13,7 +14,7 @@ let server: ReturnType<Express['listen']> | null = null;
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.LINEAGE_DB = dbFile;
+  useLineageTestProfile(dbFile);
 }
 
 function appWithRoutes() {

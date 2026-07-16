@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../../../test/lineageTestProfile';
 import { defaultProject, repoRoot } from '../../assetCore';
 import { attachContentPostAsset, createContentBatch, createContentPost } from '../../contentBatches';
 import { setContentTarget } from '../../contentTargets';
@@ -11,7 +12,7 @@ const dbFile = join(scratchDir, 'buffer-posting-service.sqlite');
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.LINEAGE_DB = dbFile;
+  useLineageTestProfile(dbFile);
 }
 
 function seedPost() {

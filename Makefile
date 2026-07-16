@@ -3,229 +3,131 @@
 LINEAGE_PACKAGE ?= @mean-weasel/lineage
 PLUGIN_INSTALLER ?= lineage-plugin-installer
 PROD_TAG ?= latest
-DEV_TAG ?= next
-LINEAGE_PROD_HOST ?= lineage.localhost
-LINEAGE_PROD_PORT ?= 5197
-LINEAGE_PROD_URL = http://$(LINEAGE_PROD_HOST):$(LINEAGE_PROD_PORT)
-LINEAGE_LOCAL_DB ?= $(HOME)/Library/Application Support/Lineage/lineage.sqlite
-LINEAGE_START_ARGS ?= --host lineage.localhost
-LINEAGE_DEV_START_ARGS ?= --host lineage-dev.localhost
-LINEAGE_RUN_DIR ?= .asset-scratch/lineage-runtime
-LINEAGE_PROD_PID ?= $(LINEAGE_RUN_DIR)/lineage-prod.pid
-LINEAGE_PROD_LOG ?= $(LINEAGE_RUN_DIR)/lineage-prod.log
-LINEAGE_PROD_TMUX_SESSION ?= lineage-prod
-LINEAGE_LOCAL_PROD_AGENT_LABEL ?= com.meanweasel.lineage.localprod
-LINEAGE_LOCAL_PROD_PLIST ?= $(HOME)/Library/LaunchAgents/$(LINEAGE_LOCAL_PROD_AGENT_LABEL).plist
-LINEAGE_LOCAL_PROD_LOG ?= $(LINEAGE_RUN_DIR)/launchd-local-prod.log
-LINEAGE_LOCAL_PROD_ERR_LOG ?= $(LINEAGE_RUN_DIR)/launchd-local-prod.err.log
-LINEAGE_DEV_PID ?= $(LINEAGE_RUN_DIR)/lineage-dev.pid
-LINEAGE_DEV_LOG ?= $(LINEAGE_RUN_DIR)/lineage-dev.log
-LINEAGE_DEV_TMUX_SESSION ?= lineage-dev
-empty :=
-space := $(empty) $(empty)
-START_PROD_CMD = lineage start --open$(if $(strip $(LINEAGE_START_ARGS)),$(space)$(LINEAGE_START_ARGS))
-START_LOCAL_PROD_CMD = env NODE_ENV=production HOST=$(LINEAGE_PROD_HOST) PORT=$(LINEAGE_PROD_PORT) LINEAGE_DB="$(LINEAGE_LOCAL_DB)" node dist/server.js
-START_DEV_CMD = lineage-dev start --open$(if $(strip $(LINEAGE_DEV_START_ARGS)),$(space)$(LINEAGE_DEV_START_ARGS))
+PREVIEW_TAG ?= next
+LINEAGE_RUNTIME_ROOT ?= $(HOME)/Library/Application Support/Lineage/runtimes
+LINEAGE_CHANNEL_CLI ?= node dist/cli/lineage-channel.js
+LINEAGE_STABLE_BIN ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-stable
+LINEAGE_PREVIEW_BIN ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-preview
+LINEAGE_STABLE_SERVICE_MANAGER ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-stable-service
+LINEAGE_PREVIEW_SERVICE_MANAGER ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-preview-service
+LINEAGE_DEV_SERVICE_MANAGER ?= node scripts/managed-service.mjs
+LINEAGE_PROD_PROFILE ?=
+LINEAGE_PREVIEW_PROFILE ?=
+LINEAGE_DEV_PROFILE ?=
 
-.PHONY: help init install-prod install-dev install-plugin-prod install-plugin-dev start-prod start-prod-bg status-prod stop-prod logs-prod start-local-prod-bg status-local-prod stop-local-prod logs-local-prod start-dev start-dev-bg status-dev stop-dev logs-dev dev check test lint build smoke ci release-status
+START_PROD_CMD = "$(LINEAGE_STABLE_BIN)" start --profile "$(LINEAGE_PROD_PROFILE)" --open
+START_PREVIEW_CMD = "$(LINEAGE_PREVIEW_BIN)" start --profile "$(LINEAGE_PREVIEW_PROFILE)" --open
+START_DEV_CMD = npm run --silent lineage:dev -- start --profile "$(LINEAGE_DEV_PROFILE)" --open
+
+.PHONY: help init install-prod install-preview install-dev install-plugin-prod install-plugin-preview start-prod start-preview start-dev start-prod-bg status-prod stop-prod logs-prod start-preview-bg status-preview stop-preview logs-preview start-dev-bg status-dev stop-dev logs-dev dev check test lint build smoke ci release-status
 
 help:
-	@printf "Lineage shortcuts\\n"
-	@printf "\\n"
-	@printf "Setup and installs:\\n"
-	@printf "  make init                 npm ci\\n"
-	@printf "  make install-prod         npm install -g $(LINEAGE_PACKAGE)@$(PROD_TAG)\\n"
-	@printf "  make install-dev          npm install -g $(LINEAGE_PACKAGE)@$(DEV_TAG)\\n"
-	@printf "  make install-plugin-prod  $(PLUGIN_INSTALLER) install --channel $(PROD_TAG)\\n"
-	@printf "  make install-plugin-dev   $(PLUGIN_INSTALLER) install --channel $(DEV_TAG)\\n"
-	@printf "\\n"
-	@printf "Start Lineage:\\n"
-	@printf "  make start-prod           $(START_PROD_CMD)\\n"
-	@printf "  make start-prod-bg        start prod detached with tmux when available\\n"
-	@printf "  make status-prod          show detached prod status and URL\\n"
-	@printf "  make stop-prod            stop detached prod server\\n"
-	@printf "  make logs-prod            show detached prod logs\\n"
-	@printf "  make start-local-prod-bg  start this checkout's built prod detached\\n"
-	@printf "  make status-local-prod    show detached local prod status\\n"
-	@printf "  make stop-local-prod      stop detached local prod server\\n"
-	@printf "  make logs-local-prod      tail detached local prod log\\n"
-	@printf "  make start-dev            $(START_DEV_CMD)\\n"
-	@printf "  make start-dev-bg         start dev detached with tmux when available\\n"
-	@printf "  make status-dev           show detached dev status\\n"
-	@printf "  make stop-dev             stop detached dev server\\n"
-	@printf "  make logs-dev             tail detached dev log\\n"
-	@printf "  make dev                  npm run dev\\n"
-	@printf "\\n"
-	@printf "Verification:\\n"
-	@printf "  make check                npm run check\\n"
-	@printf "  make test                 npm run test\\n"
-	@printf "  make lint                 npm run lint\\n"
-	@printf "  make build                npm run build\\n"
-	@printf "  make smoke                npm run build && npm run public:readiness && npm run package:smoke\\n"
-	@printf "  make ci                   npm run ci\\n"
-	@printf "  make release-status       npm run release:status\\n"
+	@printf "Lineage shortcuts\n"
+	@printf "\n"
+	@printf "Setup and installs:\n"
+	@printf "  make init                   npm ci\n"
+	@printf "  make install-prod           install npm latest into the isolated stable root\n"
+	@printf "  make install-preview        install npm next into the isolated preview root\n"
+	@printf "  make install-dev            install checkout dependencies (dev is not published)\n"
+	@printf "  make install-plugin-prod    $(PLUGIN_INSTALLER) install --channel $(PROD_TAG)\n"
+	@printf "  make install-plugin-preview $(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)\n"
+	@printf "\n"
+	@printf "Foreground (browser opens only after exact runtime readiness):\n"
+	@printf "  make start-prod LINEAGE_PROD_PROFILE=<profile>\n"
+	@printf "  make start-preview LINEAGE_PREVIEW_PROFILE=<profile>\n"
+	@printf "  make start-dev LINEAGE_DEV_PROFILE=<profile>\n"
+	@printf "\n"
+	@printf "Managed services (profile-scoped receipt, log, health, and stop):\n"
+	@printf "  make start-prod-bg/status-prod/stop-prod/logs-prod LINEAGE_PROD_PROFILE=<profile>\n"
+	@printf "  make start-preview-bg/status-preview/stop-preview/logs-preview LINEAGE_PREVIEW_PROFILE=<profile>\n"
+	@printf "  make start-dev-bg/status-dev/stop-dev/logs-dev LINEAGE_DEV_PROFILE=<profile>\n"
+	@printf "\n"
+	@printf "Verification:\n"
+	@printf "  make check                  npm run check\n"
+	@printf "  make test                   npm run test\n"
+	@printf "  make lint                   npm run lint\n"
+	@printf "  make build                  npm run build\n"
+	@printf "  make smoke                  build, public readiness, and package smoke\n"
+	@printf "  make ci                     npm run ci\n"
+	@printf "  make release-status         npm run release:status\n"
 
 init:
 	npm ci
 
 install-prod:
-	npm install -g $(LINEAGE_PACKAGE)@$(PROD_TAG)
+	$(LINEAGE_CHANNEL_CLI) install stable --package $(LINEAGE_PACKAGE)@$(PROD_TAG)
+
+install-preview:
+	$(LINEAGE_CHANNEL_CLI) install preview --package $(LINEAGE_PACKAGE)@$(PREVIEW_TAG)
 
 install-dev:
-	npm install -g $(LINEAGE_PACKAGE)@$(DEV_TAG)
+	npm ci
 
 install-plugin-prod:
 	$(PLUGIN_INSTALLER) install --channel $(PROD_TAG)
 
-install-plugin-dev:
-	$(PLUGIN_INSTALLER) install --channel $(DEV_TAG)
+install-plugin-preview:
+	$(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)
 
 start-prod:
+	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }
 	$(START_PROD_CMD)
 
-start-prod-bg:
-	@mkdir -p "$(LINEAGE_RUN_DIR)"
-	@if command -v tmux >/dev/null 2>&1; then \
-		if tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
-			printf "Lineage prod already running in tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
-		else \
-			tmux new-session -d -s "$(LINEAGE_PROD_TMUX_SESSION)" -c "$$(pwd)" '$(START_PROD_CMD)'; \
-			rm -f "$(LINEAGE_PROD_PID)"; \
-			printf "Lineage prod started in tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
-			printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
-			printf "URL: %s\\n" "$(LINEAGE_PROD_URL)"; \
-		fi; \
-	else \
-		if [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
-			printf "Lineage prod already running (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
-		else \
-			rm -f "$(LINEAGE_PROD_PID)"; \
-			nohup $(START_PROD_CMD) > "$(LINEAGE_PROD_LOG)" 2>&1 & \
-			printf "%s\\n" "$$!" > "$(LINEAGE_PROD_PID)"; \
-			printf "Lineage prod started detached (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
-			printf "Log: %s\\n" "$(LINEAGE_PROD_LOG)"; \
-		fi; \
-	fi
-
-status-prod:
-	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
-		printf "Lineage prod running in tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
-		printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
-		printf "URL: %s\\n" "$(LINEAGE_PROD_URL)"; \
-	elif [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
-		printf "Lineage prod running (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
-		printf "URL: %s\\n" "$(LINEAGE_PROD_URL)"; \
-	else \
-		printf "Lineage prod is not running\\n"; \
-	fi
-
-stop-prod:
-	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
-		tmux kill-session -t "$(LINEAGE_PROD_TMUX_SESSION)"; \
-		printf "Stopped Lineage prod tmux session %s\\n" "$(LINEAGE_PROD_TMUX_SESSION)"; \
-		rm -f "$(LINEAGE_PROD_PID)"; \
-	elif [ -f "$(LINEAGE_PROD_PID)" ] && kill -0 "$$(cat "$(LINEAGE_PROD_PID)")" 2>/dev/null; then \
-		kill "$$(cat "$(LINEAGE_PROD_PID)")"; \
-		printf "Stopped Lineage prod (pid %s)\\n" "$$(cat "$(LINEAGE_PROD_PID)")"; \
-		rm -f "$(LINEAGE_PROD_PID)"; \
-	else \
-		printf "Lineage prod is not running\\n"; \
-		rm -f "$(LINEAGE_PROD_PID)"; \
-	fi
-
-logs-prod:
-	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_PROD_TMUX_SESSION)" 2>/dev/null; then \
-		tmux capture-pane -pt "$(LINEAGE_PROD_TMUX_SESSION):0" -S -80; \
-	else \
-		tail -n 80 "$(LINEAGE_PROD_LOG)" 2>/dev/null || true; \
-	fi
-
-start-local-prod-bg:
-	@mkdir -p "$(LINEAGE_RUN_DIR)"
-	@if [ ! -f "$(LINEAGE_LOCAL_PROD_PLIST)" ]; then \
-		printf "Missing launch agent plist: %s\\n" "$(LINEAGE_LOCAL_PROD_PLIST)"; \
-		exit 1; \
-	fi
-	@launchctl print "gui/$$(id -u)/$(LINEAGE_LOCAL_PROD_AGENT_LABEL)" >/dev/null 2>&1 || launchctl bootstrap "gui/$$(id -u)" "$(LINEAGE_LOCAL_PROD_PLIST)"
-	@launchctl kickstart -k "gui/$$(id -u)/$(LINEAGE_LOCAL_PROD_AGENT_LABEL)"
-	@open "$(LINEAGE_PROD_URL)" >/dev/null 2>&1 || true
-	@printf "Lineage local prod launch agent started: %s\\n" "$(LINEAGE_LOCAL_PROD_AGENT_LABEL)"
-	@printf "Logs: %s %s\\n" "$(LINEAGE_LOCAL_PROD_LOG)" "$(LINEAGE_LOCAL_PROD_ERR_LOG)"
-
-status-local-prod:
-	@if launchctl print "gui/$$(id -u)/$(LINEAGE_LOCAL_PROD_AGENT_LABEL)" >/dev/null 2>&1; then \
-		launchctl print "gui/$$(id -u)/$(LINEAGE_LOCAL_PROD_AGENT_LABEL)" | grep -E "state =|pid =|runs =" || true; \
-	else \
-		printf "Lineage local prod is not running\\n"; \
-	fi
-
-stop-local-prod:
-	@if launchctl print "gui/$$(id -u)/$(LINEAGE_LOCAL_PROD_AGENT_LABEL)" >/dev/null 2>&1; then \
-		launchctl bootout "gui/$$(id -u)" "$(LINEAGE_LOCAL_PROD_PLIST)"; \
-		printf "Stopped Lineage local prod launch agent: %s\\n" "$(LINEAGE_LOCAL_PROD_AGENT_LABEL)"; \
-	else \
-		printf "Lineage local prod is not running\\n"; \
-	fi
-
-logs-local-prod:
-	@tail -n 80 "$(LINEAGE_LOCAL_PROD_LOG)" "$(LINEAGE_LOCAL_PROD_ERR_LOG)" 2>/dev/null || true
+start-preview:
+	@test -n "$(strip $(LINEAGE_PREVIEW_PROFILE))" || { printf "LINEAGE_PREVIEW_PROFILE is required\n"; exit 2; }
+	$(START_PREVIEW_CMD)
 
 start-dev:
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
 	$(START_DEV_CMD)
 
+start-prod-bg:
+	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_STABLE_SERVICE_MANAGER)" start --channel stable --profile "$(LINEAGE_PROD_PROFILE)" --launcher "$(LINEAGE_STABLE_BIN)" --open
+
+status-prod:
+	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_STABLE_SERVICE_MANAGER)" status --channel stable --profile "$(LINEAGE_PROD_PROFILE)" --launcher "$(LINEAGE_STABLE_BIN)"
+
+stop-prod:
+	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_STABLE_SERVICE_MANAGER)" stop --channel stable --profile "$(LINEAGE_PROD_PROFILE)" --launcher "$(LINEAGE_STABLE_BIN)"
+
+logs-prod:
+	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_STABLE_SERVICE_MANAGER)" logs --channel stable --profile "$(LINEAGE_PROD_PROFILE)" --launcher "$(LINEAGE_STABLE_BIN)"
+
+start-preview-bg:
+	@test -n "$(strip $(LINEAGE_PREVIEW_PROFILE))" || { printf "LINEAGE_PREVIEW_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_PREVIEW_SERVICE_MANAGER)" start --channel preview --profile "$(LINEAGE_PREVIEW_PROFILE)" --launcher "$(LINEAGE_PREVIEW_BIN)" --open
+
+status-preview:
+	@test -n "$(strip $(LINEAGE_PREVIEW_PROFILE))" || { printf "LINEAGE_PREVIEW_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_PREVIEW_SERVICE_MANAGER)" status --channel preview --profile "$(LINEAGE_PREVIEW_PROFILE)" --launcher "$(LINEAGE_PREVIEW_BIN)"
+
+stop-preview:
+	@test -n "$(strip $(LINEAGE_PREVIEW_PROFILE))" || { printf "LINEAGE_PREVIEW_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_PREVIEW_SERVICE_MANAGER)" stop --channel preview --profile "$(LINEAGE_PREVIEW_PROFILE)" --launcher "$(LINEAGE_PREVIEW_BIN)"
+
+logs-preview:
+	@test -n "$(strip $(LINEAGE_PREVIEW_PROFILE))" || { printf "LINEAGE_PREVIEW_PROFILE is required\n"; exit 2; }
+	"$(LINEAGE_PREVIEW_SERVICE_MANAGER)" logs --channel preview --profile "$(LINEAGE_PREVIEW_PROFILE)" --launcher "$(LINEAGE_PREVIEW_BIN)"
+
 start-dev-bg:
-	@mkdir -p "$(LINEAGE_RUN_DIR)"
-	@if command -v tmux >/dev/null 2>&1; then \
-		if tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
-			printf "Lineage dev already running in tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
-		else \
-			tmux new-session -d -s "$(LINEAGE_DEV_TMUX_SESSION)" -c "$$(pwd)" '$(START_DEV_CMD)'; \
-			rm -f "$(LINEAGE_DEV_PID)"; \
-			printf "Lineage dev started in tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
-			printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
-		fi; \
-	else \
-		if [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
-			printf "Lineage dev already running (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
-		else \
-			rm -f "$(LINEAGE_DEV_PID)"; \
-			nohup $(START_DEV_CMD) > "$(LINEAGE_DEV_LOG)" 2>&1 & \
-			printf "%s\\n" "$$!" > "$(LINEAGE_DEV_PID)"; \
-			printf "Lineage dev started detached (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
-			printf "Log: %s\\n" "$(LINEAGE_DEV_LOG)"; \
-		fi; \
-	fi
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
+	$(LINEAGE_DEV_SERVICE_MANAGER) start --channel dev --profile "$(LINEAGE_DEV_PROFILE)" --open
 
 status-dev:
-	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
-		printf "Lineage dev running in tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
-		printf "Attach: tmux attach -t %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
-	elif [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
-		printf "Lineage dev running (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
-	else \
-		printf "Lineage dev is not running\\n"; \
-	fi
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
+	$(LINEAGE_DEV_SERVICE_MANAGER) status --channel dev --profile "$(LINEAGE_DEV_PROFILE)"
 
 stop-dev:
-	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
-		tmux kill-session -t "$(LINEAGE_DEV_TMUX_SESSION)"; \
-		printf "Stopped Lineage dev tmux session %s\\n" "$(LINEAGE_DEV_TMUX_SESSION)"; \
-		rm -f "$(LINEAGE_DEV_PID)"; \
-	elif [ -f "$(LINEAGE_DEV_PID)" ] && kill -0 "$$(cat "$(LINEAGE_DEV_PID)")" 2>/dev/null; then \
-		kill "$$(cat "$(LINEAGE_DEV_PID)")"; \
-		printf "Stopped Lineage dev (pid %s)\\n" "$$(cat "$(LINEAGE_DEV_PID)")"; \
-		rm -f "$(LINEAGE_DEV_PID)"; \
-	else \
-		printf "Lineage dev is not running\\n"; \
-		rm -f "$(LINEAGE_DEV_PID)"; \
-	fi
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
+	$(LINEAGE_DEV_SERVICE_MANAGER) stop --channel dev --profile "$(LINEAGE_DEV_PROFILE)"
 
 logs-dev:
-	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(LINEAGE_DEV_TMUX_SESSION)" 2>/dev/null; then \
-		tmux capture-pane -pt "$(LINEAGE_DEV_TMUX_SESSION):0" -S -80; \
-	else \
-		tail -n 80 "$(LINEAGE_DEV_LOG)" 2>/dev/null || true; \
-	fi
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
+	$(LINEAGE_DEV_SERVICE_MANAGER) logs --channel dev --profile "$(LINEAGE_DEV_PROFILE)"
 
 dev:
 	npm run dev

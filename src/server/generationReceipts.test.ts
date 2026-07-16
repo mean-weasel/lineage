@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageAttempts, getLineageSnapshot, indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
@@ -224,7 +225,7 @@ describe('generation receipts', () => {
   beforeEach(() => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
   });
 
   it('plans, inspects, and imports local generation outputs as lineage children', () => {

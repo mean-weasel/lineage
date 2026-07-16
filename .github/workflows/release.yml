@@ -46,13 +46,20 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Publish next dry run
         if: ${{ inputs.dry_run && inputs.operation == 'publish-next' }}
-        run: npm run release -- --tag next --dry-run
+        run: |
+          npm run release -- --tag next --dry-run
+          npm run release:github:next:dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Publish next
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-next' }}
-        run: npm run release -- --tag next
+        run: |
+          npm run release:github:next
+          npm run release -- --tag next
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+          GH_TOKEN: ${{ github.token }}
       - name: Publish latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'publish-latest' }}
         run: |
@@ -63,8 +70,8 @@ jobs:
       - name: Publish latest
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-latest' }}
         run: |
-          npm run release -- --tag latest
           npm run release:github
+          npm run release -- --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

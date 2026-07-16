@@ -24,6 +24,7 @@ import { getLineageBrief, linkSelectedLineageChild } from './server/assetLineage
 import { removeLineageNode } from './server/assetLineageRemove';
 import { isLineageTaskError } from './server/assetLineageTasks';
 import { isLineageWorkspaceError } from './server/assetLineageWorkspaces';
+import { lineageDb } from './server/assetLineageDb';
 import { getLedgerPageFromQuery } from './server/assetLedgerApi';
 import { isAssetReviewError, markAssetReview, markAssetReviewsFromRequestBody, requireApprovedLocalBackupPath, withLocalReviewMetadata } from './server/assetReviews';
 import { getReviewQueue } from './server/assetReviewQueue';
@@ -40,15 +41,65 @@ import { listImageGenerationJobs } from './server/generationReceiptJobs';
 import { isGenerationReceiptError } from './server/generationReceipts';
 import { registerLineageTaskRoutes } from './server/lineageTaskRoutes';
 import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes';
-import { getLineageRuntimeInfo } from './server/runtimeInfo';
+import { assertLineageCodeOrigin, getLineageRuntimeInfo, normalizeRuntimeChannel } from './server/runtimeInfo';
+import { assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, doctorLineageProfile } from './server/lineageProfiles';
+import { acquireProfileWriterLease } from './server/profileWriterLease';
+import type { ResolvedLineageProfile } from './shared/lineageProfileTypes';
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
+const runtimeChannel = normalizeRuntimeChannel(process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL);
+const startupCode = assertLineageCodeOrigin(runtimeChannel);
+assertRuntimeProfileSafety(runtimeChannel);
+const startupRuntime = getLineageRuntimeInfo({ channel: runtimeChannel, code: startupCode });
+if (!process.env.LINEAGE_PROFILE) assertUnselectedDatabaseIsUnbound(startupRuntime);
+let startupProfile: ResolvedLineageProfile | undefined;
+if (process.env.LINEAGE_PROFILE) {
+  if (!process.env.LINEAGE_PROFILE_ID || !process.env.LINEAGE_PROFILE_ENVIRONMENT || !process.env.LINEAGE_PROFILE_MANIFEST) {
+    throw new Error('LINEAGE_PROFILE must be resolved by the Lineage CLI before server startup; use lineage start --profile or lineage-dev start --profile');
+  }
+  const doctor = doctorLineageProfile(process.env.LINEAGE_PROFILE, {
+    channel: runtimeChannel,
+    code: startupRuntime.code,
+    gitSha: startupRuntime.git_sha,
+    version: startupRuntime.version,
+  });
+  if (!doctor.ok) {
+    const failures = doctor.checks.filter(check => check.status === 'fail').map(check => `${check.id}: ${check.message}`).join('; ');
+    throw new Error(`Configured Lineage profile failed doctor: ${failures}`);
+  }
+  assertResolvedRuntimeProfileEnvironment(doctor.profile!);
+  startupProfile = doctor.profile!;
+}
+const writerLease = startupProfile ? acquireProfileWriterLease(startupProfile, runtimeChannel, 'service') : undefined;
+if (startupProfile) delete process.env.LINEAGE_DB_ACCESS;
+else process.env.LINEAGE_DB_ACCESS = 'read-only';
+if (writerLease) {
+  try {
+    const startupDatabase = lineageDb();
+    startupDatabase.close();
+  } catch (error) {
+    writerLease.release();
+    throw error;
+  }
+}
 const app = express();
 const port = Number(process.env.PORT || 5173);
 const host = process.env.HOST || 'lineage.localhost';
 const isProduction = process.env.NODE_ENV === 'production';
 const maxUploadBytes = Number(process.env.LINEAGE_MAX_UPLOAD_MB || 200) * 1024 * 1024;
-const upload = multer({ dest: ensureUploadDir(), limits: { fileSize: maxUploadBytes } });
+const upload = multer({
+  limits: { fileSize: maxUploadBytes },
+  storage: startupProfile
+    ? multer.diskStorage({ destination: ensureUploadDir() })
+    : multer.memoryStorage(),
+});
 app.use(express.json({ limit: '1mb' }));
+app.use((req, res, next) => {
+  if (startupProfile || req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  res.status(409).json({
+    error: 'profile_required',
+    message: 'Persistent writes require a selected named Lineage profile; legacy-unbound service access is read-only.',
+  });
+});
 function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {
   const candidate = input.body?.project || input.body?.product || input.query?.project || input.query?.product;
   return typeof candidate === 'string' ? candidate : defaultProduct;
@@ -58,7 +109,9 @@ function asyncRoute(handler: (req: express.Request, res: express.Response) => Pr
   return (req, res, next) => { Promise.resolve(handler(req, res)).catch(next); };
 }
 app.get('/api/projects', asyncRoute((_req, res) => { res.json({ projects: listProjects() }); }));
-app.get('/api/runtime', asyncRoute((_req, res) => { res.json({ ok: true, runtime: getLineageRuntimeInfo() }); }));
+app.get('/api/runtime', asyncRoute((_req, res) => {
+  res.json({ ok: true, runtime: getLineageRuntimeInfo({ channel: runtimeChannel, code: startupCode }) });
+}));
 app.get(
   '/api/assets',
   asyncRoute((req, res) => {
@@ -466,4 +519,13 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ error: message });
 });
 
-app.listen(port, host, () => { console.log(`Lineage listening on http://${host}:${port}`); });
+const server = app.listen(port, host, () => { console.log(`Lineage listening on http://${host}:${port}`); });
+const releaseWriterLease = () => writerLease?.release();
+process.once('exit', releaseWriterLease);
+process.once('SIGINT', () => { releaseWriterLease(); process.exit(130); });
+process.once('SIGTERM', () => { releaseWriterLease(); process.exit(143); });
+server.once('error', error => {
+  releaseWriterLease();
+  console.error(`Lineage failed to listen on http://${host}:${port}: ${error.message}`);
+  process.exit(1);
+});

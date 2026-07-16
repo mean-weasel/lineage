@@ -43,6 +43,25 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
+execFileSync(process.execPath, ['scripts/plugin-release.mjs'], { cwd: root, stdio: 'inherit' });
+
+function assertRemotePluginAssets() {
+  const tag = `v${packageInfo.version}`;
+  let release;
+  try {
+    release = JSON.parse(execFileSync('gh', ['release', 'view', tag, '--json', 'assets'], { cwd: root, encoding: 'utf8' }));
+  } catch (error) {
+    throw new Error(`Refusing npm mutation: GitHub release ${tag} with plugin assets must exist first`, { cause: error });
+  }
+  const names = new Set((release.assets || []).map(asset => asset.name));
+  const artifact = `lineage-codex-plugin-${packageInfo.version}.tgz`;
+  for (const required of [artifact, `${artifact}.sha256`]) {
+    if (!names.has(required)) throw new Error(`Refusing npm mutation: GitHub release ${tag} is missing ${required}`);
+  }
+}
+
+if (!dryRun) assertRemotePluginAssets();
+
 if (!skipCi) {
   execFileSync('npm', ['run', 'prepare-release'], { cwd: root, stdio: 'inherit' });
 }

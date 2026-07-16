@@ -1,126 +1,117 @@
 ---
 name: lineage-package-operator
-description: Use when an agent needs to install, start, inspect, or continue work through the public @mean-weasel/lineage package.
+description: Operate stable, preview, or checkout-dev Lineage safely from Codex. Use for installing a Lineage channel, selecting or diagnosing a named profile, starting or checking a managed service, reading lineage state, or performing claim-scoped mutations without crossing code, database, or service identities.
 ---
 
-# Lineage Package Operator
+# Operate Lineage
 
-Use the public `@mean-weasel/lineage` package for Lineage app and CLI work. Do
-not assume a source checkout is available.
+Treat code channel, named profile, database identity, and service identity as one
+contract. Never infer them from a window title, PID, port, PATH, or old command.
 
-## Install And Channels
+## Choose one channel
 
-Use `latest` for stable dogfooding and daily work:
+- Stable daily use: `lineage-stable` from the isolated npm `latest` runtime.
+- Preview candidate: `lineage-preview` from the isolated npm `next` runtime.
+- Development: `npm run lineage:dev --` from the intended checkout/worktree.
 
-```bash
-npm install -g @mean-weasel/lineage@latest
-lineage --version
-```
+Do not globally install `latest` and `next` into one prefix. Do not use `npx`, a
+PATH-resolved `lineage-dev`, or checkout code for production operations.
 
-Use `next` only when intentionally verifying a release candidate before
-promotion:
+## Prove identity before work
 
-```bash
-npm install -g @mean-weasel/lineage@next
-lineage --version
-```
-
-If a global install is not appropriate, run the package directly with npm:
+Set the intended profile selector, then run the matching launcher:
 
 ```bash
-npx @mean-weasel/lineage@latest --version
+lineage-stable runtime doctor --json
+lineage-stable profile doctor --profile "$LINEAGE_PROD_PROFILE" --json
+lineage-stable db info --profile "$LINEAGE_PROD_PROFILE" --json
 ```
 
-Agent guidance belongs to the plugin channel; the Lineage package owns app and
-CLI runtime behavior.
+Require all three results to agree on verified code origin/fingerprint, channel,
+profile ID/environment/fingerprint, database path/identity, and service origin.
+Stop on any failed doctor, unbound profile, wrong database, or unexpected code
+root. Legacy-unbound access is diagnostic/read-only and never authorizes writes.
 
-## Agent Handoff Commands
+For preview, substitute `lineage-preview` and `$LINEAGE_PREVIEW_PROFILE`. For
+dev, substitute `npm run lineage:dev --` and `$LINEAGE_DEV_PROFILE`.
 
-Treat copied handoff commands as executable contracts. If a command copied from
-the app fails, file or fix the package issue before promoting a release.
+## Start and inspect services
 
-Supported packaged handoff verbs:
+From a checkout, use the profile-scoped managed targets:
 
 ```bash
-lineage next --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
-lineage brief --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
-lineage inspect --project demo-project --asset-id <asset-id> --db /absolute/path/to/lineage.sqlite --json
-lineage agent claim --project demo-project --scope lineage_workspace --target demo-project:lineage-workspace:<root-asset-id> --agent-name "Codex thread 123" --ttl 20m --db /absolute/path/to/lineage.sqlite --json
-lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --db /absolute/path/to/lineage.sqlite --json
-lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
-lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --db /absolute/path/to/lineage.sqlite --confirm-write --json
-lineage reroll list --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
-lineage reroll plan --project demo-project --root <root-asset-id> --target <target-asset-id> --prompt "Regenerate with clean readable text" --db /absolute/path/to/lineage.sqlite --json
-lineage reroll import --project demo-project --job-id <job-id> --file <.asset-scratch-file> --db /absolute/path/to/lineage.sqlite --confirm-write --json
-lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --db /absolute/path/to/lineage.sqlite --confirm-write --json
-lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --db /absolute/path/to/lineage.sqlite --json
+make start-prod-bg LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+make status-prod LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+make logs-prod LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+make stop-prod LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
 ```
 
-Use `project_channel` claims only for rare, intentional ownership of a whole
-project/channel lane. Prefer `lineage_workspace` or `content_post` for normal
-handoffs.
+Use the equivalent preview/dev target and variable for those channels. Managed
+start opens a browser only after exact runtime readiness. Treat nonzero status
+as unsafe even if a PID, tmux session, launchd registration, or port exists.
+Stable and preview Make targets must resolve `lineage-stable-service` or
+`lineage-preview-service` from the matching attested runtime. Stop if either
+published channel falls back to `node scripts/managed-service.mjs`; that
+checkout controller is dev-only.
 
-The same verbs may be run through npm without a global install:
+Use foreground packaged start only with an explicit profile:
 
 ```bash
-npx @mean-weasel/lineage@latest next --project demo-project --root <root-asset-id> --db /absolute/path/to/lineage.sqlite --json
+lineage-stable start --profile "$LINEAGE_PROD_PROFILE" --open
 ```
 
-Never use stale doubled namespace commands with an unscoped npm package followed
-by a second `lineage` word.
+Never recreate `start-local-prod` or an unprofiled background service.
 
-## Safe Operating Pattern
+## Read and mutate through profiles
 
-1. Verify the installed package with `lineage --version`.
-2. Start Lineage with an explicit `--db` when the work must survive handoff.
-3. Use `lineage brief --json` to collect the agent prompt and executable
-   commands.
-4. Use `lineage next --json` and `lineage inspect --json` before generating or
-   linking work.
-5. Use `lineage agent claim --scope lineage_workspace --json`, export the
-   returned raw token as `LINEAGE_CLAIM_TOKEN`, and heartbeat while working.
-6. Use `lineage link-child --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write
-   --json` only to create a new visible child variation, after the child asset
-   is indexed and the parent/root is clear. Do not use it for re-rolls.
-7. For re-rolls, use `lineage reroll mark --confirm-write --json`, then
-   `lineage reroll plan --json`, and import exactly one output with
-   `lineage reroll import --confirm-write --json` so the result becomes an
-   attempt instead of a visible child edge.
-8. Release the claim with `lineage agent release --claim-token
-   "$LINEAGE_CLAIM_TOKEN" --json` before handing off or stopping.
-9. Run a negative check for unknown child IDs when changing handoff behavior.
-
-## Starting The App From Codex
-
-Prefer a real foreground terminal for human-driven daily use:
+Pass `--profile` on every operational command. Examples:
 
 ```bash
-lineage start --host lineage.localhost
+lineage-stable next --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --json
+lineage-stable brief --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --json
+lineage-stable inspect --profile "$LINEAGE_PROD_PROFILE" --project demo-project --asset-id <asset-id> --json
+lineage-stable agent claim --profile "$LINEAGE_PROD_PROFILE" --project demo-project --scope lineage_workspace --target <workspace-id> --agent-name "Codex task" --ttl 20m --json
+lineage-stable agent heartbeat --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
+lineage-stable link-child --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --child <child-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage-stable agent release --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
-When starting Lineage from the Codex app or another agent command session, do
-not rely on `lineage start &` or `nohup` alone. Tool-owned background processes
-may be cleaned up after the command returns. Use the repo Makefile detached
-targets when a checkout is available:
+Export the returned raw token as `LINEAGE_CLAIM_TOKEN`. Heartbeat while working,
+pass the token to claim-scoped writes, and release it before handoff. Use
+`link-child` only for a visible child variation. Use `reroll mark`, `reroll
+plan`, and `reroll import` for a new attempt on the same node.
+
+Persistent writes require the profile writer lease and any operation-specific
+`--confirm-write`. Never replace `--profile` with a direct `--db` write.
+
+## Create non-production test data
+
+Never copy a live SQLite file directly. Define a new preview/development target
+profile, pin it to the verified target code, and use:
 
 ```bash
-make start-prod-bg
-make status-prod
-make logs-prod
-make stop-prod
+lineage-preview profile clone --source-db /path/to/source.sqlite --target-profile "$LINEAGE_PREVIEW_PROFILE" --confirm-write --json
 ```
 
-Those targets prefer a detached `tmux` session when `tmux` is installed, and
-fall back to PID/log files otherwise. `make start-prod` remains foreground.
-Keep launchd or other OS service managers as explicit, platform-specific paths;
-macOS can block LaunchAgents with `EX_CONFIG`/`Operation not permitted` until
-the user approves or repairs the service.
+Clone must target a nonexistent non-production database and produce a new
+profile identity and receipt. Bind a legacy database in place only as an
+intentional migration with `profile bind --profile <profile> --confirm-write`.
 
-## Boundaries
+When that legacy database references media in a checkout, keep the database and
+source checkout read-only and stage only its referenced files into the target
+profile's nonexistent asset root:
 
-- The package does not publish to social platforms.
-- The package does not install Codex plugins.
-- The plugin does not own Lineage release promotion.
-- `latest` is stable. `next` is for release-candidate verification.
-- Do not claim unsupported app-displayed commands are packaged CLI verbs unless
-  `lineage --help` and tests prove them.
+```bash
+lineage-stable profile clone-assets --source-asset-root /path/to/legacy/checkout --target-profile "$LINEAGE_PROD_PROFILE" --confirm-write --json
+```
+
+Require a no-clobber receipt, matching file hashes, owner-only permissions, and
+an explicitly reviewed missing-reference count before binding or service
+cutover. Never copy the whole checkout scratch tree or reuse it as production's
+asset root.
+
+## Handoff proof
+
+Before claiming completion, rerun runtime doctor, profile doctor, database info,
+and managed status when a service is involved. Report the exact channel,
+profile, code fingerprint, database path/fingerprint, and any nonzero check.

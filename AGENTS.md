@@ -6,21 +6,37 @@ Do not commit private media, credentials, private campaign data, real presigned 
 
 Runtime channel memory:
 
-- `stable` is npm `latest` and daily-use data.
-- `preview` is the published npm `next` candidate.
-- `dev` is a local GitHub checkout or branch before publication.
-- Check `lineage db info --json` or `lineage-dev db info --json` before assuming which SQLite database a CLI/app session is using.
-- Do not point preview/dev code at the stable database unless it is an intentional test; prefer a copied snapshot for realistic preview/dev testing.
+- `stable` resolves npm `latest` once into an isolated, receipt-bound code root and is launched with `lineage-stable` (normally through `make start-prod`).
+- `preview` resolves npm `next` into a different isolated, receipt-bound code root and is launched with `lineage-preview`.
+- `dev` is checkout-only. Run it with `npm run lineage:dev -- <command>` or the `make start-dev*` targets; a published `lineage-dev` must fail closed.
+- Never install `latest` and `next` into the same global npm prefix. Do not use PATH-resolved `lineage-dev` as evidence that checkout code is running.
+- Run `<launcher> runtime doctor --json` before operational commands and check `code.root`, `code.fingerprint`, `code.verified`, channel, profile, and SQLite identity. Use `runtime info` only to diagnose an unverified install.
+- Check `lineage-stable db info --json`, `lineage-preview db info --json`, or `npm run lineage:dev -- db info --json` before assuming which SQLite database a CLI/app session is using.
+- Persistent writes require a named profile whose `expected_runtime` pins the verified code origin and fingerprint; `legacy-unbound` CLI and service access is read-only.
+- Before any write, run `profile doctor --profile <profile> --json` and confirm the profile fingerprint, code fingerprint, database identity, environment, origin, and service URL all match.
+- Bind an existing database only with `profile bind --profile <profile> --confirm-write`; this is the only in-place legacy identity migration.
+- Never copy a live SQLite database with `cp`, Finder, or a raw file API. Use `profile clone --source-db <source> --target-profile <non-production-profile> --confirm-write` so SQLite makes a consistent snapshot and the clone receives a fresh identity.
+- Do not point preview/dev code at the stable database. A stable database may be a read-only clone source when the operation is intentional and the target is a new preview/development profile.
 
 Local startup memory:
 
-- `lineage start`, `lineage-dev start`, `make start-prod`, and `make start-dev` are foreground commands.
-- Prefer `make start-prod-bg` or `make start-dev-bg` when the user wants a persistent local server; these use tmux when available and fall back to nohup/PID files.
-- Use `make status-prod`/`make status-dev`, `make logs-prod`/`make logs-dev`, and `make stop-prod`/`make stop-dev` for detached servers.
+- Every foreground or managed start requires an explicit profile: `make start-prod LINEAGE_PROD_PROFILE=<profile>`, `make start-preview LINEAGE_PREVIEW_PROFILE=<profile>`, or `make start-dev LINEAGE_DEV_PROFILE=<profile>`.
+- Persistent services use the matching `start-*-bg`, `status-*`, `logs-*`, and `stop-*` target plus the same profile variable. Preview has a complete managed lifecycle too.
+- Managed start/status must verify `/api/runtime` code root/fingerprint, profile/database identity, and unique service instance. A PID, tmux session, launchd registration, or open port is never sufficient evidence.
+- Browser open happens only after exact readiness. If status is nonzero, inspect the profile-scoped log and identity error; do not open the URL or assume the registered process is Lineage.
+- Never use or recreate checkout-backed `start-local-prod`, shared tmux names, or an unprofiled launchd service for production.
 
 For meaningful changes, prefer:
 
 - `npm run ci` for the full public gate.
 - `npm run public:readiness` for no-private-data and package-boundary proof.
 - `npm run package:smoke` for installability proof.
+- `npm run runtime:oracle` for simultaneous stable/preview/dev isolation and named negative-case proof.
 - `npm run e2e` for browser workflow proof.
+- `npm run plugin:smoke` for exact Lineage/plugin version lock, safe guidance, checksum, artifact, and atomic temporary-install proof.
+
+Release memory:
+
+- Root package, plugin package, plugin manifest, and `lineage.version` must match exactly; do not hard-code an older compatibility version in workflows or agent examples.
+- A GitHub release must contain `lineage-codex-plugin-<version>.tgz` and its `.sha256` before npm publish or dist-tag mutation. The Release workflow builds, installs, attaches, and verifies these assets as one gated operation.
+- Never install the plugin into the user's real Codex root during verification; use `npm run plugin:smoke`, which installs only into a temporary target.

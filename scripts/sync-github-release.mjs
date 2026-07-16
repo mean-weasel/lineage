@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -56,6 +56,8 @@ function releaseNotes(changelog, version) {
 }
 
 const repo = readOption('--repo', process.env.GITHUB_REPOSITORY || 'mean-weasel/lineage');
+const channel = readOption('--channel', 'latest');
+if (channel !== 'latest' && channel !== 'next') throw new Error(`Unsupported release channel: ${channel}`);
 const target = readOption('--target', process.env.GITHUB_SHA || 'HEAD');
 const packageInfo = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const changelog = await readFile(join(root, 'CHANGELOG.md'), 'utf8');
@@ -63,6 +65,12 @@ const notes = releaseNotes(changelog, packageInfo.version);
 const tag = `v${packageInfo.version}`;
 const title = `Lineage ${tag}`;
 const targetCommit = capture('git', ['rev-parse', '--verify', `${target}^{commit}`]);
+const tempDir = mkdtempSync(join(tmpdir(), 'lineage-release-'));
+process.once('exit', () => rmSync(tempDir, { force: true, recursive: true }));
+const pluginOut = join(tempDir, 'lineage-plugin');
+const pluginBuild = JSON.parse(capture(process.execPath, ['scripts/plugin-release.mjs', '--out-dir', pluginOut, '--json']));
+const pluginArtifact = pluginBuild.artifact;
+const pluginChecksum = `${pluginArtifact}.sha256`;
 
 if (!notes) {
   console.error(`CHANGELOG.md is missing release notes for ${packageInfo.version}`);
@@ -79,8 +87,11 @@ if (dryRun) {
   console.log(`Remote tag: ${remoteTag.ok ? 'present' : 'missing'}`);
   console.log(`Local tag: ${localTag.ok ? localTag.stdout : 'missing'}`);
   console.log(`GitHub release: ${release.ok ? 'present' : 'missing'}`);
+  console.log(`Plugin artifact: ${pluginArtifact}`);
+  console.log(`Plugin checksum: ${pluginChecksum}`);
   console.log('Release notes:');
   console.log(notes);
+  rmSync(tempDir, { force: true, recursive: true });
   process.exit(0);
 }
 
@@ -102,14 +113,23 @@ if (remoteTag.ok) {
   run('git', ['push', 'origin', tag]);
 }
 
-const tempDir = mkdtempSync(join(tmpdir(), 'lineage-release-'));
 const notesFile = join(tempDir, `${tag}.md`);
 writeFileSync(notesFile, `${notes}\n`);
 
 if (release.ok) {
-  run('gh', ['release', 'edit', tag, '--repo', repo, '--title', title, '--notes-file', notesFile, '--latest']);
+  const releaseMode = channel === 'latest' ? ['--latest', '--prerelease=false'] : ['--prerelease'];
+  run('gh', ['release', 'edit', tag, '--repo', repo, '--title', title, '--notes-file', notesFile, ...releaseMode]);
   console.log(`Updated GitHub release ${tag}`);
 } else {
-  run('gh', ['release', 'create', tag, '--repo', repo, '--title', title, '--notes-file', notesFile, '--latest']);
+  const releaseMode = channel === 'latest' ? ['--latest'] : ['--prerelease'];
+  run('gh', ['release', 'create', tag, '--repo', repo, '--title', title, '--notes-file', notesFile, ...releaseMode]);
   console.log(`Created GitHub release ${tag}`);
 }
+
+run('gh', ['release', 'upload', tag, pluginArtifact, pluginChecksum, '--repo', repo, '--clobber']);
+const assets = JSON.parse(capture('gh', ['release', 'view', tag, '--repo', repo, '--json', 'assets'])).assets || [];
+for (const required of [pluginArtifact.split('/').at(-1), pluginChecksum.split('/').at(-1)]) {
+  if (!assets.some(asset => asset.name === required)) throw new Error(`GitHub release ${tag} is missing plugin asset ${required}`);
+}
+console.log(`Attached and verified ${pluginArtifact.split('/').at(-1)} and checksum`);
+rmSync(tempDir, { force: true, recursive: true });

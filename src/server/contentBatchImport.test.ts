@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { getContentBatch } from './contentBatches';
 import { importDemoContentBatch } from './contentBatchImport';
@@ -11,11 +12,12 @@ const dbFile = join(scratchDir, 'content-import.sqlite');
 describe('content batch markdown import', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
     process.env.LINEAGE_CONTENT_SOURCE_ROOT = join(scratchDir, 'missing-content-source');
   });
 
   it('previews demo markdown import without creating sqlite', () => {
+    rmSync(dbFile, { force: true });
     const result = importDemoContentBatch(defaultProject, {
       batchId: 'preview-import',
       confirmWrite: false,

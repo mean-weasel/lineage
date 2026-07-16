@@ -9,4 +9,6 @@ metadata do not match exactly.
 
 Installers should treat the plugin artifact as Codex-specific agent tooling. The
 Lineage app package owns app and CLI runtime behavior; it does not install Codex
-plugins.
+plugins. The operator skill requires isolated channel launchers, explicit named
+profiles for every operation, profile-scoped managed service status, and
+SQLite-safe non-production cloning.

@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageNextAsset, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import { createLineageWorkspace } from './assetLineageWorkspaces';
@@ -49,7 +50,7 @@ describe('generation receipt selection reset', () => {
   beforeEach(() => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
   });
 
   it('clears next variation selections after generation import while preserving parent receipts', () => {
