@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { LineageRuntimeChannel } from '../shared/runtimeInfoTypes';
@@ -17,13 +17,31 @@ interface WriterLeaseOwner {
   profile_id: string;
   role: 'service' | 'cli';
   schema_version: typeof writerLeaseSchemaVersion;
+  service_origin?: string;
   token: string;
 }
 
 export interface ProfileWriterLease {
+  authenticate: (token: string | undefined) => boolean;
   lock_path: string;
   owner: Omit<WriterLeaseOwner, 'token'>;
   release: () => void;
+}
+
+export interface ProfileWriterDelegation {
+  owner: Omit<WriterLeaseOwner, 'token'>;
+  service_origin: string;
+  token: string;
+}
+
+export class ProfileWriterLeaseConflictError extends Error {
+  constructor(
+    message: string,
+    public readonly owner: Omit<WriterLeaseOwner, 'token'>,
+  ) {
+    super(message);
+    this.name = 'ProfileWriterLeaseConflictError';
+  }
 }
 
 export function profileWriterLockPath(profile: Pick<ResolvedLineageProfile, 'manifest_path'>): string {
@@ -64,6 +82,8 @@ function readOwner(lockPath: string): WriterLeaseOwner {
     || Number(owner.pid) <= 0
     || typeof owner.acquired_at !== 'string'
     || Number.isNaN(Date.parse(owner.acquired_at))
+    || (owner.role === 'service' && (typeof owner.service_origin !== 'string' || !owner.service_origin))
+    || (owner.role === 'cli' && owner.service_origin !== undefined)
     || typeof owner.token !== 'string'
     || owner.token.length < 16
   ) {
@@ -94,11 +114,14 @@ function createLeaseDirectory(lockPath: string, owner: WriterLeaseOwner): void {
 
 function reclaimDeadOwner(lockPath: string, owner: WriterLeaseOwner): void {
   if (processIsAlive(owner.pid)) {
-    throw new Error(
-      `Lineage profile ${owner.profile_id} already has an active ${owner.role} writer (pid ${owner.pid}); use that managed service or stop it before starting another writer`
+    const { token: _token, ...publicOwner } = owner;
+    throw new ProfileWriterLeaseConflictError(
+      `Lineage profile ${owner.profile_id} already has an active ${owner.role} writer (pid ${owner.pid}); use that managed service or stop it before starting another writer`,
+      publicOwner,
     );
   }
-  const tombstone = `${lockPath}.stale-${owner.pid}-${randomUUID()}`;
+  const tokenFence = createHash('sha256').update(owner.token).digest('hex').slice(0, 24);
+  const tombstone = `${lockPath}.stale-${owner.pid}-${tokenFence}`;
   try {
     renameSync(lockPath, tombstone);
   } catch (error) {
@@ -123,6 +146,7 @@ export function acquireProfileWriterLease(
     profile_id: profile.profile_id,
     role,
     schema_version: writerLeaseSchemaVersion,
+    ...(role === 'service' ? { service_origin: profile.service_origin } : {}),
     token: randomUUID(),
   };
 
@@ -134,6 +158,12 @@ export function acquireProfileWriterLease(
       const { token: _token, ...publicOwner } = owner;
       let released = false;
       return {
+        authenticate: candidate => {
+          if (!candidate) return false;
+          const expected = Buffer.from(owner.token);
+          const actual = Buffer.from(candidate);
+          return actual.length === expected.length && timingSafeEqual(actual, expected);
+        },
         lock_path: lockPath,
         owner: publicOwner,
         release: () => {
@@ -230,4 +260,29 @@ export function inspectProfileWriterLease(profile: ResolvedLineageProfile): Omit
   if (!existsSync(lockPath)) return undefined;
   const { token: _token, ...owner } = readOwner(lockPath);
   return owner;
+}
+
+export function getProfileWriterDelegation(profile: ResolvedLineageProfile): ProfileWriterDelegation {
+  const lockPath = profileWriterLockPath(profile);
+  if (!existsSync(lockPath)) {
+    throw new Error(
+      `Lineage profile ${profile.profile_id} mutating commands require its managed service at ${profile.service_origin}; no active service writer lease was found`
+    );
+  }
+  const owner = readOwner(lockPath);
+  if (
+    owner.profile_id !== profile.profile_id
+    || owner.environment !== profile.environment
+    || owner.profile_fingerprint !== profile.profile_fingerprint
+  ) {
+    throw new Error(`Writer lease identity at ${lockPath} does not match ${profile.profile_id}/${profile.environment}; refusing delegation`);
+  }
+  if (owner.role !== 'service' || owner.service_origin !== profile.service_origin) {
+    throw new Error(`Writer lease for Lineage profile ${profile.profile_id} is not the configured managed service at ${profile.service_origin}`);
+  }
+  if (!processIsAlive(owner.pid)) {
+    throw new Error(`Managed service writer lease for Lineage profile ${profile.profile_id} is stale; refusing delegation`);
+  }
+  const { token, ...publicOwner } = owner;
+  return { owner: publicOwner, service_origin: owner.service_origin, token };
 }

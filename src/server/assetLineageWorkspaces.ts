@@ -92,10 +92,19 @@ function knownRoots(database: DatabaseSync, project: string): Array<{ root_asset
       and parent_asset_id not in (select child_asset_id from asset_edges where project_id = ?)
     group by parent_asset_id
   `).all(project, project, project, project) as Array<{ root_asset_id: string; selected_at?: string | null }>;
-  return rows.map(row => ({ root_asset_id: row.root_asset_id, selected_at: row.selected_at || undefined }));
+  const roots = new Map<string, { root_asset_id: string; selected_at?: string }>();
+  for (const row of rows) {
+    const existing = roots.get(row.root_asset_id);
+    roots.set(row.root_asset_id, {
+      root_asset_id: row.root_asset_id,
+      selected_at: row.selected_at || existing?.selected_at,
+    });
+  }
+  return [...roots.values()];
 }
 
 function seedLegacyWorkspaces(database: DatabaseSync, project: string): void {
+  if (process.env.LINEAGE_DB_ACCESS === 'read-only') return;
   ensureProject(database, project);
   const timestamp = nowIso();
   const statement = database.prepare(`
@@ -120,6 +129,40 @@ function seedLegacyWorkspaces(database: DatabaseSync, project: string): void {
   }
 }
 
+function inferredLegacyWorkspaces(database: DatabaseSync, project: string): LineageWorkspace[] {
+  if (process.env.LINEAGE_DB_ACCESS !== 'read-only') return [];
+  const persistedRoots = new Set(
+    (database.prepare('select root_asset_id from lineage_workspaces where project_id = ?').all(project) as Array<{ root_asset_id: string }>)
+      .map(row => row.root_asset_id),
+  );
+  const asset = database.prepare('select id, title from assets where project_id = ? and id = ?');
+  return knownRoots(database, project).flatMap(root => {
+    if (persistedRoots.has(root.root_asset_id)) return [];
+    const row = asset.get(project, root.root_asset_id) as { id: string; title: string } | undefined;
+    if (!row) return [];
+    const timestamp = root.selected_at || nowIso();
+    return [{
+      active_at: root.selected_at,
+      created_at: timestamp,
+      created_by: 'system' as const,
+      id: lineageWorkspaceId(project, root.root_asset_id),
+      project,
+      root_asset_id: root.root_asset_id,
+      status: 'active' as const,
+      title: `${row.title} lineage`,
+      updated_at: timestamp,
+    }];
+  });
+}
+
+function sortWorkspaces(workspaces: LineageWorkspace[]): LineageWorkspace[] {
+  const statusRank: Record<LineageWorkspaceStatus, number> = { active: 0, paused: 1, archived: 2 };
+  return workspaces.sort((left, right) => statusRank[left.status] - statusRank[right.status]
+    || (right.active_at || '').localeCompare(left.active_at || '')
+    || right.updated_at.localeCompare(left.updated_at)
+    || left.title.localeCompare(right.title));
+}
+
 function listRows(database: DatabaseSync, project: string): LineageWorkspace[] {
   return (database.prepare(`
     select * from lineage_workspaces
@@ -132,24 +175,15 @@ function listRows(database: DatabaseSync, project: string): LineageWorkspace[] {
   `).all(project) as Row[]).map(rowToWorkspace);
 }
 
-function activeWorkspace(database: DatabaseSync, project: string): LineageWorkspace | null {
-  const row = database.prepare(`
-    select * from lineage_workspaces
-    where project_id = ? and status != 'archived'
-    order by active_at desc nulls last, updated_at desc
-    limit 1
-  `).get(project) as Row | undefined;
-  return row ? rowToWorkspace(row) : null;
-}
-
 export function listLineageWorkspaces(project: string): LineageWorkspaceSnapshot {
   const database = lineageDb();
   try {
     seedLegacyWorkspaces(database, project);
+    const workspaces = sortWorkspaces([...listRows(database, project), ...inferredLegacyWorkspaces(database, project)]);
     return {
       project,
-      active_workspace: activeWorkspace(database, project),
-      workspaces: listRows(database, project),
+      active_workspace: workspaces.find(workspace => workspace.status !== 'archived') || null,
+      workspaces,
       fetchedAt: nowIso(),
     };
   } finally {
@@ -161,7 +195,9 @@ export function inspectLineageWorkspace(project: string, workspaceId: string): L
   const database = lineageDb();
   try {
     seedLegacyWorkspaces(database, project);
-    const workspace = workspaceById(database, project, workspaceId) || workspaceByRoot(database, project, workspaceId);
+    const workspace = workspaceById(database, project, workspaceId)
+      || workspaceByRoot(database, project, workspaceId)
+      || inferredLegacyWorkspaces(database, project).find(item => item.id === workspaceId || item.root_asset_id === workspaceId);
     if (!workspace) throw new LineageWorkspaceError(`Unknown lineage workspace: ${workspaceId}`, 404);
     return workspace;
   } finally {
@@ -298,7 +334,8 @@ export function activeLineageWorkspaceRoot(project: string): string | undefined 
   const database = lineageDb();
   try {
     seedLegacyWorkspaces(database, project);
-    return activeWorkspace(database, project)?.root_asset_id;
+    return sortWorkspaces([...listRows(database, project), ...inferredLegacyWorkspaces(database, project)])
+      .find(workspace => workspace.status !== 'archived')?.root_asset_id;
   } finally {
     database.close();
   }

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { DatabaseSync } from 'node:sqlite';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useLineageTestProfile } from '../test/lineageTestProfile';
@@ -30,6 +31,7 @@ import {
 } from './assetLineageWorkspaces';
 import { registerLineageWorkspaceRoutes } from './lineageWorkspaceRoutes';
 import { fileSha256 } from './localReview';
+import { lineageDb } from './assetLineageDb';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage-workspaces');
 const dbFile = join(scratchDir, 'asset-lineage-workspaces.sqlite');
@@ -209,6 +211,30 @@ describe('lineage workspaces', () => {
     });
     expect(getLineageNextAsset(defaultProject, files.rootAId).next_asset?.asset_id).toBe(files.childAId);
     expect(getLineageNextAsset(defaultProject, files.rootBId).next_asset?.asset_id).toBe(files.childBId);
+  });
+
+  it('infers adopted legacy workspaces without writes when a profile command opens the database read-only', () => {
+    const files = seedTwoLineages();
+    const database = lineageDb();
+    database.exec('delete from lineage_workspaces');
+    database.close();
+    process.env.LINEAGE_DB_ACCESS = 'read-only';
+    try {
+      const snapshot = listLineageWorkspaces(defaultProject);
+
+      expect(snapshot.active_workspace).not.toBeNull();
+      expect(snapshot.workspaces.map(workspace => workspace.root_asset_id).sort()).toEqual([files.rootAId, files.rootBId].sort());
+      expect(inspectLineageWorkspace(defaultProject, files.rootAId)).toMatchObject({
+        created_by: 'system',
+        root_asset_id: files.rootAId,
+      });
+
+      const verification = new DatabaseSync(dbFile, { readOnly: true });
+      expect(verification.prepare('select count(*) count from lineage_workspaces').get()).toEqual({ count: 0 });
+      verification.close();
+    } finally {
+      delete process.env.LINEAGE_DB_ACCESS;
+    }
   });
 
   it('creates, updates, and activates explicit workspaces independently under one project', () => {

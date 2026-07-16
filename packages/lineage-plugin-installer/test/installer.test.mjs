@@ -20,6 +20,8 @@ import {
 } from "../src/installer.mjs";
 
 const cliPath = path.resolve("bin/lineage-plugin-installer.mjs");
+const installerVersion = "0.1.2";
+const releaseFixtureVersion = "0.1.13";
 
 test("parseLineageVersion accepts JSON strings and CLI output", () => {
   assert.equal(parseLineageVersion('"0.1.11"'), "0.1.11");
@@ -32,7 +34,7 @@ test("CLI prints installer package version", () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), "0.1.1");
+  assert.equal(result.stdout.trim(), installerVersion);
   assert.equal(result.stderr, "");
 });
 
@@ -43,7 +45,7 @@ test("CLI preserves install --version as the Lineage compatibility selector", ()
     "--plugin",
     path.resolve("../../plugins/lineage-codex-plugin"),
     "--version",
-    "0.1.11",
+    releaseFixtureVersion,
     "--target-dir",
     path.join(tmpdir(), "lineage-cli-version-selector-proof"),
     "--dry-run",
@@ -55,8 +57,8 @@ test("CLI preserves install --version as the Lineage compatibility selector", ()
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.dryRun, true);
-  assert.equal(output.pluginVersion, "0.1.11");
-  assert.equal(output.lineageVersion, "0.1.11");
+  assert.equal(output.pluginVersion, releaseFixtureVersion);
+  assert.equal(output.lineageVersion, releaseFixtureVersion);
 });
 
 test("resolveLineageVersion uses explicit version before npm channel lookup", async () => {
@@ -281,20 +283,20 @@ test("installPluginDirectory recovers an interrupted replacement before installi
 test("packPlugin dry-run validates artifact contents without writing dist files", async () => {
   const result = await packPlugin({
     plugin: path.resolve("../../plugins/lineage-codex-plugin"),
-    version: "0.1.11",
+    version: releaseFixtureVersion,
     outDir: path.resolve("dist-test-should-not-exist"),
     dryRun: true,
   });
 
   assert.equal(result.dryRun, true);
-  assert.equal(result.artifactName, "lineage-codex-plugin-0.1.11.tgz");
+  assert.equal(result.artifactName, `lineage-codex-plugin-${releaseFixtureVersion}.tgz`);
   assert.deepEqual(result.files, [
     ".codex-plugin/plugin.json",
     "README.md",
     "package.json",
     "skills/lineage-package-operator/SKILL.md",
   ]);
-  await assert.rejects(readFile(path.resolve("dist-test-should-not-exist", "lineage-codex-plugin-0.1.11.tgz")));
+  await assert.rejects(readFile(path.resolve("dist-test-should-not-exist", `lineage-codex-plugin-${releaseFixtureVersion}.tgz`)));
 });
 
 test("installPluginArtifact verifies local release artifact and dry-runs install", async () => {
@@ -305,13 +307,13 @@ test("installPluginArtifact verifies local release artifact and dry-runs install
       artifactFile: fixture.artifactPath,
       checksumFile: fixture.checksumPath,
       targetRoot: fixture.targetRoot,
-      expectedVersion: "0.1.11",
+      expectedVersion: releaseFixtureVersion,
       dryRun: true,
     });
 
     assert.equal(result.dryRun, true);
-    assert.equal(result.pluginVersion, "0.1.11");
-    assert.equal(result.lineageVersion, "0.1.11");
+    assert.equal(result.pluginVersion, releaseFixtureVersion);
+    assert.equal(result.lineageVersion, releaseFixtureVersion);
     assert.equal(result.checksum, fixture.checksum);
     assert.equal(result.artifact, fixture.artifactPath);
     await assert.rejects(readFile(path.join(fixture.targetRoot, "lineage-codex-plugin", ".codex-plugin", "plugin.json")));
@@ -323,14 +325,14 @@ test("installPluginArtifact verifies local release artifact and dry-runs install
 test("installFromOptions can fetch a release artifact from resolved URLs", async () => {
   const fixture = await createPluginArtifactFixture();
   const urls = releaseArtifactUrls({
-    version: "0.1.11",
-    releaseBaseUrl: "https://example.test/releases/v0.1.11",
+    version: releaseFixtureVersion,
+    releaseBaseUrl: `https://example.test/releases/v${releaseFixtureVersion}`,
   });
 
   try {
     const result = await installFromOptions({
-      version: "0.1.11",
-      releaseBaseUrl: "https://example.test/releases/v0.1.11",
+      version: releaseFixtureVersion,
+      releaseBaseUrl: `https://example.test/releases/v${releaseFixtureVersion}`,
       targetRoot: fixture.targetRoot,
       dryRun: true,
       fetchBytes: async (url) => {
@@ -342,7 +344,7 @@ test("installFromOptions can fetch a release artifact from resolved URLs", async
 
     assert.equal(result.artifact, urls.artifactUrl);
     assert.equal(result.checksumSource, urls.checksumUrl);
-    assert.equal(result.pluginVersion, "0.1.11");
+    assert.equal(result.pluginVersion, releaseFixtureVersion);
   } finally {
     await rm(fixture.temp, { recursive: true, force: true });
   }
@@ -359,7 +361,7 @@ test("installPluginArtifact rejects checksum mismatches before extraction", asyn
         artifactFile: fixture.artifactPath,
         checksumFile: badChecksumPath,
         targetRoot: fixture.targetRoot,
-        expectedVersion: "0.1.11",
+        expectedVersion: releaseFixtureVersion,
         dryRun: true,
       }),
       /Checksum mismatch/,
@@ -425,7 +427,7 @@ async function createPluginArtifactFixture() {
   const plugin = path.resolve("../../plugins/lineage-codex-plugin");
   const result = await packPlugin({
     plugin,
-    version: "0.1.11",
+    version: releaseFixtureVersion,
     outDir,
   });
   const artifactPath = result.artifactPath;

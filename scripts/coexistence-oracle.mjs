@@ -258,11 +258,38 @@ try {
   assert(new Set(statuses.map(status => status.runtime.database.path)).size === 3, 'Simultaneous services do not expose three database paths');
   assert(new Set(statuses.map(status => status.runtime.service.instance_id)).size === 3, 'Simultaneous services do not expose three instance IDs');
 
-  const secondWriter = invoke(stableLauncher, [
+  const routedWriter = invokeJson(stableLauncher, [
     'agent', 'claim', '--profile', stable.manifest, '--project', 'coexistence-oracle',
-    '--scope', 'lineage_workspace', '--target', 'second-writer', '--agent-name', 'oracle', '--ttl', '1m', '--json',
+    '--scope', 'lineage_workspace', '--target', 'managed-writer-route', '--agent-name', 'oracle', '--ttl', '1m', '--json',
   ]);
-  assert(secondWriter.status !== 0 && secondWriter.stderr.includes('active service writer'), 'Second writer was not refused while stable service owned the lease');
+  assert(routedWriter.claim_token, 'Stable CLI mutation did not route through the managed service');
+  invokeJson(stableLauncher, ['agent', 'release', '--profile', stable.manifest, '--claim-token', routedWriter.claim_token, '--json']);
+
+  const stableProfile = stable.doctor.profile;
+  const secondWriter = attempt(process.execPath, [join(stableInstall.package_root, 'dist', 'server.js')], {
+    env: {
+      ...controlledEnv,
+      HOST: '127.0.0.1',
+      LINEAGE_ASSET_ROOT: stableProfile.asset_root,
+      LINEAGE_CHANNEL: 'stable',
+      LINEAGE_DB: stableProfile.database_path,
+      LINEAGE_PROFILE: stableProfile.manifest_path,
+      LINEAGE_PROFILE_ENVIRONMENT: stableProfile.environment,
+      LINEAGE_PROFILE_FINGERPRINT: stableProfile.profile_fingerprint,
+      LINEAGE_PROFILE_ID: stableProfile.profile_id,
+      LINEAGE_PROFILE_MANIFEST: stableProfile.manifest_path,
+      LINEAGE_PROFILE_SERVICE_ORIGIN: stableProfile.service_origin,
+      LINEAGE_RELEASE_CHANNEL: 'stable',
+      LINEAGE_RUNTIME_RECEIPT: stableInstall.receipt_path,
+      NODE_ENV: 'production',
+      PORT: new URL(stableProfile.service_origin).port,
+    },
+    timeout: 5_000,
+  });
+  assert(
+    secondWriter.status !== 0 && secondWriter.stderr.includes('active service writer'),
+    `A second direct stable service writer was not refused while the managed service owned the lease: ${secondWriter.stderr || secondWriter.stdout || secondWriter.error?.message || 'no diagnostic'}`,
+  );
 
   stableReceiptPath = statuses[0].state_path;
   stableReceiptOriginal = readFileSync(stableReceiptPath);
@@ -308,6 +335,7 @@ try {
       'dev raw-path production write refused without database change',
       'stale packaged build failed managed status',
       'wrong service origin failed identity status',
+      'CLI mutation routed through authenticated managed writer',
       'second writer refused by stable service lease',
       'mismatched Codex plugin refused before install',
     ],

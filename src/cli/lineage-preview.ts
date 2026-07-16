@@ -2,7 +2,7 @@
 
 import { runLineageCli } from './lineageCli';
 
-runLineageCli({
+await runLineageCli({
   binName: 'lineage-preview',
   channel: 'preview',
   defaultHost: 'lineage-preview.localhost',

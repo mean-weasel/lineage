@@ -165,6 +165,19 @@ describe('agent claims', () => {
     expect(serializedReads).not.toContain(created.claim_token);
   });
 
+  it('projects expired status from read-only claims without mutating the stored row', () => {
+    const created = createWorkspaceClaim();
+    ageClaimHeartbeat(created.claim!.id, '2026-01-01T00:00:00.000Z', '2026-01-01T00:01:00.000Z');
+    process.env.LINEAGE_DB_ACCESS = 'read-only';
+
+    expect(listAgentClaims(defaultProject).claims[0]).toMatchObject({ status: 'expired', derived_state: 'expired' });
+    expect(inspectAgentClaim(created.claim!.id, defaultProject).claim).toMatchObject({ status: 'expired', derived_state: 'expired' });
+    const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+    const database = new DatabaseSync(dbFile, { readOnly: true });
+    expect(database.prepare('select status from agent_claims where id = ?').get(created.claim!.id)).toMatchObject({ status: 'active' });
+    database.close();
+  });
+
   it('blocks exact target conflicts unless force and reason are present', () => {
     const first = createWorkspaceClaim();
 

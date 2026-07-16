@@ -1,13 +1,13 @@
 {
   "name": "lineage-codex-plugin",
-  "version": "0.1.11",
+  "version": "0.1.13",
   "description": "Codex agent guidance for the public Lineage app and CLI package.",
   "author": {
     "name": "Mean Weasel"
   },
   "lineage": {
     "package": "@mean-weasel/lineage",
-    "version": "0.1.11"
+    "version": "0.1.13"
   },
   "skills": "./skills/",
   "interface": {

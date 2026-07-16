@@ -43,7 +43,9 @@ import { registerLineageTaskRoutes } from './server/lineageTaskRoutes';
 import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes';
 import { assertLineageCodeOrigin, getLineageRuntimeInfo, normalizeRuntimeChannel } from './server/runtimeInfo';
 import { assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, doctorLineageProfile } from './server/lineageProfiles';
+import { isManagedWriterRoutingError, registerManagedWriterRoute } from './server/managedWriterRouting';
 import { acquireProfileWriterLease } from './server/profileWriterLease';
+import { executeDelegatedLineageMutation, lineageCliCanDelegateMutation } from './cli/lineageCli';
 import type { ResolvedLineageProfile } from './shared/lineageProfileTypes';
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
 const runtimeChannel = normalizeRuntimeChannel(process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL);
@@ -93,6 +95,13 @@ const upload = multer({
     : multer.memoryStorage(),
 });
 app.use(express.json({ limit: '1mb' }));
+registerManagedWriterRoute(app, {
+  accepts: lineageCliCanDelegateMutation,
+  channel: runtimeChannel,
+  execute: executeDelegatedLineageMutation,
+  profile: startupProfile,
+  writerLease,
+});
 app.use((req, res, next) => {
   if (startupProfile || req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   res.status(409).json({
@@ -499,6 +508,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     return;
   }
   if (isGenerationReceiptError(error)) { res.status(error.status).json({ error: error.message }); return; }
+  if (isManagedWriterRoutingError(error)) { res.status(error.status).json({ error: error.message }); return; }
   if (isAgentClaimError(error)) {
     res.status(error.status).json({ error: error.code, message: error.message, conflicts: error.conflicts });
     return;
@@ -519,13 +529,14 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ error: message });
 });
 
-const server = app.listen(port, host, () => { console.log(`Lineage listening on http://${host}:${port}`); });
+const listenOrigin = `http://${host.includes(':') ? `[${host}]` : host}:${port}`;
+const server = app.listen(port, host, () => { console.log(`Lineage listening on ${listenOrigin}`); });
 const releaseWriterLease = () => writerLease?.release();
 process.once('exit', releaseWriterLease);
 process.once('SIGINT', () => { releaseWriterLease(); process.exit(130); });
 process.once('SIGTERM', () => { releaseWriterLease(); process.exit(143); });
 server.once('error', error => {
   releaseWriterLease();
-  console.error(`Lineage failed to listen on http://${host}:${port}: ${error.message}`);
+  console.error(`Lineage failed to listen on ${listenOrigin}: ${error.message}`);
   process.exit(1);
 });

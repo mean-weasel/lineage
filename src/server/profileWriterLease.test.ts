@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,9 +11,10 @@ import type { LineageProfileManifest, ResolvedLineageProfile } from '../shared/l
 import { lineageDb } from './assetLineageDb';
 import { repoRoot } from './assetCore';
 import { lineageProfileFingerprint } from './lineageProfiles';
-import { acquireProfileWriterLease, inspectProfileWriterLease, profileWriterLockPath } from './profileWriterLease';
+import { acquireProfileWriterLease, getProfileWriterDelegation, inspectProfileWriterLease, profileWriterLockPath } from './profileWriterLease';
 import { getLineageCodeIdentity } from './runtimeInfo';
-import { lineageCliRequiresWriterLease } from '../cli/lineageCli';
+import { lineageCliCanDelegateMutation, lineageCliRequiresWriterLease } from '../cli/lineageCli';
+import { managedWriterRequestSchemaVersion, managedWriterRoute, managedWriterTimeoutMs } from './managedWriterRouting';
 
 const scratchRoot = join(repoRoot, '.asset-scratch', 'vitest-profile-writer-lease');
 const originalEnv = { ...process.env };
@@ -55,11 +57,19 @@ describe('profile writer lease', () => {
     expect(reader.stdout).toContain('"claims": []');
     expect(inspectProfileWriterLease(profile)?.pid).toBe(owner.pid);
 
-    const cliWriter = await collectExit(spawnCli(profile, [
-      'agent', 'claim', '--scope', 'project', '--target', 'demo', '--agent-name', 'contender', '--json',
+    const routedWriter = await collectExit(spawnCli(profile, [
+      'agent', 'claim', '--scope', 'lineage_workspace', '--target', 'demo-project:lineage-workspace:root', '--agent-name', 'contender', '--json',
     ]));
-    expect(cliWriter.code).toBe(1);
-    expect(cliWriter.stderr).toContain('already has an active service writer');
+    expect(routedWriter, routedWriter.stderr).toMatchObject({ code: 0 });
+    expect(routedWriter.stdout).toContain('"agent_name": "contender"');
+    const conflict = await collectExit(spawnCli(profile, [
+      'agent', 'claim', '--scope', 'lineage_workspace', '--target', 'demo-project:lineage-workspace:root', '--agent-name', 'second', '--json',
+    ]));
+    expect(conflict.code).toBe(1);
+    expect(JSON.parse(conflict.stderr)).toMatchObject({
+      error: 'target_already_claimed',
+      conflicts: [expect.objectContaining({ agent_name: 'contender' })],
+    });
 
     const contender = spawnService(profile, 'dev');
     const rejected = await collectExit(contender);
@@ -70,6 +80,64 @@ describe('profile writer lease', () => {
     const stopped = await collectExit(owner);
     expect(stopped.code).toBe(143);
     expect(existsSync(profileWriterLockPath(profile))).toBe(false);
+  });
+
+  it('rejects unauthenticated, wrong-identity, protected-override, and non-allowlisted delegated requests', async () => {
+    const port = await availablePort();
+    const profile = testProfile('identity-owner', 'development', `http://127.0.0.1:${port}`);
+    bindProfileDatabase(profile);
+    const owner = spawnService(profile, 'dev');
+    await waitForLine(owner, `Lineage listening on http://127.0.0.1:${port}`);
+    const delegation = getProfileWriterDelegation(profile);
+    const identity = {
+      channel: 'dev',
+      environment: profile.environment,
+      profile_id: profile.profile_id,
+      schema_version: managedWriterRequestSchemaVersion,
+      service_origin: profile.service_origin,
+    };
+    const request = (body: Record<string, unknown>, token?: string) => fetch(new URL(managedWriterRoute, profile.service_origin), {
+      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-Lineage-Writer-Delegation': token } : {}),
+      },
+      method: 'POST',
+    });
+
+    const wrongIdentity = await request({ ...identity, args: ['claim'], command: 'agent', profile_id: 'wrong-profile' }, delegation.token);
+    expect(wrongIdentity.status).toBe(409);
+    const missingAuth = await request({ ...identity, args: ['claim'], command: 'agent' });
+    expect(missingAuth.status).toBe(401);
+    const unsupported = await request({ ...identity, args: ['status'], command: 'agent' }, delegation.token);
+    expect(unsupported.status).toBe(400);
+    const override = await request({ ...identity, args: ['claim', '--db', '/tmp/forbidden.sqlite'], command: 'agent' }, delegation.token);
+    expect(override.status).toBe(400);
+
+    owner.kill('SIGTERM');
+    await collectExit(owner);
+  });
+
+  it('fails closed without direct fallback when a live service lease has no listener', async () => {
+    const port = await availablePort();
+    const profile = testProfile('unavailable-service', 'development', `http://127.0.0.1:${port}`);
+    bindProfileDatabase(profile);
+    const before = createHash('sha256').update(readFileSync(profile.database_path)).digest('hex');
+    const owner = spawnLeaseChild(profile, true, 'dev');
+    await waitForLine(owner, 'ACQUIRED');
+
+    const result = await collectExit(spawnCli(profile, [
+      'agent', 'claim', '--scope', 'lineage_workspace', '--target', 'never-written', '--agent-name', 'offline', '--json',
+    ]));
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('is unavailable');
+    expect(result.stderr).toContain('no direct fallback was attempted');
+    expect(result.stderr).toContain('outcome is unknown');
+    expect(createHash('sha256').update(readFileSync(profile.database_path)).digest('hex')).toBe(before);
+    expect(inspectProfileWriterLease(profile)?.pid).toBe(owner.pid);
+    owner.kill('SIGKILL');
+    await collectExit(owner);
   });
 
   it('refuses a second writer in another process while the owner is alive', async () => {
@@ -225,6 +293,11 @@ describe('profile database writer enforcement', () => {
 });
 
 describe('CLI writer classification', () => {
+  it('allows slow imports while bounding ordinary delegated writes', () => {
+    expect(managedWriterTimeoutMs('reroll', ['import', '--job-id', 'job'])).toBe(300_000);
+    expect(managedWriterTimeoutMs('agent', ['claim'])).toBe(30_000);
+  });
+
   it('keeps read commands concurrent while requiring leases for mutations', () => {
     expect(lineageCliRequiresWriterLease('db', ['info'])).toBe(false);
     expect(lineageCliRequiresWriterLease('next', ['--root', 'root'])).toBe(false);
@@ -236,6 +309,20 @@ describe('CLI writer classification', () => {
     expect(lineageCliRequiresWriterLease('reroll', ['mark'])).toBe(true);
     expect(lineageCliRequiresWriterLease('tasks', ['claim'])).toBe(true);
     expect(lineageCliRequiresWriterLease('agent', ['claim'])).toBe(true);
+  });
+
+  it('allowlists every current delegated mutator and rejects reads or unknown writes', () => {
+    for (const [command, args] of [
+      ['link-child', ['--confirm-write']],
+      ['reroll', ['mark']], ['reroll', ['cancel']], ['reroll', ['plan']], ['reroll', ['import']],
+      ['tasks', ['claim']], ['tasks', ['start']], ['tasks', ['comment']], ['tasks', ['cancel']], ['tasks', ['override']], ['tasks', ['instructions']],
+      ['agent', ['claim']], ['agent', ['heartbeat']], ['agent', ['release']], ['agent', ['revoke']], ['agent', ['transfer']],
+    ] as Array<[string, string[]]>) {
+      expect(lineageCliCanDelegateMutation(command, args), `${command} ${args.join(' ')}`).toBe(true);
+    }
+    expect(lineageCliCanDelegateMutation('agent', ['status'])).toBe(false);
+    expect(lineageCliCanDelegateMutation('tasks', ['unknown-write'])).toBe(false);
+    expect(lineageCliCanDelegateMutation('unknown', ['write'])).toBe(false);
   });
 });
 

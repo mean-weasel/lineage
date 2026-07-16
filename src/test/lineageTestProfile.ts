@@ -28,6 +28,7 @@ let previousEnv: Partial<Record<(typeof managedEnvKeys)[number], string | undefi
 export function useLineageTestProfile(databasePath: string): ResolvedLineageProfile {
   resetLineageTestProfile();
   const resolvedDatabasePath = resolve(databasePath);
+  mkdirSync(join(repoRoot, '.asset-scratch'), { recursive: true });
   const scratchRoot = realpathSync(join(repoRoot, '.asset-scratch'));
   mkdirSync(dirname(resolvedDatabasePath), { recursive: true });
   const resolvedParent = realpathSync(dirname(resolvedDatabasePath));

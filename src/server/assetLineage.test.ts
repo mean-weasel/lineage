@@ -1064,7 +1064,26 @@ describe('asset lineage index', () => {
     expect(brief.brief.reference_asset_ids).toEqual([files.parentId, files.childId]);
     expect(brief.brief.prompt).toContain(`Create 3-4 variations using these 2 selected references: ${files.parentId}, ${files.childId}`);
     expect(brief.brief.prompt).toContain('Blend the strongest pieces.');
-    expect(brief.handoff.link_child_command).toContain('lineage link-child');
+    expect(brief.handoff.link_child_command).toContain('link-child');
+  });
+
+  it('uses the resolved profile manifest instead of a direct database path in generated handoffs', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    updateSelectedAsset(defaultProject, { assetId: files.parentId, confirmWrite: true, rootAssetId: files.parentId });
+    const profileManifest = process.env.LINEAGE_PROFILE_MANIFEST!;
+    process.env.LINEAGE_CHANNEL = 'dev';
+
+    const handoff = getLineageBrief(defaultProject, files.parentId).handoff;
+
+    for (const command of [handoff.next_command, handoff.inspect_command, handoff.link_child_command]) {
+      expect(command).toContain(`--profile '${profileManifest}'`);
+      expect(command).toContain(" --import '");
+      expect(command).toContain('/node_modules/tsx/dist/loader.mjs');
+      expect(command).toContain('/src/cli/lineage-dev.ts');
+      expect(command).not.toContain('--db');
+    }
+    delete process.env.LINEAGE_CHANNEL;
   });
 
   it('creates an agent brief and links a generated child from the selected base', () => {
@@ -1085,7 +1104,7 @@ describe('asset lineage index', () => {
     const brief = getLineageBrief(defaultProject, files.parentId);
     expect(brief.next_asset?.asset_id).toBe(files.childId);
     expect(brief.brief.prompt).toContain('Use the cleanest concept');
-    expect(brief.handoff.link_child_command).toContain('lineage link-child');
+    expect(brief.handoff.link_child_command).toContain('link-child');
 
     const dryRun = linkSelectedLineageChild(defaultProject, {
       childAssetId: files.variationId,

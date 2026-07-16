@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.13
+
+- Isolate stable, preview, and checkout-only development code into attested channel-specific roots with runtime doctor and tamper detection.
+- Require fingerprint-bound named profiles, opened-handle SQLite identity checks, one managed writer, consistent database clones, and referenced-asset-only migration receipts for persistent writes.
+- Ship profile-aware managed service lifecycles, a three-runtime adversarial coexistence oracle, and an atomic version-locked Codex plugin release/install path.
+
+## 0.1.12
+
+- Add named runtime profiles that bind environment, SQLite, media root, service origin, and expected runtime identity without allowing silent path drift.
+- Enforce a single cross-process writer lease per profile and route profile-bound mutations through the authenticated managed service while keeping inspections read-only.
+- Add opt-in `lineage.selection_packet.v2` exports whose stable semantic identity binds ordered selections to their current attempts and checksums for durable GrowthOps handoff receipts.
+
 ## 0.1.11
 
 - Add `--asset-root` / `LINEAGE_ASSET_ROOT` so installed Lineage packages can use external project catalogs and local media independently from the SQLite path.

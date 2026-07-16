@@ -48,7 +48,8 @@ import {
   doctorLineageProfile,
   resolveLineageProfile,
 } from '../server/lineageProfiles';
-import { acquireProfileWriterLease } from '../server/profileWriterLease';
+import { executeManagedWriterCommand } from '../server/managedWriterRouting';
+import { acquireProfileWriterLease, ProfileWriterLeaseConflictError } from '../server/profileWriterLease';
 import type {
   LineageProfileAssetsCloneResult,
   LineageProfileBindResult,
@@ -743,6 +744,38 @@ export function lineageCliRequiresWriterLease(command: string, args: string[]): 
   return true;
 }
 
+export function lineageCliCanDelegateMutation(command: string, args: string[]): boolean {
+  const subcommand = positionalArgs(args)[0] || '';
+  if (command === 'link-child') return true;
+  if (command === 'reroll') return ['mark', 'cancel', 'plan', 'import'].includes(subcommand);
+  if (command === 'tasks') return ['claim', 'start', 'comment', 'cancel', 'override', 'instructions'].includes(subcommand);
+  if (command === 'agent') return ['claim', 'heartbeat', 'release', 'revoke', 'transfer'].includes(subcommand);
+  return false;
+}
+
+function argsWithoutProfileSelector(args: string[]): string[] {
+  const filtered: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--profile') {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--profile=')) continue;
+    filtered.push(arg);
+  }
+  return filtered;
+}
+
+export function executeDelegatedLineageMutation(command: string, args: string[]): unknown {
+  if (!lineageCliCanDelegateMutation(command, args)) throw new Error(`Unsupported managed writer command: ${command}`);
+  if (command === 'agent') {
+    const agentCommand = args[0] || '';
+    return runLineageAgentCommand(agentCommand, args.slice(1));
+  }
+  return runLineageDataCommand(command, args);
+}
+
 function printDbResult(command: string, result: unknown, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
@@ -990,7 +1023,8 @@ function start(config: LineageCliConfig, args: string[]): void {
   });
 }
 
-export function runLineageCli(config: LineageCliConfig, args = process.argv.slice(2)): void {
+export async function runLineageCli(config: LineageCliConfig, args = process.argv.slice(2)): Promise<void> {
+  process.env.LINEAGE_CHANNEL = config.channel;
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
     printHelp(config);
     process.exit(0);
@@ -1065,14 +1099,21 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     return;
   }
 
+  let managedWriterProfile: ResolvedLineageProfile | undefined;
   try {
     const profile = prepareCliProfile(config, normalizedArgs.slice(1));
     const requiresWriter = lineageCliRequiresWriterLease(command, normalizedArgs.slice(1));
     if (profile) {
       if (requiresWriter) {
         delete process.env.LINEAGE_DB_ACCESS;
-        const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
-        process.once('exit', writerLease.release);
+        try {
+          const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
+          process.once('exit', writerLease.release);
+        } catch (error) {
+          if (!(error instanceof ProfileWriterLeaseConflictError) || error.owner.role !== 'service') throw error;
+          process.env.LINEAGE_DB_ACCESS = 'read-only';
+          managedWriterProfile = profile;
+        }
       } else {
         process.env.LINEAGE_DB_ACCESS = 'read-only';
       }
@@ -1093,7 +1134,10 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {
-      printDataResult(command, runLineageDataCommand(command, commandArgs), json);
+      const result = managedWriterProfile
+        ? await executeManagedWriterCommand(managedWriterProfile, config.channel, command, argsWithoutProfileSelector(commandArgs))
+        : runLineageDataCommand(command, commandArgs);
+      printDataResult(command, result, json);
     } catch (error) {
       const message = redactAgentClaimTokens(error instanceof Error ? error.message : String(error));
       if (json) {
@@ -1128,7 +1172,15 @@ export function runLineageCli(config: LineageCliConfig, args = process.argv.slic
     const agentCommand = normalizedArgs[1] || '';
     const json = commandArgs.includes('--json');
     try {
-      printAgentResult(agentCommand, runLineageAgentCommand(agentCommand, commandArgs), json);
+      const result = managedWriterProfile
+        ? await executeManagedWriterCommand(
+          managedWriterProfile,
+          config.channel,
+          'agent',
+          argsWithoutProfileSelector([agentCommand, ...commandArgs]),
+        )
+        : runLineageAgentCommand(agentCommand, commandArgs);
+      printAgentResult(agentCommand, result, json);
     } catch (error) {
       const message = redactAgentClaimTokens(error instanceof Error ? error.message : String(error));
       if (json) {

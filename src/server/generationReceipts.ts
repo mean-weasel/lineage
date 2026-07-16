@@ -7,6 +7,7 @@ import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 import { cancelLineageIterateTasksForAssets, listLineageTasks, resolveLineageTask } from './assetLineageTasks';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
+import { lineagePublicPackageCommand, lineageRuntimeSelector } from './lineageRuntimeCommand';
 import type {
   GenerationHandoffPacket,
   GenerationImportResponse,
@@ -82,7 +83,7 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
   const importFilesFlag = parents.length > 1
     ? `--parent-files ${quote(parents.map(mapping => `${mapping.parent.asset_id}=<${mapping.output_indexes.map(index => `file-${index}`).join(',')}>`).join(';'))}`
     : '--files <comma-separated-.asset-scratch-files>';
-  const importCommand = `npx lineage generate image import --project ${quote(project)} --job-id ${quote(id)} ${importFilesFlag} --confirm-write --json`;
+  const importCommand = `${lineagePublicPackageCommand()} generate image import --project ${quote(project)} --job-id ${quote(id)} ${importFilesFlag} --confirm-write ${lineageRuntimeSelector()} --json`;
   return {
     schema_version: 'lineage.generation_handoff.v1', provider, project, job_id: id, prompt, expected_output_count: count,
     per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,
@@ -107,7 +108,7 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
 }
 
 function buildRerollHandoff(project: string, id: string, prompt: string, rootAssetId: string, target: { asset_id: string; title: string; local_path?: string; s3_key?: string }, request: LineageRerollRequest): GenerationHandoffPacket {
-  const importCommand = `npx lineage reroll import --project ${quote(project)} --job-id ${quote(id)} --file <.asset-scratch-file> --confirm-write --json`;
+  const importCommand = `${lineagePublicPackageCommand()} reroll import --project ${quote(project)} --job-id ${quote(id)} --file <.asset-scratch-file> --confirm-write ${lineageRuntimeSelector()} --json`;
   return {
     schema_version: 'lineage.generation_handoff.v1',
     provider,
