@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexLineageAssets, updateAssetReview } from './assetLineage';
 import { getReviewQueue } from './assetReviewQueue';
@@ -12,7 +13,7 @@ const dbFile = join(dbDir, 'asset-lineage.sqlite');
 describe('asset review queue', () => {
   beforeEach(() => {
     rmSync(dbDir, { force: true, recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
   });
 
   it('summarizes local QA and posting state without live S3 access', () => {

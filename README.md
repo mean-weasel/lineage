@@ -4,41 +4,62 @@ Lineage is a local-first workspace for reviewing creative assets, branching vari
 
 ## Package Channels
 
-Lineage is packaged as `@mean-weasel/lineage`. Use `latest` for the stable dogfood or production install, and use `next` when you intentionally want the published preview candidate:
+Lineage is packaged as `@mean-weasel/lineage`, but stable and preview must not
+be installed into the same global npm prefix. A global `npm install -g ...@next`
+would replace the files and bins used by `latest`.
+
+Use the stable package only as a bootstrap for the channel installer, then
+resolve `latest` and `next` into separate content-addressed roots:
 
 ```bash
 npm install -g @mean-weasel/lineage@latest
-npm install -g @mean-weasel/lineage@next
+lineage-channel install stable
+lineage-channel install preview
 ```
 
-The stable, preview, and dev channels are intended to coexist conceptually:
+By default the installer writes immutable version/integrity roots beneath
+`~/Library/Application Support/Lineage/runtimes`, plus channel-qualified
+launchers in its `bin` directory. Every launcher is pinned to an absolute
+package root and install receipt; it does not select code from `PATH` at runtime.
 
-- `latest` is the version you should trust for day-to-day dogfooding.
-- `next` is the published preview version to test before promotion.
-- `dev` is the local GitHub checkout or branch before publication.
-- `lineage` runs with stable runtime defaults.
-- `lineage-dev` runs with dev runtime defaults.
+The three exact channel meanings are:
 
-The package includes both CLI bridge bins for help and version checks:
+- `stable` is npm `latest`, launched as `lineage-stable` from its receipt-bound root.
+- `preview` is npm `next`, launched as `lineage-preview` from a different root.
+- `dev` is the current Git checkout/worktree, launched from source with
+  `npm run lineage:dev -- <command>`.
+
+Verify code identity before inspecting data or starting a service:
 
 ```bash
-lineage --help
-lineage --version
-lineage-dev --help
-lineage-dev --version
+lineage-stable runtime doctor --json
+lineage-preview runtime doctor --json
+npm run lineage:dev -- runtime doctor --json
 ```
 
-Both bins can also run the bundled production server:
+`runtime doctor` fails unless channel, canonical package/checkout root, exact
+version, embedded Git/build fingerprint, install receipt, and installed package
+tree agree. `runtime info` prints the same identity without requiring it to pass
+and is intended for repair diagnostics.
+
+A published package still carries a `lineage-dev` migration stub so old global
+links fail with checkout guidance. It never runs package code as dev.
+
+Start each foreground runtime explicitly:
 
 ```bash
-lineage start
-lineage-dev start
+lineage-stable start --profile team-production
+lineage-preview start --profile team-preview
+npm run lineage:dev -- start --profile team-development
 ```
 
-By default, `lineage start` listens on `lineage.localhost:5197` and stores SQLite state in a stable Lineage runtime directory. `lineage-dev start` listens on `lineage-dev.localhost:5198` and uses a separate development SQLite file. Override those defaults with `--port`, `--host`, `--db`, or `LINEAGE_HOME`:
+Stable defaults to `lineage.localhost:5197`, dev to
+`lineage-dev.localhost:5198`, and preview to
+`lineage-preview.localhost:5199`. Override those defaults with `--port`,
+`--host`, `--db`, or `LINEAGE_HOME`:
 
 ```bash
-lineage start --port 6123 --db ~/.lineage/lineage.sqlite --asset-root /absolute/path/to/asset-repo
+lineage-stable start --profile team-production --port 6123
 ```
 
 `--db` selects the SQLite state file. `--asset-root` (or
@@ -50,17 +71,19 @@ web assets, and public demo fixtures.
 
 ## Runtime Channels and SQLite
 
-Lineage treats app code channels and local SQLite data as separate concerns:
+Lineage treats attested code identity and local SQLite data identity as separate,
+simultaneously required concerns:
 
-- `stable` is npm `latest` and is the daily-use channel.
-- `preview` is the published candidate channel, normally npm `next`.
-- `dev` is a GitHub checkout or local branch before publication.
+- `stable` is the isolated npm `latest` install and daily-use channel.
+- `preview` is the isolated npm `next` candidate.
+- `dev` is the current Git checkout/worktree and may be dirty.
 
-Each channel should use its own default runtime directory and SQLite database.
-Do not point preview or dev code at the stable database unless you are doing an
-intentional, explicit test. Prefer copying a stable snapshot forward when a
-realistic preview/dev dataset is needed. `--db` and `LINEAGE_DB` remain the
-escape hatches for intentionally choosing a database.
+Each channel must use its own code root, runtime directory, and SQLite database.
+Do not point preview or dev code at the stable database. Use the profile clone
+command when a realistic preview/dev dataset is needed; it reads the source
+through SQLite's online backup API and gives the target a fresh non-production
+identity. Direct `--db` and `LINEAGE_DB` selection is diagnostic/read-only
+unless a matching named profile has been selected and its writer lease is held.
 
 For repeatable or multi-session work, prefer a named profile over those legacy
 path defaults. A profile is an immutable identity contract for one Lineage
@@ -71,6 +94,11 @@ service and its data:
   "schema_version": "lineage.profile.v1",
   "profile_id": "team-production",
   "environment": "production",
+  "expected_runtime": {
+    "channel": "stable",
+    "code_origin": "package",
+    "code_fingerprint": "<64-character fingerprint from runtime doctor>"
+  },
   "database_path": "./lineage.sqlite",
   "asset_root": "./media",
   "service_origin": "http://lineage.localhost:5197"
@@ -83,47 +111,101 @@ and asset paths resolve from the manifest directory. Inspect a profile without
 creating or migrating anything:
 
 ```bash
-lineage profile doctor --profile team-production --json
-lineage profile bind --profile team-production --confirm-write --json
-lineage start --profile team-production
+lineage-stable profile doctor --profile team-production --json
+lineage-stable start --profile team-production
 ```
 
 `LINEAGE_PROFILE` is equivalent to `--profile`. Profile commands reject direct
 `--db` and `--asset-root` overrides, and a dev or preview runtime refuses to
 open a production profile. Doctor also requires the existing SQLite database
-to have one matching `lineage_profile_identity` binding; `profile bind` creates
-that identity for a new database or explicitly adopts a legacy database, and
-requires `--confirm-write`. Profile creation and database binding remain
-separate migration operations. A
-command without a profile remains compatible but is labeled `legacy-unbound`.
+to have one matching `lineage_profile_identity` binding, including the profile
+manifest fingerprint. Binding is an explicit migration operation:
+
+```bash
+lineage-stable profile bind --profile team-production --confirm-write --json
+```
+
+The profile must pin the exact verified code origin and fingerprint before it
+can be bound or used for writes. `profile bind` may add a fingerprint to a
+matching legacy identity, but refuses a conflicting identity. An unprofiled
+CLI or service is `legacy-unbound` and read-only; mutating CLI commands and HTTP
+methods fail with a profile-required error instead of creating a database.
+
+To create a realistic preview or development database without copying a live
+SQLite file directly, define a new non-production target profile whose database
+does not exist, then run:
+
+```bash
+lineage-preview profile clone --source-db /path/to/source.sqlite \
+  --target-profile team-preview --confirm-write --json
+npm run lineage:dev -- profile clone --source-db /path/to/source.sqlite \
+  --target-profile team-development --confirm-write --json
+```
+
+Clone refuses production targets, existing target files, source/target path
+reuse, unverified code, and missing confirmation. It writes a local receipt
+under the target profile directory after SQLite integrity and identity checks.
+
+When migrating a legacy installation whose production media still lives under
+a development checkout, stage only database-referenced local files into the
+new profile's nonexistent, dedicated asset root before binding or starting it:
+
+```bash
+lineage-stable profile clone-assets --source-asset-root /path/to/legacy/checkout \
+  --target-profile team-production --confirm-write --json
+```
+
+Asset clone holds the target profile's writer lease, refuses reused or nested
+roots and escaping references, reserves the target without clobbering, verifies
+every copied file by SHA-256, uses owner-only permissions, and writes a compact
+receipt. Missing legacy references are counted rather than silently replaced;
+unreferenced checkout scratch files are not copied. Inspect that count before
+binding the database. The source database and asset tree remain read-only.
 
 A named profile has one cross-process writer lease at
-`<resolved-database-path>.writer.lock`. The managed service holds that lease for its
-lifetime, so a second service is refused while it is running. Named-profile
-mutating CLI commands, including generated claim, heartbeat, link-child, and
-re-roll import handoffs, use an authenticated profile-bound route through that
-service instead of opening SQLite as a competing writer. The request and
-response identities must match the selected profile, environment, channel, and
-configured localhost origin; an unavailable or mismatched service fails closed
-without a direct-write fallback. A CLI data command may hold the same lease
-directly only while the service is offline. Lineage verifies lease ownership
-before opening a named-profile database for writes and configures SQLite with
-WAL journaling and a five-second busy timeout. If an owner was killed, the next
-writer may reclaim the lock only after the recorded PID is no longer alive;
-malformed or mismatched lock metadata is left in place for manual inspection.
-`profile doctor` never acquires or modifies the lease. Legacy-unbound databases
-retain their existing compatibility behavior and also use WAL.
+`<profile-directory>/writer.lock`. The managed service holds that lease for its
+lifetime, so a second service or one-shot CLI writer is refused while it is
+running. A CLI data command may hold the same lease only while the service is
+offline. Lineage verifies lease ownership before opening a named-profile
+database for writes and configures SQLite with WAL journaling and a five-second
+busy timeout. If an owner was killed, the next writer may reclaim the lock only
+after the recorded PID is no longer alive; malformed or mismatched lock metadata
+is left in place for manual inspection. `profile doctor` never acquires or
+modifies the lease. The lease records both the immutable profile ID and manifest
+fingerprint; legacy-unbound access never acquires a writer lease.
 
 Check the active runtime before making changes:
 
 ```bash
-lineage db info --json
-lineage-dev db info --json
+lineage-stable db info --profile team-production --json
+lineage-preview db info --profile team-preview --json
+npm run lineage:dev -- db info --profile team-development --json
 ```
 
+Managed services are profile-scoped. Their receipts record the launcher PID
+and start token, unique service instance, code root/fingerprint, profile and
+database fingerprints, origin, and log path. Start waits for `/api/runtime` to
+match every field before reporting success or opening a browser. Status exits
+nonzero for a stale PID, unreachable service, current-code drift, wrong port,
+or any code/profile/database/instance mismatch:
+
+```bash
+make start-prod-bg LINEAGE_PROD_PROFILE=team-production
+make status-prod LINEAGE_PROD_PROFILE=team-production
+make start-preview-bg LINEAGE_PREVIEW_PROFILE=team-preview
+make start-dev-bg LINEAGE_DEV_PROFILE=team-development
+```
+
+Use the matching `status-*`, `logs-*`, and `stop-*` target with the same profile
+variable. Stable and preview targets execute the service controller from that
+channel's attested, content-addressed package root; only dev executes the
+checkout controller. Stop signals only the process identity recorded for that profile.
+Checkout-backed `start-local-prod` and registration-only launchd/tmux status
+paths are intentionally not supported.
+
 The app shows a persistent environment/profile badge, and Settings includes the
-profile binding, channel, version, Git SHA when available, schema markers, and
-SQLite path.
+profile binding, code origin/root/fingerprint, channel, version, embedded Git
+revision, schema markers, and SQLite path.
 
 ## Agent Claims
 
@@ -242,15 +324,27 @@ whose version or `lineage.version` does not exactly match the resolved Lineage
 package version. The plugin artifact and installer package are released from
 this public repository.
 
+Every Lineage release preflights the current operator skill, packs and checksums
+the exact matching plugin, installs that artifact into a temporary Codex plugin
+root, and attaches both files to the versioned GitHub release before npm publish
+or dist-tag mutation is allowed. Release status reports the local version lock
+and GitHub assets. The installed skill requires isolated channel launchers,
+named profiles, managed service identity status, and profile-only writes.
+
 ## Local Development
 
 ```bash
 npm ci
 npm run dev
 npm run ci
+npm run runtime:oracle
 ```
 
 `npm run dev` starts the local development server from source. `npm run ci` runs the full local verification gate.
+`npm run runtime:oracle` creates three temporary code roots, profiles,
+databases, ports, and managed services, proves their identities are distinct
+while all are live, attacks every cross-channel and stale-identity boundary,
+and then cleans up.
 
 ## Command Shortcuts
 
@@ -260,7 +354,9 @@ verification commands. Run `make` or `make help` to list the available targets.
 ```bash
 make install-prod
 make install-plugin-prod
-make start-prod
+make start-prod LINEAGE_PROD_PROFILE=team-production
+make start-prod-bg LINEAGE_PROD_PROFILE=team-production
+make status-prod LINEAGE_PROD_PROFILE=team-production
 make check
 make smoke
 ```
@@ -287,7 +383,7 @@ npm run release:dry-run -- --tag latest
 npm run release:latest
 ```
 
-The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, and package contents before publishing. Promotion also installs the candidate package and runs a claim lifecycle smoke that creates a target claim, proves missing-token writes fail, proves matching-token writes succeed, verifies read surfaces do not expose the raw token, and proves release invalidates the token. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
+The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, package contents, and the version-locked Codex plugin before publishing. The GitHub plugin artifact and checksum must exist before npm publish or dist-tag mutation. Promotion also installs the candidate package and runs a claim lifecycle smoke that creates a target claim, proves missing-token writes fail, proves matching-token writes succeed, verifies read surfaces do not expose the raw token, and proves release invalidates the token. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
 
 Use the Release workflow operations this way:
 

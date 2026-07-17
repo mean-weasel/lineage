@@ -38,6 +38,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Resolve current Lineage compatibility version
+        run: |
+          plugin_version="$(node -p 'require("./package.json").version')"
+          echo "PLUGIN_VERSION=$plugin_version" >> "$GITHUB_ENV"
+
       - name: Run installer tests
         run: npm test --prefix packages/lineage-plugin-installer
 
@@ -48,11 +53,11 @@ jobs:
         run: cd packages/lineage-plugin-installer && npm pack --dry-run --json
 
       - name: Dry-run matching plugin artifact
-        run: node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.7 --dry-run --json
+        run: node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version "$PLUGIN_VERSION" --dry-run --json
 
       - name: Reject mismatched plugin artifact version
         run: |
-          if node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.1.6 --dry-run --json; then
+          if node packages/lineage-plugin-installer/scripts/pack-plugin.mjs --plugin plugins/lineage-codex-plugin --version 0.0.0-mismatch --dry-run --json; then
             echo "::error::Mismatched plugin artifact version was accepted."
             exit 1
           fi

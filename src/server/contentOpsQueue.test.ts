@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { createAgentClaim } from './agentClaims';
 import { fileSha256 } from './localReview';
@@ -19,7 +20,7 @@ let postClaimTokens: Record<string, string> = {};
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.LINEAGE_DB = dbFile;
+  useLineageTestProfile(dbFile);
   postClaimTokens = {};
 }
 

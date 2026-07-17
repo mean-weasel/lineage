@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageAttempts, getLineageSnapshot, indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
@@ -19,7 +20,7 @@ import { fileSha256 } from './localReview';
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
-const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-generation-receipts');
+const scratchDir = join(repoRoot, '.asset-scratch', 'vitest generation receipts');
 const dbFile = join(scratchDir, 'generation-receipts.sqlite');
 
 function localId(file: string): string {
@@ -224,15 +225,13 @@ describe('generation receipts', () => {
   beforeEach(() => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
-    process.env.LINEAGE_DB = dbFile;
-    delete process.env.LINEAGE_CHANNEL;
-    delete process.env.LINEAGE_PROFILE_MANIFEST;
+    useLineageTestProfile(dbFile);
   });
 
   it('plans, inspects, and imports local generation outputs as lineage children', () => {
     const lineage = setupSelectedLineage();
     process.env.LINEAGE_CHANNEL = 'dev';
-    process.env.LINEAGE_PROFILE_MANIFEST = '/tmp/lineage profiles/development-main/profile.json';
+    const profileManifest = process.env.LINEAGE_PROFILE_MANIFEST!;
     const plan = planImageGeneration(defaultProject, {
       count: 2,
       fromLineageSelection: true,
@@ -243,7 +242,7 @@ describe('generation receipts', () => {
     expect(plan.job.inputs).toHaveLength(1);
     expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'lineage_next_base' });
     expect(plan.job.handoff.provider).toBe('codex-handoff');
-    expect(plan.job.handoff.import_command).toContain("--profile '/tmp/lineage profiles/development-main/profile.json'");
+    expect(plan.job.handoff.import_command).toContain(`--profile '${profileManifest}'`);
     expect(plan.job.receipts[0]).toMatchObject({ receipt_type: 'plan', status: 'ok' });
 
     const inspected = inspectImageGeneration(defaultProject, plan.job.id);
@@ -446,7 +445,7 @@ describe('generation receipts', () => {
   it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
     const lineage = setupSelectedLineage('reroll');
     process.env.LINEAGE_CHANNEL = 'dev';
-    process.env.LINEAGE_PROFILE_MANIFEST = '/tmp/lineage profiles/development-main/profile.json';
+    const profileManifest = process.env.LINEAGE_PROFILE_MANIFEST!;
     const marked = markLineageRerollRequest(defaultProject, {
       rootAssetId: lineage.rootId,
       nodeAssetId: lineage.selectedId,
@@ -464,7 +463,7 @@ describe('generation receipts', () => {
     expect(plan.job.source_mode).toBe('lineage_reroll');
     expect(plan.job.expected_output_count).toBe(1);
     expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'reroll_target' });
-    expect(plan.job.handoff.import_command).toContain("--profile '/tmp/lineage profiles/development-main/profile.json'");
+    expect(plan.job.handoff.import_command).toContain(`--profile '${profileManifest}'`);
 
     const beforeEdges = countRows('asset_edges');
     const imported = importImageRerollOutput(defaultProject, {

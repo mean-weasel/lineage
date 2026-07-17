@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
@@ -14,7 +15,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const parent = join(scratchDir, 'parent.png');
   const child = join(scratchDir, 'child.png');
@@ -25,7 +25,8 @@ function seedFiles() {
 
 describe('asset lineage selection migration', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   it('drops a legacy root-level selection index from partially migrated databases', () => {

@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateLineageLayout, updateSelectedAsset } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
@@ -17,7 +18,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const parent = join(scratchDir, 'demo-lineage-remove-parent.png');
   const child = join(scratchDir, 'demo-lineage-remove-child.png');
@@ -35,7 +35,8 @@ function seedFiles() {
 
 describe('lineage node removal', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   it('blocks removing the root lineage node', () => {

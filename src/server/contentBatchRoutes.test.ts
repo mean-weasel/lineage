@@ -3,6 +3,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { createAgentClaim, isAgentClaimError } from './agentClaims';
 import { defaultProject, repoRoot } from './assetCore';
 import { contentBatchRouter } from './contentBatchRoutes';
@@ -52,7 +53,7 @@ async function postJson(baseUrl: string, path: string, body: Record<string, unkn
 describe('content batch routes', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
     process.env.LINEAGE_CONTENT_SOURCE_ROOT = join(scratchDir, 'missing-content-source');
   });
 

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { fileSha256 } from './localReview';
 import {
@@ -32,8 +33,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
-  mkdirSync(scratchDir, { recursive: true });
   const root = join(scratchDir, 'demo-linkedin-selection-root.png');
   const child = join(scratchDir, 'demo-linkedin-selection-child.png');
   writeFileSync(root, Buffer.from('selection-packet-root'));
@@ -99,7 +98,9 @@ function seedCurrentReroll(files: ReturnType<typeof seedSelectedWorkspace>, cont
 
 describe('lineage selection packet', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    mkdirSync(scratchDir, { recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   afterEach(() => {

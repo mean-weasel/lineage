@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { getLineageAttempts, getLineageNextAsset, getLineageSnapshot, indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import {
@@ -45,7 +46,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const rootA = join(scratchDir, 'demo-tiktok-hook-root-a.png');
   const childA = join(scratchDir, 'demo-tiktok-hook-child-a.png');
@@ -162,7 +162,8 @@ async function postJson<T>(baseUrl: string, path: string, body: Record<string, u
 
 describe('lineage workspaces', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
     rmSync(demoProjectDir, { force: true, recursive: true });
     rmSync(demoFilesDir, { force: true, recursive: true });
   });

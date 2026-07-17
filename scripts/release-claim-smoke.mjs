@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function readOption(name, fallback) {
   const prefix = `${name}=`;
@@ -70,9 +72,25 @@ async function stopServer(server) {
   if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');
 }
 
+function parseJsonOutput(output, label) {
+  const trimmed = output.trim();
+  const candidates = [trimmed];
+  for (let index = trimmed.lastIndexOf('\n{'); index >= 0; index = trimmed.lastIndexOf('\n{', index - 1)) {
+    candidates.push(trimmed.slice(index + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Node may prefix structured CLI output with process warnings.
+    }
+  }
+  throw new Error(`${label} did not return a trailing JSON object`);
+}
+
 function runJson(command, commandArgs, options) {
   const output = execFileSync(command, commandArgs, { ...options, encoding: 'utf8' });
-  return JSON.parse(output);
+  return parseJsonOutput(output, commandArgs.join(' '));
 }
 
 function runExpectFailure(command, commandArgs, options) {
@@ -81,7 +99,7 @@ function runExpectFailure(command, commandArgs, options) {
   } catch (error) {
     const stderr = error.stderr?.toString() || '';
     try {
-      return JSON.parse(stderr);
+      return parseJsonOutput(stderr, commandArgs.join(' '));
     } catch {
       throw new Error(`Expected JSON failure from ${commandArgs.join(' ')}, got: ${stderr.trim() || error.message}`);
     }
@@ -98,15 +116,58 @@ function assertNoToken(value, token, label) {
 const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-release-claim-smoke-'));
 
 try {
-  execFileSync('npm', ['init', '-y'], { cwd: tmpProject, stdio: 'ignore' });
-  execFileSync('npm', ['install', packageSpec], { cwd: tmpProject, stdio: 'ignore' });
-
-  const bin = join(tmpProject, 'node_modules', '.bin', 'lineage');
+  const channelCli = join(root, 'src', 'cli', 'lineage-channel.ts');
+  const runtimeRoot = join(tmpProject, 'runtimes');
+  const shimDir = join(tmpProject, 'bin');
+  mkdirSync(shimDir, { recursive: true });
+  const install = runJson(process.execPath, ['--import', 'tsx', channelCli,
+    'install', 'stable', '--package', packageSpec,
+    '--root', runtimeRoot, '--shim-dir', shimDir, '--json',
+  ], { cwd: root });
+  if (
+    install.package_source !== 'registry'
+    || install.package_spec !== packageSpec
+    || typeof install.package_integrity !== 'string'
+    || !install.package_integrity.startsWith('sha512-')
+  ) {
+    throw new Error('Release claim smoke did not install the exact registry package with an integrity receipt');
+  }
+  const bin = install.shim;
+  const code = runJson(bin, ['runtime', 'doctor', '--json'], { cwd: tmpProject });
+  if (
+    !code.verified
+    || code.channel !== 'stable'
+    || code.origin !== 'package'
+    || code.package_version !== install.package_version
+    || realpathSync(code.root) !== realpathSync(install.package_root)
+  ) {
+    throw new Error('Release claim smoke did not resolve a verified stable package receipt');
+  }
   const port = await freePort();
   const dbPath = join(tmpProject, 'claim-smoke.sqlite');
+  const manifestPath = join(tmpProject, 'profile.json');
+  const assetRoot = join(tmpProject, 'assets');
+  mkdirSync(assetRoot, { recursive: true });
+  writeFileSync(dbPath, '');
+  writeFileSync(manifestPath, `${JSON.stringify({
+    asset_root: assetRoot,
+    database_path: dbPath,
+    environment: 'production',
+    expected_runtime: {
+      channel: 'stable',
+      code_fingerprint: code.fingerprint,
+      code_origin: 'package',
+    },
+    profile_id: 'release-claim-smoke',
+    schema_version: 'lineage.profile.v1',
+    service_origin: `http://127.0.0.1:${port}`,
+  }, null, 2)}\n`, { mode: 0o600 });
+  runJson(bin, ['profile', 'bind', '--profile', manifestPath, '--confirm-write', '--json'], { cwd: tmpProject });
+  const profileDoctor = runJson(bin, ['profile', 'doctor', '--profile', manifestPath, '--json'], { cwd: tmpProject });
+  if (!profileDoctor.ok) throw new Error('Release claim smoke profile did not pass doctor after binding');
   let stdout = '';
   let stderr = '';
-  const server = spawn(bin, ['start', '--host', '127.0.0.1', '--port', String(port), '--db', dbPath, '--json'], {
+  const server = spawn(bin, ['start', '--profile', manifestPath, '--json'], {
     cwd: tmpProject,
     env: { ...process.env, LINEAGE_HOME: join(tmpProject, 'lineage-home') },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -128,7 +189,7 @@ try {
       '--target-title', 'Release claim smoke lineage',
       '--agent-name', 'Release claim smoke',
       '--ttl', '20m',
-      '--db', dbPath,
+      '--profile', manifestPath,
       '--json',
     ], { cwd: tmpProject });
     const claimId = created.claim?.id;
@@ -141,7 +202,7 @@ try {
       '--root', rootAsset,
       '--child', childAsset,
       '--confirm-write',
-      '--db', dbPath,
+      '--profile', manifestPath,
       '--json',
     ], { cwd: tmpProject });
     if (denied.error !== 'claim_required') throw new Error(`Expected claim_required denial, got ${denied.error || '(missing)'}`);
@@ -153,23 +214,23 @@ try {
       '--child', childAsset,
       '--claim-token', claimSecret,
       '--confirm-write',
-      '--db', dbPath,
+      '--profile', manifestPath,
       '--json',
     ], { cwd: tmpProject });
     if (linked.edge?.parent_asset_id !== rootAsset || linked.edge?.child_asset_id !== childAsset || linked.dryRun) {
       throw new Error('Claimed link-child did not write the expected edge');
     }
 
-    const heartbeat = runJson(bin, ['agent', 'heartbeat', '--claim-token', claimSecret, '--db', dbPath, '--json'], { cwd: tmpProject });
+    const heartbeat = runJson(bin, ['agent', 'heartbeat', '--claim-token', claimSecret, '--profile', manifestPath, '--json'], { cwd: tmpProject });
     if (heartbeat.claim?.id !== claimId || heartbeat.claim?.status !== 'active') throw new Error('Heartbeat did not keep the claim active');
 
-    const status = runJson(bin, ['agent', 'status', '--project', project, '--db', dbPath, '--json'], { cwd: tmpProject });
-    const inspected = runJson(bin, ['agent', 'inspect', '--claim', claimId, '--project', project, '--db', dbPath, '--json'], { cwd: tmpProject });
+    const status = runJson(bin, ['agent', 'status', '--project', project, '--profile', manifestPath, '--json'], { cwd: tmpProject });
+    const inspected = runJson(bin, ['agent', 'inspect', '--claim', claimId, '--project', project, '--profile', manifestPath, '--json'], { cwd: tmpProject });
     assertNoToken(status, claimSecret, 'agent status');
     assertNoToken(inspected, claimSecret, 'agent inspect');
     if (!inspected.events?.some(event => event.event_type === 'write_allowed')) throw new Error('Claim inspect did not include write_allowed history');
 
-    const released = runJson(bin, ['agent', 'release', '--claim-token', claimSecret, '--db', dbPath, '--json'], { cwd: tmpProject });
+    const released = runJson(bin, ['agent', 'release', '--claim-token', claimSecret, '--profile', manifestPath, '--json'], { cwd: tmpProject });
     if (released.claim?.status !== 'released') throw new Error('Release did not close the claim');
 
     const afterRelease = runExpectFailure(bin, [
@@ -179,7 +240,7 @@ try {
       '--child', childAsset,
       '--claim-token', claimSecret,
       '--confirm-write',
-      '--db', dbPath,
+      '--profile', manifestPath,
       '--json',
     ], { cwd: tmpProject });
     if (afterRelease.error !== 'claim_not_active') throw new Error(`Expected claim_not_active after release, got ${afterRelease.error || '(missing)'}`);

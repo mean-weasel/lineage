@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,10 +20,13 @@ import {
 } from "../src/installer.mjs";
 
 const cliPath = path.resolve("bin/lineage-plugin-installer.mjs");
+const pluginFixturePath = path.resolve("../../plugins/lineage-codex-plugin");
+const installerVersion = JSON.parse(await readFile(path.resolve("package.json"), "utf8")).version;
+const releaseFixtureVersion = JSON.parse(await readFile(path.join(pluginFixturePath, ".codex-plugin", "plugin.json"), "utf8")).version;
 
 test("parseLineageVersion accepts JSON strings and CLI output", () => {
-  assert.equal(parseLineageVersion('"0.1.7"'), "0.1.7");
-  assert.equal(parseLineageVersion("lineage 0.1.7"), "0.1.7");
+  assert.equal(parseLineageVersion('"0.1.11"'), "0.1.11");
+  assert.equal(parseLineageVersion("lineage 0.1.11"), "0.1.11");
 });
 
 test("CLI prints installer package version", () => {
@@ -32,7 +35,7 @@ test("CLI prints installer package version", () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), "0.1.1");
+  assert.equal(result.stdout.trim(), installerVersion);
   assert.equal(result.stderr, "");
 });
 
@@ -41,9 +44,9 @@ test("CLI preserves install --version as the Lineage compatibility selector", ()
     cliPath,
     "install",
     "--plugin",
-    path.resolve("../../plugins/lineage-codex-plugin"),
+    pluginFixturePath,
     "--version",
-    "0.1.7",
+    releaseFixtureVersion,
     "--target-dir",
     path.join(tmpdir(), "lineage-cli-version-selector-proof"),
     "--dry-run",
@@ -55,19 +58,19 @@ test("CLI preserves install --version as the Lineage compatibility selector", ()
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.dryRun, true);
-  assert.equal(output.pluginVersion, "0.1.7");
-  assert.equal(output.lineageVersion, "0.1.7");
+  assert.equal(output.pluginVersion, releaseFixtureVersion);
+  assert.equal(output.lineageVersion, releaseFixtureVersion);
 });
 
 test("resolveLineageVersion uses explicit version before npm channel lookup", async () => {
   const version = await resolveLineageVersion({
-    version: "0.1.7",
+    version: "0.1.11",
     runCommand: async () => {
       throw new Error("should not run npm");
     },
   });
 
-  assert.equal(version, "0.1.7");
+  assert.equal(version, "0.1.11");
 });
 
 test("resolveLineageVersion resolves npm dist-tag channels", async () => {
@@ -87,11 +90,11 @@ test("resolveLineageVersion resolves npm dist-tag channels", async () => {
 test("assertPluginManifest accepts exact package and plugin version match", () => {
   const manifest = {
     name: "lineage-codex-plugin",
-    version: "0.1.7",
-    lineage: { package: "@mean-weasel/lineage", version: "0.1.7" },
+    version: "0.1.11",
+    lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
   };
 
-  assert.equal(assertPluginManifest(manifest, "0.1.7"), manifest);
+  assert.equal(assertPluginManifest(manifest, "0.1.11"), manifest);
 });
 
 test("assertPluginManifest rejects plugin version mismatch", () => {
@@ -101,11 +104,11 @@ test("assertPluginManifest rejects plugin version mismatch", () => {
         {
           name: "lineage-codex-plugin",
           version: "0.1.1",
-          lineage: { package: "@mean-weasel/lineage", version: "0.1.7" },
+          lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
         },
-        "0.1.7",
+        "0.1.11",
       ),
-    /Plugin version 0\.1\.1 does not match 0\.1\.7/,
+    /Plugin version 0\.1\.1 does not match 0\.1\.11/,
   );
 });
 
@@ -115,12 +118,12 @@ test("assertPluginManifest rejects lineage compatibility mismatch", () => {
       assertPluginManifest(
         {
           name: "lineage-codex-plugin",
-          version: "0.1.7",
+          version: "0.1.11",
           lineage: { package: "@mean-weasel/lineage", version: "0.1.1" },
         },
-        "0.1.7",
+        "0.1.11",
       ),
-    /Plugin lineage version 0\.1\.1 does not match 0\.1\.7/,
+    /Plugin lineage version 0\.1\.1 does not match 0\.1\.11/,
   );
 });
 
@@ -132,16 +135,16 @@ test("assertChecksum rejects corrupted artifact bytes", () => {
 
 test("parseChecksumText accepts sha256 files with filenames", () => {
   const hash = "a".repeat(64);
-  assert.equal(parseChecksumText(`${hash}  lineage-codex-plugin-0.1.7.tgz\n`), hash);
+  assert.equal(parseChecksumText(`${hash}  lineage-codex-plugin-0.1.11.tgz\n`), hash);
   assert.throws(() => parseChecksumText("not a checksum"), /does not contain a sha256 hash/);
 });
 
 test("releaseArtifactUrls derives GitHub release artifact URLs", () => {
-  assert.deepEqual(releaseArtifactUrls({ version: "0.1.7" }), {
+  assert.deepEqual(releaseArtifactUrls({ version: "0.1.11" }), {
     artifactUrl:
-      "https://github.com/mean-weasel/lineage/releases/download/v0.1.7/lineage-codex-plugin-0.1.7.tgz",
+      "https://github.com/mean-weasel/lineage/releases/download/v0.1.11/lineage-codex-plugin-0.1.11.tgz",
     checksumUrl:
-      "https://github.com/mean-weasel/lineage/releases/download/v0.1.7/lineage-codex-plugin-0.1.7.tgz.sha256",
+      "https://github.com/mean-weasel/lineage/releases/download/v0.1.11/lineage-codex-plugin-0.1.11.tgz.sha256",
   });
 });
 
@@ -153,14 +156,14 @@ test("installPluginDirectory verifies manifest and dry-run does not write", asyn
   try {
     await writePluginManifest(pluginDir, {
       name: "lineage-codex-plugin",
-      version: "0.1.7",
-      lineage: { package: "@mean-weasel/lineage", version: "0.1.7" },
+      version: "0.1.11",
+      lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
     });
 
     const result = await installPluginDirectory({
       pluginDir,
       targetRoot,
-      expectedVersion: "0.1.7",
+      expectedVersion: "0.1.11",
       dryRun: true,
     });
 
@@ -180,20 +183,99 @@ test("installPluginDirectory copies a verified plugin to target directory", asyn
   try {
     await writePluginManifest(pluginDir, {
       name: "lineage-codex-plugin",
-      version: "0.1.7",
-      lineage: { package: "@mean-weasel/lineage", version: "0.1.7" },
+      version: "0.1.11",
+      lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
     });
 
     await installPluginDirectory({
       pluginDir,
       targetRoot,
-      expectedVersion: "0.1.7",
+      expectedVersion: "0.1.11",
     });
 
     const copied = JSON.parse(
       await readFile(path.join(targetRoot, "lineage-codex-plugin", ".codex-plugin", "plugin.json"), "utf8"),
     );
-    assert.equal(copied.version, "0.1.7");
+    assert.equal(copied.version, "0.1.11");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("installPluginDirectory replaces the destination as one verified tree without stale files", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-installer-"));
+  const pluginDir = path.join(temp, "plugin");
+  const targetRoot = path.join(temp, "target");
+  const destination = path.join(targetRoot, "lineage-codex-plugin");
+  const manifest = {
+    name: "lineage-codex-plugin",
+    version: "0.1.11",
+    lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
+  };
+
+  try {
+    await writePluginManifest(pluginDir, manifest);
+    await writePluginManifest(destination, manifest);
+    await writeFile(path.join(destination, "stale-guidance.md"), "must disappear\n");
+
+    await installPluginDirectory({ pluginDir, targetRoot, expectedVersion: "0.1.11" });
+
+    await assert.rejects(readFile(path.join(destination, "stale-guidance.md")), /ENOENT/);
+    assert.deepEqual(JSON.parse(await readFile(path.join(destination, ".codex-plugin", "plugin.json"), "utf8")), manifest);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("installPluginDirectory refuses a concurrent install without changing the destination", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-installer-"));
+  const pluginDir = path.join(temp, "plugin");
+  const targetRoot = path.join(temp, "target");
+  const destination = path.join(targetRoot, "lineage-codex-plugin");
+  const manifest = {
+    name: "lineage-codex-plugin",
+    version: "0.1.11",
+    lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
+  };
+
+  try {
+    await writePluginManifest(pluginDir, manifest);
+    await writePluginManifest(destination, manifest);
+    await mkdir(path.join(targetRoot, ".lineage-codex-plugin.install.lock"), { recursive: true });
+
+    await assert.rejects(
+      installPluginDirectory({ pluginDir, targetRoot, expectedVersion: "0.1.11" }),
+      /install is already active/,
+    );
+    assert.equal(JSON.parse(await readFile(path.join(destination, ".codex-plugin", "plugin.json"), "utf8")).version, "0.1.11");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("installPluginDirectory recovers an interrupted replacement before installing", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-installer-"));
+  const pluginDir = path.join(temp, "plugin");
+  const targetRoot = path.join(temp, "target");
+  const destination = path.join(targetRoot, "lineage-codex-plugin");
+  const backup = path.join(targetRoot, ".lineage-codex-plugin.install-backup");
+  const manifest = {
+    name: "lineage-codex-plugin",
+    version: "0.1.11",
+    lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
+  };
+
+  try {
+    await writePluginManifest(pluginDir, manifest);
+    await writePluginManifest(backup, manifest);
+    await writeFile(path.join(backup, "interrupted-install-marker.md"), "old verified tree\n");
+    await symlink("999999:abandoned", path.join(targetRoot, ".lineage-codex-plugin.install.lock"));
+
+    await installPluginDirectory({ pluginDir, targetRoot, expectedVersion: "0.1.11" });
+
+    assert.deepEqual(JSON.parse(await readFile(path.join(destination, ".codex-plugin", "plugin.json"), "utf8")), manifest);
+    await assert.rejects(readFile(path.join(destination, "interrupted-install-marker.md")), /ENOENT/);
+    await assert.rejects(readFile(backup), /ENOENT|EISDIR/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -202,20 +284,20 @@ test("installPluginDirectory copies a verified plugin to target directory", asyn
 test("packPlugin dry-run validates artifact contents without writing dist files", async () => {
   const result = await packPlugin({
     plugin: path.resolve("../../plugins/lineage-codex-plugin"),
-    version: "0.1.7",
+    version: releaseFixtureVersion,
     outDir: path.resolve("dist-test-should-not-exist"),
     dryRun: true,
   });
 
   assert.equal(result.dryRun, true);
-  assert.equal(result.artifactName, "lineage-codex-plugin-0.1.7.tgz");
+  assert.equal(result.artifactName, `lineage-codex-plugin-${releaseFixtureVersion}.tgz`);
   assert.deepEqual(result.files, [
     ".codex-plugin/plugin.json",
     "README.md",
     "package.json",
     "skills/lineage-package-operator/SKILL.md",
   ]);
-  await assert.rejects(readFile(path.resolve("dist-test-should-not-exist", "lineage-codex-plugin-0.1.7.tgz")));
+  await assert.rejects(readFile(path.resolve("dist-test-should-not-exist", `lineage-codex-plugin-${releaseFixtureVersion}.tgz`)));
 });
 
 test("installPluginArtifact verifies local release artifact and dry-runs install", async () => {
@@ -226,13 +308,13 @@ test("installPluginArtifact verifies local release artifact and dry-runs install
       artifactFile: fixture.artifactPath,
       checksumFile: fixture.checksumPath,
       targetRoot: fixture.targetRoot,
-      expectedVersion: "0.1.7",
+      expectedVersion: releaseFixtureVersion,
       dryRun: true,
     });
 
     assert.equal(result.dryRun, true);
-    assert.equal(result.pluginVersion, "0.1.7");
-    assert.equal(result.lineageVersion, "0.1.7");
+    assert.equal(result.pluginVersion, releaseFixtureVersion);
+    assert.equal(result.lineageVersion, releaseFixtureVersion);
     assert.equal(result.checksum, fixture.checksum);
     assert.equal(result.artifact, fixture.artifactPath);
     await assert.rejects(readFile(path.join(fixture.targetRoot, "lineage-codex-plugin", ".codex-plugin", "plugin.json")));
@@ -244,14 +326,14 @@ test("installPluginArtifact verifies local release artifact and dry-runs install
 test("installFromOptions can fetch a release artifact from resolved URLs", async () => {
   const fixture = await createPluginArtifactFixture();
   const urls = releaseArtifactUrls({
-    version: "0.1.7",
-    releaseBaseUrl: "https://example.test/releases/v0.1.7",
+    version: releaseFixtureVersion,
+    releaseBaseUrl: `https://example.test/releases/v${releaseFixtureVersion}`,
   });
 
   try {
     const result = await installFromOptions({
-      version: "0.1.7",
-      releaseBaseUrl: "https://example.test/releases/v0.1.7",
+      version: releaseFixtureVersion,
+      releaseBaseUrl: `https://example.test/releases/v${releaseFixtureVersion}`,
       targetRoot: fixture.targetRoot,
       dryRun: true,
       fetchBytes: async (url) => {
@@ -263,7 +345,7 @@ test("installFromOptions can fetch a release artifact from resolved URLs", async
 
     assert.equal(result.artifact, urls.artifactUrl);
     assert.equal(result.checksumSource, urls.checksumUrl);
-    assert.equal(result.pluginVersion, "0.1.7");
+    assert.equal(result.pluginVersion, releaseFixtureVersion);
   } finally {
     await rm(fixture.temp, { recursive: true, force: true });
   }
@@ -280,7 +362,7 @@ test("installPluginArtifact rejects checksum mismatches before extraction", asyn
         artifactFile: fixture.artifactPath,
         checksumFile: badChecksumPath,
         targetRoot: fixture.targetRoot,
-        expectedVersion: "0.1.7",
+        expectedVersion: releaseFixtureVersion,
         dryRun: true,
       }),
       /Checksum mismatch/,
@@ -292,7 +374,7 @@ test("installPluginArtifact rejects checksum mismatches before extraction", asyn
 
 test("installPluginArtifact rejects unsafe tarball entries", async () => {
   const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-artifact-unsafe-"));
-  const artifactPath = path.join(temp, pluginArtifactFilename("0.1.7"));
+  const artifactPath = path.join(temp, pluginArtifactFilename("0.1.11"));
   const checksumPath = `${artifactPath}.sha256`;
   const targetRoot = path.join(temp, "target");
 
@@ -300,8 +382,8 @@ test("installPluginArtifact rejects unsafe tarball entries", async () => {
     const packageDir = path.join(temp, "unsafe", "package");
     await writePluginManifest(packageDir, {
       name: "lineage-codex-plugin",
-      version: "0.1.7",
-      lineage: { package: "@mean-weasel/lineage", version: "0.1.7" },
+      version: "0.1.11",
+      lineage: { package: "@mean-weasel/lineage", version: "0.1.11" },
     });
     await mkdir(path.join(packageDir, "docs", "goals"), { recursive: true });
     await writeFile(path.join(packageDir, "docs", "goals", "leak.md"), "should not ship\n");
@@ -318,7 +400,7 @@ test("installPluginArtifact rejects unsafe tarball entries", async () => {
         artifactFile: artifactPath,
         checksumFile: checksumPath,
         targetRoot,
-        expectedVersion: "0.1.7",
+        expectedVersion: "0.1.11",
         dryRun: true,
       }),
       /unsafe entries/,
@@ -343,10 +425,10 @@ async function createPluginArtifactFixture() {
   const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-artifact-"));
   const outDir = path.join(temp, "dist");
   const targetRoot = path.join(temp, "target");
-  const plugin = path.resolve("../../plugins/lineage-codex-plugin");
+  const plugin = pluginFixturePath;
   const result = await packPlugin({
     plugin,
-    version: "0.1.7",
+    version: releaseFixtureVersion,
     outDir,
   });
   const artifactPath = result.artifactPath;

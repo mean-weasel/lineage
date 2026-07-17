@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { fileSha256 } from './localReview';
 import { getAssetReviewMap, isAssetReviewError, markAssetReview, markAssetReviews, markAssetReviewsFromRequestBody, requireApprovedLocalBackupPath } from './assetReviews';
@@ -13,7 +14,6 @@ function localId(file: string): string {
 }
 
 function seedLocalAsset() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const file = join(scratchDir, 'demo-tiktok-local-review-decision.png');
   writeFileSync(file, Buffer.from('local-review-decision'));
@@ -21,7 +21,6 @@ function seedLocalAsset() {
 }
 
 function seedLocalAssets() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const files = [
     join(scratchDir, 'demo-tiktok-local-review-batch-one.png'),
@@ -33,7 +32,8 @@ function seedLocalAssets() {
 
 describe('asset review helpers', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   it('indexes local assets and returns their review state', () => {
@@ -67,6 +67,7 @@ describe('asset review helpers', () => {
 
   it('previews a batch local review without mutating sqlite', () => {
     const assets = seedLocalAssets();
+    rmSync(dbFile, { force: true });
 
     const result = markAssetReviews(defaultProject, {
       assetIds: assets.map(asset => asset.assetId),
@@ -126,6 +127,7 @@ describe('asset review helpers', () => {
 
   it('rejects malformed batch request asset ids without mutating sqlite', () => {
     const assets = seedLocalAssets();
+    rmSync(dbFile, { force: true });
 
     expect(() =>
       markAssetReviewsFromRequestBody(defaultProject, {
@@ -139,6 +141,7 @@ describe('asset review helpers', () => {
 
   it('rejects missing batch request asset id arrays without mutating sqlite', () => {
     seedLocalAssets();
+    rmSync(dbFile, { force: true });
 
     expect(() =>
       markAssetReviewsFromRequestBody(defaultProject, {

@@ -57,8 +57,10 @@ jobs:
           const version = process.env.PLUGIN_VERSION;
           const manifest = JSON.parse(readFileSync("plugins/lineage-codex-plugin/.codex-plugin/plugin.json", "utf8"));
           const packageJson = JSON.parse(readFileSync("plugins/lineage-codex-plugin/package.json", "utf8"));
+          const lineagePackage = JSON.parse(readFileSync("package.json", "utf8"));
           const failures = [];
 
+          if (lineagePackage.version !== version) failures.push(`root Lineage package version ${lineagePackage.version} != ${version}`);
           if (manifest.version !== version) failures.push(`plugin manifest version ${manifest.version} != ${version}`);
           if (manifest.lineage?.package !== "@mean-weasel/lineage") failures.push("plugin manifest lineage.package is not @mean-weasel/lineage");
           if (manifest.lineage?.version !== version) failures.push(`plugin manifest lineage.version ${manifest.lineage?.version} != ${version}`);

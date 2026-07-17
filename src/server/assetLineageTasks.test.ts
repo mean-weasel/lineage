@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import express from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
 import { backfillLineageTasks, lineageDb } from './assetLineageDb';
@@ -33,7 +34,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const root = join(scratchDir, 'task-root.png');
   const child = join(scratchDir, 'task-child.png');
@@ -100,7 +100,8 @@ async function postJson<T>(baseUrl: string, path: string, body: Record<string, u
 
 describe('asset lineage tasks', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   afterEach(() => {

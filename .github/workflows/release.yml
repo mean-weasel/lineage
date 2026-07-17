@@ -12,6 +12,7 @@ on:
           - publish-next
           - publish-latest
           - promote-latest
+          - deprecate-0.1.13
       dry_run:
         description: Preview the release operation without changing npm
         required: true
@@ -46,13 +47,20 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Publish next dry run
         if: ${{ inputs.dry_run && inputs.operation == 'publish-next' }}
-        run: npm run release -- --tag next --dry-run
+        run: |
+          npm run release -- --tag next --dry-run
+          npm run release:github:next:dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Publish next
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-next' }}
-        run: npm run release -- --tag next
+        run: |
+          npm run release:github:next
+          npm run release -- --tag next
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+          GH_TOKEN: ${{ github.token }}
       - name: Publish latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'publish-latest' }}
         run: |
@@ -63,8 +71,8 @@ jobs:
       - name: Publish latest
         if: ${{ !inputs.dry_run && inputs.operation == 'publish-latest' }}
         run: |
-          npm run release -- --tag latest
           npm run release:github
+          npm run release -- --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
@@ -84,3 +92,46 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GH_TOKEN: ${{ github.token }}
+      - name: Verify Lineage 0.1.13 is safe to deprecate
+        if: ${{ inputs.operation == 'deprecate-0.1.13' }}
+        env:
+          PACKAGE_NAME: "@mean-weasel/lineage"
+          TARGET_VERSION: "0.1.13"
+        run: |
+          resolved="$(npm view "${PACKAGE_NAME}@${TARGET_VERSION}" version --json | tr -d '"')"
+          if [ "$resolved" != "$TARGET_VERSION" ]; then
+            echo "::error::Expected ${PACKAGE_NAME}@${TARGET_VERSION}, got ${resolved:-<missing>}."
+            exit 1
+          fi
+
+          latest="$(npm view "$PACKAGE_NAME" dist-tags.latest --json | tr -d '"')"
+          next="$(npm view "$PACKAGE_NAME" dist-tags.next --json | tr -d '"')"
+          if [ "$latest" = "$TARGET_VERSION" ] || [ "$next" = "$TARGET_VERSION" ]; then
+            echo "::error::Refusing to deprecate tagged version ${TARGET_VERSION}; latest=${latest:-<missing>} next=${next:-<missing>}."
+            exit 1
+          fi
+          printf 'Verified %s@%s with latest=%s and next=%s.\n' "$PACKAGE_NAME" "$TARGET_VERSION" "$latest" "$next"
+      - name: Deprecate Lineage 0.1.13 dry run
+        if: ${{ inputs.dry_run && inputs.operation == 'deprecate-0.1.13' }}
+        run: echo "Dry run would deprecate @mean-weasel/lineage@0.1.13; both release tags were verified elsewhere."
+      - name: Deprecate Lineage 0.1.13
+        if: ${{ !inputs.dry_run && inputs.operation == 'deprecate-0.1.13' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm deprecate "@mean-weasel/lineage@0.1.13" "Cannot bootstrap isolated channel installs with affected npm metadata output. Upgrade to >=0.1.14."
+      - name: Verify Lineage 0.1.13 deprecation
+        if: ${{ !inputs.dry_run && inputs.operation == 'deprecate-0.1.13' }}
+        env:
+          DEPRECATION_MESSAGE: "Cannot bootstrap isolated channel installs with affected npm metadata output. Upgrade to >=0.1.14."
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            deprecated="$(npm view "@mean-weasel/lineage@0.1.13" deprecated --json | tr -d '"')"
+            if [ "$deprecated" = "$DEPRECATION_MESSAGE" ]; then
+              npm view "@mean-weasel/lineage@0.1.13" version deprecated --json
+              exit 0
+            fi
+            echo "Registry has not exposed the deprecation yet (attempt ${attempt}/12)."
+            sleep 5
+          done
+          echo "::error::Deprecation verification did not converge."
+          exit 1

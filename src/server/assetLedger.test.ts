@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { indexAssetLedger, getAssetLedgerSnapshot, upsertAssetLedgerAsset } from './assetLedger';
 import { getLedgerPageFromQuery } from './assetLedgerApi';
@@ -12,7 +13,6 @@ const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-asset-ledger');
 const dbFile = join(scratchDir, 'asset-ledger.sqlite');
 
 function seedLocalAsset() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const file = join(scratchDir, 'demo-linkedin-ledger-local.png');
   writeFileSync(file, Buffer.from('asset-ledger-local'));
@@ -71,7 +71,7 @@ function syntheticAsset(source: 'catalog' | 'local', checksum: string): GrowthAs
 describe('asset ledger foundation', () => {
   beforeEach(() => {
     rmSync(scratchDir, { force: true, recursive: true });
-    process.env.LINEAGE_DB = dbFile;
+    useLineageTestProfile(dbFile);
   });
 
   it('indexes catalog, local, and S3 metadata into one SQLite ledger', () => {

@@ -1,8 +1,9 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import type { LineageRuntimeChannel } from '../shared/runtimeInfoTypes';
 import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
+import type { DatabaseSync } from './assetLineageDb';
 import { assertProfileChannel } from './lineageProfiles';
 
 const writerLeaseSchemaVersion = 'lineage.profile_writer_lease.v1' as const;
@@ -12,6 +13,7 @@ interface WriterLeaseOwner {
   acquired_at: string;
   environment: ResolvedLineageProfile['environment'];
   pid: number;
+  profile_fingerprint: string;
   profile_id: string;
   role: 'service' | 'cli';
   schema_version: typeof writerLeaseSchemaVersion;
@@ -42,25 +44,8 @@ export class ProfileWriterLeaseConflictError extends Error {
   }
 }
 
-function canonicalDatabasePath(databasePath: string): string {
-  const resolved = resolve(databasePath);
-  const missingSegments: string[] = [];
-  let candidate = resolved;
-  while (!existsSync(candidate)) {
-    const parent = dirname(candidate);
-    if (parent === candidate) return resolved;
-    missingSegments.unshift(basename(candidate));
-    candidate = parent;
-  }
-  try {
-    return join(realpathSync(candidate), ...missingSegments);
-  } catch {
-    return resolved;
-  }
-}
-
-export function profileWriterLockPath(profile: Pick<ResolvedLineageProfile, 'database_path'>): string {
-  return `${canonicalDatabasePath(profile.database_path)}.writer.lock`;
+export function profileWriterLockPath(profile: Pick<ResolvedLineageProfile, 'manifest_path'>): string {
+  return join(dirname(profile.manifest_path), 'writer.lock');
 }
 
 function ownerPath(lockPath: string): string {
@@ -89,6 +74,8 @@ function readOwner(lockPath: string): WriterLeaseOwner {
   if (
     owner.schema_version !== writerLeaseSchemaVersion
     || typeof owner.profile_id !== 'string'
+    || typeof owner.profile_fingerprint !== 'string'
+    || !/^[a-f0-9]{64}$/i.test(owner.profile_fingerprint)
     || (owner.environment !== 'production' && owner.environment !== 'preview' && owner.environment !== 'development')
     || (owner.role !== 'service' && owner.role !== 'cli')
     || !Number.isSafeInteger(owner.pid)
@@ -133,16 +120,15 @@ function reclaimDeadOwner(lockPath: string, owner: WriterLeaseOwner): void {
       publicOwner,
     );
   }
-  // Keep a deterministic fence for this exact dead token. A delayed concurrent
-  // reclaimer can then never rename a replacement lease to a fresh tombstone.
   const tokenFence = createHash('sha256').update(owner.token).digest('hex').slice(0, 24);
   const tombstone = `${lockPath}.stale-${owner.pid}-${tokenFence}`;
   try {
     renameSync(lockPath, tombstone);
   } catch (error) {
-    if (errorCode(error) === 'ENOENT' || errorCode(error) === 'EEXIST' || errorCode(error) === 'ENOTEMPTY') return;
+    if (errorCode(error) === 'ENOENT') return;
     throw error;
   }
+  rmSync(tombstone, { force: true, recursive: true });
 }
 
 export function acquireProfileWriterLease(
@@ -156,6 +142,7 @@ export function acquireProfileWriterLease(
     acquired_at: new Date().toISOString(),
     environment: profile.environment,
     pid: process.pid,
+    profile_fingerprint: profile.profile_fingerprint,
     profile_id: profile.profile_id,
     role,
     schema_version: writerLeaseSchemaVersion,
@@ -201,7 +188,11 @@ export function acquireProfileWriterLease(
         if (errorCode(readError) === 'ENOENT') continue;
         throw readError;
       }
-      if (existing.profile_id !== profile.profile_id || existing.environment !== profile.environment) {
+      if (
+        existing.profile_id !== profile.profile_id
+        || existing.environment !== profile.environment
+        || existing.profile_fingerprint !== profile.profile_fingerprint
+      ) {
         throw new Error(`Writer lease identity at ${lockPath} does not match ${profile.profile_id}/${profile.environment}; manual inspection is required`, { cause: error });
       }
       reclaimDeadOwner(lockPath, existing);
@@ -211,21 +202,56 @@ export function acquireProfileWriterLease(
 }
 
 export function assertProfileWriterLeaseHeld(): void {
-  if (!process.env.LINEAGE_PROFILE) return;
+  if (!process.env.LINEAGE_PROFILE) {
+    throw new Error('Persistent writes require a selected named Lineage profile and its writer lease; legacy-unbound access is read-only');
+  }
   const profileId = process.env.LINEAGE_PROFILE_ID;
+  const profileFingerprint = process.env.LINEAGE_PROFILE_FINGERPRINT;
   const environment = process.env.LINEAGE_PROFILE_ENVIRONMENT;
   const manifestPath = process.env.LINEAGE_PROFILE_MANIFEST;
-  const databasePath = process.env.LINEAGE_DB;
   const lockPath = process.env.LINEAGE_WRITER_LOCK_PATH;
   const token = process.env.LINEAGE_WRITER_LEASE_TOKEN;
-  if (!profileId || !environment || !manifestPath || !databasePath || !lockPath || !token) {
+  if (!profileId || !profileFingerprint || !environment || !manifestPath || !lockPath || !token) {
     throw new Error('Named Lineage profiles may write only through a process holding the profile writer lease');
   }
-  const expectedLockPath = `${canonicalDatabasePath(databasePath)}.writer.lock`;
-  if (resolve(lockPath) !== expectedLockPath) throw new Error('Profile writer lease path does not match the selected profile database');
+  const expectedLockPath = join(dirname(resolve(manifestPath)), 'writer.lock');
+  if (resolve(lockPath) !== expectedLockPath) throw new Error('Profile writer lease path does not match the selected profile manifest');
   const owner = readOwner(lockPath);
-  if (owner.pid !== process.pid || owner.token !== token || owner.profile_id !== profileId || owner.environment !== environment) {
+  if (
+    owner.pid !== process.pid
+    || owner.token !== token
+    || owner.profile_id !== profileId
+    || owner.profile_fingerprint !== profileFingerprint
+    || owner.environment !== environment
+  ) {
     throw new Error('Current process does not own the selected Lineage profile writer lease');
+  }
+}
+
+export function assertSelectedProfileDatabaseIdentity(database: DatabaseSync): void {
+  const profileId = process.env.LINEAGE_PROFILE_ID;
+  const environment = process.env.LINEAGE_PROFILE_ENVIRONMENT;
+  const profileFingerprint = process.env.LINEAGE_PROFILE_FINGERPRINT;
+  if (!process.env.LINEAGE_PROFILE || !profileId || !environment || !profileFingerprint) {
+    throw new Error('Writable SQLite identity validation requires a fully resolved named Lineage profile');
+  }
+  const table = database.prepare("select name from sqlite_master where type = 'table' and name = 'lineage_profile_identity'").get();
+  if (!table) throw new Error(`Refusing writable open: database is not bound to Lineage profile ${profileId}`);
+  const columns = new Set((database.prepare('pragma table_info(lineage_profile_identity)').all() as Array<{ name: string }>).map(row => row.name));
+  if (!columns.has('profile_id') || !columns.has('environment') || !columns.has('profile_fingerprint')) {
+    throw new Error(`Refusing writable open: database identity for ${profileId} is missing required fingerprint fields`);
+  }
+  const rows = database.prepare('select profile_id, environment, profile_fingerprint from lineage_profile_identity').all() as Array<Record<string, unknown>>;
+  if (rows.length !== 1) throw new Error(`Refusing writable open: expected exactly one database profile identity, found ${rows.length}`);
+  const identity = rows[0];
+  if (
+    identity.profile_id !== profileId
+    || identity.environment !== environment
+    || identity.profile_fingerprint !== profileFingerprint
+  ) {
+    throw new Error(
+      `Refusing writable open: database identity ${String(identity.profile_id)}/${String(identity.environment)}/${String(identity.profile_fingerprint)} does not match selected profile ${profileId}/${environment}/${profileFingerprint}`
+    );
   }
 }
 
@@ -244,7 +270,11 @@ export function getProfileWriterDelegation(profile: ResolvedLineageProfile): Pro
     );
   }
   const owner = readOwner(lockPath);
-  if (owner.profile_id !== profile.profile_id || owner.environment !== profile.environment) {
+  if (
+    owner.profile_id !== profile.profile_id
+    || owner.environment !== profile.environment
+    || owner.profile_fingerprint !== profile.profile_fingerprint
+  ) {
     throw new Error(`Writer lease identity at ${lockPath} does not match ${profile.profile_id}/${profile.environment}; refusing delegation`);
   }
   if (owner.role !== 'service' || owner.service_origin !== profile.service_origin) {

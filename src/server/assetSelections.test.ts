@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { chooseReviewSetLabels, clearCurrentSelection, createReviewSet, getAssetSelectionSnapshot, selectCurrentAssets } from './assetSelections';
 import { activateReviewSet, archiveReviewSet, inspectReviewSet, listReviewSets } from './assetReviewSets';
@@ -14,7 +15,7 @@ const assetD = 'selection-asset-d';
 
 function resetDb() {
   rmSync(scratchDir, { force: true, recursive: true });
-  process.env.LINEAGE_DB = dbFile;
+  useLineageTestProfile(dbFile);
 }
 
 describe('asset selection ledger', () => {

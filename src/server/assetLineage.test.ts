@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { lineageDb } from './assetLineageDb';
 import { fileSha256 } from './localReview';
@@ -34,7 +35,6 @@ function localId(file: string): string {
 }
 
 function seedFiles() {
-  rmSync(scratchDir, { force: true, recursive: true });
   mkdirSync(scratchDir, { recursive: true });
   const parent = join(scratchDir, 'demo-linkedin-lineage-parent.png');
   const child = join(scratchDir, 'demo-linkedin-lineage-child.png');
@@ -90,7 +90,8 @@ function seedRerollAttempts() {
 
 describe('asset lineage index', () => {
   beforeEach(() => {
-    process.env.LINEAGE_DB = dbFile;
+    rmSync(scratchDir, { force: true, recursive: true });
+    useLineageTestProfile(dbFile);
   });
 
   it('indexes local assets, links lineage, and computes latest leaves', () => {
@@ -1063,26 +1064,25 @@ describe('asset lineage index', () => {
     expect(brief.brief.reference_asset_ids).toEqual([files.parentId, files.childId]);
     expect(brief.brief.prompt).toContain(`Create 3-4 variations using these 2 selected references: ${files.parentId}, ${files.childId}`);
     expect(brief.brief.prompt).toContain('Blend the strongest pieces.');
-    expect(brief.handoff.link_child_command).toContain('lineage link-child');
+    expect(brief.handoff.link_child_command).toContain('link-child');
   });
 
   it('uses the resolved profile manifest instead of a direct database path in generated handoffs', () => {
     const files = seedFiles();
     indexLineageAssets(defaultProject);
     updateSelectedAsset(defaultProject, { assetId: files.parentId, confirmWrite: true, rootAssetId: files.parentId });
-    process.env.LINEAGE_PROFILE_MANIFEST = '/tmp/lineage profiles/development-main/profile.json';
+    const profileManifest = process.env.LINEAGE_PROFILE_MANIFEST!;
     process.env.LINEAGE_CHANNEL = 'dev';
 
     const handoff = getLineageBrief(defaultProject, files.parentId).handoff;
 
     for (const command of [handoff.next_command, handoff.inspect_command, handoff.link_child_command]) {
-      expect(command).toContain("--profile '/tmp/lineage profiles/development-main/profile.json'");
+      expect(command).toContain(`--profile '${profileManifest}'`);
       expect(command).toContain(" --import '");
       expect(command).toContain('/node_modules/tsx/dist/loader.mjs');
       expect(command).toContain('/src/cli/lineage-dev.ts');
       expect(command).not.toContain('--db');
     }
-    delete process.env.LINEAGE_PROFILE_MANIFEST;
     delete process.env.LINEAGE_CHANNEL;
   });
 
@@ -1104,7 +1104,7 @@ describe('asset lineage index', () => {
     const brief = getLineageBrief(defaultProject, files.parentId);
     expect(brief.next_asset?.asset_id).toBe(files.childId);
     expect(brief.brief.prompt).toContain('Use the cleanest concept');
-    expect(brief.handoff.link_child_command).toContain('lineage link-child');
+    expect(brief.handoff.link_child_command).toContain('link-child');
 
     const dryRun = linkSelectedLineageChild(defaultProject, {
       childAssetId: files.variationId,

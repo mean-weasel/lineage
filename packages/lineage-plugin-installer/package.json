@@ -1,6 +1,6 @@
 {
   "name": "@mean-weasel/lineage-plugin-installer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Version-locked Codex plugin installer for @mean-weasel/lineage.",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,12 @@
     "test": "node --test test/*.test.mjs",
     "check": "node --check src/*.mjs && node --check bin/*.mjs && node --check scripts/*.mjs"
   },
-  "files": ["bin", "scripts", "src", "README.md"],
+  "files": [
+    "bin",
+    "scripts",
+    "src",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public"
   }

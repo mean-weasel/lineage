@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:net';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 let tarball;
 const requiredBuildFiles = [
   'dist/server.js',
   'dist/web/index.html',
+  'dist/runtime-build.json',
   'dist/cli/lineage.js',
+  'dist/cli/lineage-channel.js',
   'dist/cli/lineage-dev.js',
+  'dist/cli/managed-service.js',
+  'dist/cli/lineage-preview.js',
 ];
 
 for (const file of requiredBuildFiles) {
@@ -24,60 +27,6 @@ for (const file of requiredBuildFiles) {
   }
 }
 
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      server.close(() => {
-        if (address && typeof address === 'object') resolve(address.port);
-        else reject(new Error('Unable to allocate a free port'));
-      });
-    });
-  });
-}
-
-async function waitForProjects(url, project = 'demo-project') {
-  const deadline = Date.now() + 15_000;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        const body = await response.json();
-        if (Array.isArray(body.projects) && body.projects.some(item => item.project === project)) return;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  throw lastError || new Error(`Timed out waiting for ${url}`);
-}
-
-async function postJson(url, body) {
-  const response = await fetch(url, {
-    body: body ? JSON.stringify(body) : undefined,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error(`POST ${url} failed with ${response.status}`);
-  return response.json();
-}
-
-async function stopServer(server) {
-  if (server.exitCode !== null || server.signalCode !== null) return;
-  server.kill('SIGTERM');
-  await Promise.race([
-    new Promise(resolve => server.once('exit', resolve)),
-    new Promise(resolve => setTimeout(resolve, 5_000)),
-  ]);
-  if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');
-}
-
-const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-package-smoke-'));
-
 function parsePackMetadata(packOutput) {
   const metadata = JSON.parse(packOutput);
   const pack = Array.isArray(metadata) ? metadata[0] : metadata?.filename ? metadata : Object.values(metadata ?? {})[0];
@@ -87,122 +36,70 @@ function parsePackMetadata(packOutput) {
   return pack;
 }
 
+const tmpProject = mkdtempSync(join(tmpdir(), 'lineage-package-smoke-'));
+
 try {
-  const packOutput = execFileSync('npm', ['pack', '--json'], { cwd: root, encoding: 'utf8' });
-  const pack = parsePackMetadata(packOutput);
+  const pack = parsePackMetadata(execFileSync('npm', ['pack', '--json'], { cwd: root, encoding: 'utf8' }));
   tarball = join(root, pack.filename);
   const packedFiles = new Set(pack.files.map(file => file.path));
   const forbiddenPackedFiles = pack.files
     .map(file => file.path)
     .filter(file => file.startsWith('docs/') || file.includes('/.goalbuddy-board/') || file.startsWith('.goalbuddy-board/'));
-  if (forbiddenPackedFiles.length > 0) {
-    throw new Error(`Packed tarball includes local planning artifacts: ${forbiddenPackedFiles.join(', ')}`);
-  }
+  if (forbiddenPackedFiles.length > 0) throw new Error(`Packed tarball includes local planning artifacts: ${forbiddenPackedFiles.join(', ')}`);
   for (const file of requiredBuildFiles) {
-    if (!packedFiles.has(file)) {
-      throw new Error(`Packed tarball is missing ${file}`);
-    }
+    if (!packedFiles.has(file)) throw new Error(`Packed tarball is missing ${file}`);
   }
 
   execFileSync('npm', ['init', '-y'], { cwd: tmpProject, stdio: 'ignore' });
   execFileSync('npm', ['install', tarball], { cwd: tmpProject, stdio: 'ignore' });
-
-  const externalAssetRoot = join(tmpProject, 'external-assets');
-  const externalProject = 'consumer-project';
-  const externalAssetId = 'consumer-linkedin-selection';
-  const externalCatalogDir = join(externalAssetRoot, externalProject, 'assets');
-  mkdirSync(externalCatalogDir, { recursive: true });
-  writeFileSync(join(externalCatalogDir, 'catalog.json'), `${JSON.stringify({
-    assets: [{
-      asset_id: externalAssetId,
-      audience: 'operators',
-      campaign: 'package-smoke',
-      channel: 'linkedin',
-      content_type: 'image',
-      product: externalProject,
-      project: externalProject,
-      s3: { bucket: 'example-bucket', key: 'consumer/selection.png', region: 'us-east-1' },
-      source: 'catalog',
-      status: 'approved',
-      title: 'External package consumer selection',
-    }],
-    default_bucket: 'example-bucket',
-    default_region: 'us-east-1',
-    product: 'External Package Consumer',
-    project: externalProject,
-  }, null, 2)}\n`);
-
+  const packageRoot = join(tmpProject, 'node_modules', '@mean-weasel', 'lineage');
   const binDir = join(tmpProject, 'node_modules', '.bin');
-  execFileSync(join(binDir, 'lineage'), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
-  execFileSync(join(binDir, 'lineage-dev'), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
 
-  for (const binName of ['lineage', 'lineage-dev']) {
-    const port = await freePort();
-    const dbPath = join(tmpProject, `${binName}-smoke.sqlite`);
+  for (const binName of ['lineage', 'lineage-preview', 'lineage-channel', 'lineage-service']) {
+    execFileSync(join(binDir, binName), ['--help'], { cwd: tmpProject, stdio: 'ignore' });
+  }
+  const packagedDev = spawnSync(join(binDir, 'lineage-dev'), ['--help'], { cwd: tmpProject, encoding: 'utf8' });
+  if (packagedDev.status === 0 || !packagedDev.stderr.includes('published package execution is disabled')) {
+    throw new Error('Packaged lineage-dev did not fail closed with checkout guidance');
+  }
+  for (const binName of ['lineage', 'lineage-preview']) {
+    const identity = JSON.parse(execFileSync(join(binDir, binName), ['runtime', 'info', '--json'], { cwd: tmpProject, encoding: 'utf8' }));
+    if (identity.origin !== 'package' || identity.verified !== false || !identity.errors.some(error => error.includes('install receipt'))) {
+      throw new Error(`${binName} did not report an unverified package without a channel receipt`);
+    }
+  }
+
+  for (const channel of ['stable', 'preview']) {
+    const dbPath = join(tmpProject, `${channel}-server-smoke.sqlite`);
     let stdout = '';
     let stderr = '';
-    const server = spawn(join(binDir, binName), ['start', '--host', '127.0.0.1', '--port', String(port), '--db', dbPath, '--asset-root', externalAssetRoot, '--json'], {
+    const server = spawn(process.execPath, [join(packageRoot, 'dist', 'server.js')], {
       cwd: tmpProject,
-      env: { ...process.env, LINEAGE_HOME: join(tmpProject, `${binName}-home`) },
+      env: {
+        ...process.env,
+        HOST: '127.0.0.1',
+        LINEAGE_CHANNEL: channel,
+        LINEAGE_DB: dbPath,
+        LINEAGE_HOME: join(tmpProject, `${channel}-home`),
+        NODE_ENV: 'production',
+        PORT: channel === 'stable' ? '5197' : '5199',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     server.stdout?.on('data', chunk => { stdout += chunk.toString(); });
     server.stderr?.on('data', chunk => { stderr += chunk.toString(); });
-    try {
-      const baseUrl = `http://127.0.0.1:${port}`;
-      await waitForProjects(`${baseUrl}/api/projects`, externalProject);
-      await postJson(`${baseUrl}/api/index/local?project=demo-project`);
-      await postJson(`${baseUrl}/api/lineage-workspaces`, {
-        activate: true,
-        confirmWrite: true,
-        project: externalProject,
-        rootAssetId: externalAssetId,
-        title: 'External package consumer workspace',
-      });
-      await postJson(`${baseUrl}/api/selection`, {
-        assetId: externalAssetId,
-        confirmWrite: true,
-        project: externalProject,
-        rootAssetId: externalAssetId,
-      });
-
-      const rootAsset = 'demo-meta-short-form-upload-demo-post-static';
-      const childAsset = 'demo-linkedin-ledger-catalog-shared';
-      const next = JSON.parse(execFileSync(join(binDir, binName), ['next', '--project', 'demo-project', '--root', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
-      if (next.root_asset_id !== rootAsset || next.next_asset?.asset_id !== rootAsset) {
-        throw new Error(`${binName} next returned an unexpected lineage base`);
-      }
-      const inspect = JSON.parse(execFileSync(join(binDir, binName), ['inspect', '--project', 'demo-project', '--asset-id', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
-      if (inspect.active_asset_id !== rootAsset || !inspect.nodes?.some(node => node.asset_id === rootAsset)) {
-        throw new Error(`${binName} inspect did not return the requested asset`);
-      }
-      const link = JSON.parse(execFileSync(join(binDir, binName), ['link-child', '--project', 'demo-project', '--root', rootAsset, '--child', childAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
-      if (link.dryRun !== true || link.edge?.parent_asset_id !== rootAsset || link.edge?.child_asset_id !== childAsset) {
-        throw new Error(`${binName} link-child did not dry-run the expected edge`);
-      }
-      if (binName === 'lineage') {
-        const legacy = JSON.parse(execFileSync(join(binDir, binName), ['lineage', 'next', '--project', 'demo-project', '--root', rootAsset, '--db', dbPath, '--json'], { cwd: tmpProject, encoding: 'utf8' }));
-        if (legacy.root_asset_id !== rootAsset) throw new Error('legacy lineage namespace compatibility failed');
-      }
-      const packet = JSON.parse(execFileSync(join(binDir, binName), [
-        'selection', 'packet',
-        '--project', externalProject,
-        '--root', externalAssetId,
-        '--db', dbPath,
-        '--asset-root', externalAssetRoot,
-        '--channel', 'linkedin',
-        '--campaign', 'package-smoke',
-        '--json',
-      ], { cwd: tmpProject, encoding: 'utf8' }));
-      if (packet.schema_version !== 'lineage.selection_packet.v1' || packet.selection?.asset_ids?.[0] !== externalAssetId) {
-        throw new Error(`${binName} did not export the external package consumer selection`);
-      }
-    } catch (error) {
-      console.error(`${binName} stdout:\n${stdout.trim() || '(empty)'}`);
-      console.error(`${binName} stderr:\n${stderr.trim() || '(empty)'}`);
-      throw error;
-    } finally {
-      await stopServer(server);
+    await Promise.race([
+      new Promise(resolveExit => server.once('exit', resolveExit)),
+      new Promise(resolveDelay => setTimeout(resolveDelay, 5_000)),
+    ]);
+    if (server.exitCode === null && server.signalCode === null) {
+      server.kill('SIGKILL');
+      console.error(`${channel} stdout:\n${stdout.trim() || '(empty)'}`);
+      console.error(`${channel} stderr:\n${stderr.trim() || '(empty)'}`);
+      throw new Error(`${channel} direct packaged server unexpectedly remained running`);
+    }
+    if (!stderr.includes(`Unverified ${channel} code origin`) || existsSync(dbPath)) {
+      throw new Error(`${channel} direct packaged server did not fail closed before database creation: ${stderr}`);
     }
   }
 

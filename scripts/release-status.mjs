@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const packageInfo = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const pluginManifest = JSON.parse(readFileSync(join(root, 'plugins', 'lineage-codex-plugin', '.codex-plugin', 'plugin.json'), 'utf8'));
 
 function run(command, args, options = {}) {
   try {
@@ -51,14 +52,21 @@ if (distTags.ok) {
 
 console.log('Lineage release status');
 console.log(`package: ${packageInfo.name}@${packageInfo.version}`);
+console.log(`Codex plugin: ${pluginManifest.name}@${pluginManifest.version} for ${pluginManifest.lineage?.package}@${pluginManifest.lineage?.version}`);
 if (distTags.ok) {
   console.log(`npm tags: latest=${latest} next=${next}`);
 } else {
   printResult('npm tags', distTags);
 }
 
-printResult('installed lineage', run('lineage', ['--version']));
-printResult('installed lineage-dev', run('lineage-dev', ['--version']));
+printResult('global bootstrap lineage', run('lineage', ['--version']));
+printResult('isolated runtimes', run(process.execPath, ['dist/cli/lineage-channel.js', 'status', '--json']));
+printResult('checkout dev', run('npm', ['run', '--silent', 'lineage:dev', '--', '--version']));
+printResult('GitHub plugin assets', run('gh', [
+  'release', 'view', `v${packageInfo.version}`,
+  '--repo', 'mean-weasel/lineage',
+  '--json', 'assets',
+]));
 
 const runs = run('gh', [
   'run',

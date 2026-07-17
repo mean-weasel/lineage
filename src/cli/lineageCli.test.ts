@@ -1,52 +1,83 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
 import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { fileSha256 } from '../server/localReview';
-import { lineagePublicPackageCommand } from '../server/lineageRuntimeCommand';
-import { formatAgentGraphDigest, formatLineageHelp, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageCli, runLineageDataCommand, runLineageDbCommand } from './lineageCli';
+import { acquireProfileWriterLease, type ProfileWriterLease } from '../server/profileWriterLease';
+import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
+import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
+import { parseRegistryPackageMetadata } from './lineage-channel';
+import { formatAgentGraphDigest, formatLineageHelp, lineageServiceIdentityErrors, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand, runLineageRuntimeCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
 const cliDbFile = join(cliScratchDir, 'lineage-cli.sqlite');
 const fixtureRootAssetId = 'demo-meta-short-form-upload-demo-post-static';
 const fixtureChildAssetId = 'demo-linkedin-ledger-catalog-shared';
+let cliTestLease: ProfileWriterLease | undefined;
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  cliTestLease?.release();
+  cliTestLease = undefined;
   process.env = { ...originalEnv };
 });
 
 function seedCliDb() {
+  cliTestLease?.release();
+  cliTestLease = undefined;
   rmSync(cliScratchDir, { force: true, recursive: true });
+  mkdirSync(cliScratchDir, { recursive: true });
+  const profile: ResolvedLineageProfile = {
+    asset_root: repoRoot,
+    database_path: cliDbFile,
+    environment: 'development',
+    expected_runtime: { channel: 'dev', code_fingerprint: 'd'.repeat(64), code_origin: 'checkout' },
+    manifest_path: join(cliScratchDir, 'profile.json'),
+    profile_fingerprint: 'e'.repeat(64),
+    profile_id: 'cli-test-development',
+    schema_version: 'lineage.profile.v1',
+    service_origin: 'http://127.0.0.1:6198',
+  };
+  writeFileSync(profile.manifest_path, `${JSON.stringify(profile)}\n`);
+  const database = new DatabaseSync(cliDbFile);
+  database.exec('create table lineage_profile_identity (profile_id text primary key, environment text not null, profile_fingerprint text not null, bound_at text not null)');
+  database.prepare('insert into lineage_profile_identity (profile_id, environment, profile_fingerprint, bound_at) values (?, ?, ?, ?)')
+    .run(profile.profile_id, profile.environment, profile.profile_fingerprint, '2026-07-16T00:00:00.000Z');
+  database.close();
   process.env.LINEAGE_DB = cliDbFile;
+  process.env.LINEAGE_PROFILE = profile.manifest_path;
+  process.env.LINEAGE_PROFILE_ENVIRONMENT = profile.environment;
+  process.env.LINEAGE_PROFILE_FINGERPRINT = profile.profile_fingerprint;
+  process.env.LINEAGE_PROFILE_ID = profile.profile_id;
+  process.env.LINEAGE_PROFILE_MANIFEST = profile.manifest_path;
+  process.env.LINEAGE_PROFILE_SERVICE_ORIGIN = profile.service_origin;
+  cliTestLease = acquireProfileWriterLease(profile, 'dev', 'cli');
   indexLineageAssets(defaultProject);
 }
 
+describe('lineage channel registry metadata', () => {
+  it('accepts flat and nested npm integrity output while rejecting missing or conflicting identity', () => {
+    expect(parseRegistryPackageMetadata({ version: '0.1.13', 'dist.integrity': 'sha512-flat' })).toEqual({
+      integrity: 'sha512-flat',
+      version: '0.1.13',
+    });
+    expect(parseRegistryPackageMetadata({ version: '0.1.13', dist: { integrity: 'sha512-nested' } })).toEqual({
+      integrity: 'sha512-nested',
+      version: '0.1.13',
+    });
+    expect(() => parseRegistryPackageMetadata({ version: '0.1.13' })).toThrow('exact version and integrity');
+    expect(() => parseRegistryPackageMetadata({
+      version: '0.1.13',
+      dist: { integrity: 'sha512-nested' },
+      'dist.integrity': 'sha512-flat',
+    })).toThrow('conflicting integrity');
+  });
+});
+
 describe('lineage CLI start options', () => {
-  it('sets the configured channel before direct dev commands generate handoffs', async () => {
-    vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('process.exit:0'); });
-
-    await expect(runLineageCli(
-      { binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' },
-      ['--help'],
-    )).rejects.toThrow('process.exit:0');
-
-    expect(process.env.LINEAGE_CHANNEL).toBe('dev');
-    expect(lineagePublicPackageCommand()).toContain(" --import '");
-    expect(lineagePublicPackageCommand()).toContain('/node_modules/tsx/dist/loader.mjs');
-    expect(lineagePublicPackageCommand()).toContain('/src/cli/lineage-dev.ts');
-  });
-
-  it('pins generated preview handoffs to the published next channel', () => {
-    process.env.LINEAGE_CHANNEL = 'preview';
-
-    expect(lineagePublicPackageCommand()).toBe('LINEAGE_CHANNEL=preview npx --package @mean-weasel/lineage@next lineage-dev');
-  });
-
   it('shows accurate task cancel help with dry-run and override options', () => {
     const help = formatLineageHelp({ binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' });
 
@@ -54,8 +85,22 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
     expect(help).toContain('[--schema v2]');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
+    expect(help).toContain('lineage runtime doctor [--json]');
     expect(help).toContain('--asset-root <path>');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
+  });
+
+  it('reports checkout dev identity and rejects checkout code as stable', () => {
+    const dev = runLineageRuntimeCommand(
+      { binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' },
+      'doctor',
+    );
+
+    expect(dev).toMatchObject({ channel: 'dev', origin: 'checkout', root: repoRoot, verified: true });
+    expect(() => runLineageRuntimeCommand(
+      { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
+      'doctor',
+    )).toThrow('Checkout code may run only as dev, not stable');
   });
 
   it('uses stable channel defaults with an isolated runtime home', () => {
@@ -132,6 +177,9 @@ describe('lineage CLI start options', () => {
   });
 
   it('rejects invalid ports before spawning a server', () => {
+    process.env.LINEAGE_HOME = join(cliScratchDir, 'invalid-port-home');
+    delete process.env.LINEAGE_DB;
+
     expect(() =>
       resolveStartOptions(
         { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
@@ -145,6 +193,41 @@ describe('lineage CLI start options', () => {
         ['--port', '70000']
       )
     ).toThrow('Invalid port: 70000');
+  });
+
+  it('requires code, profile, database, and service-instance identity before readiness', () => {
+    const runtime = {
+      channel: 'dev',
+      code: { fingerprint: 'a'.repeat(64), verified: true },
+      database: { path: '/tmp/dev.sqlite' },
+      profile: { bound: true, environment: 'development', fingerprint: 'b'.repeat(64), id: 'dev-main' },
+      schema: { migration_keys: [], profile_fingerprint: 'b'.repeat(64), profile_id: 'dev-main' },
+      service: { instance_id: 'instance-a', launcher_pid: 123, pid: 124, started_at: '2026-07-16T00:00:00.000Z' },
+    } as unknown as LineageRuntimeInfo;
+    const profile = {
+      database_path: '/tmp/dev.sqlite',
+      environment: 'development',
+      profile_fingerprint: 'b'.repeat(64),
+      profile_id: 'dev-main',
+    } as ResolvedLineageProfile;
+    const expected = {
+      channel: 'dev' as const,
+      code_fingerprint: 'a'.repeat(64),
+      database_path: '/tmp/dev.sqlite',
+      instance_id: 'instance-a',
+      launcher_pid: 123,
+      profile,
+    };
+
+    expect(lineageServiceIdentityErrors(runtime, expected)).toEqual([]);
+    expect(lineageServiceIdentityErrors({
+      ...runtime,
+      code: { ...runtime.code!, fingerprint: 'c'.repeat(64) },
+      service: { ...runtime.service!, instance_id: 'wrong-instance' },
+    }, expected)).toEqual(expect.arrayContaining([
+      expect.stringContaining('code fingerprint'),
+      expect.stringContaining('service instance'),
+    ]));
   });
 });
 
@@ -748,16 +831,19 @@ describe('lineage CLI handoff commands', () => {
 
     expect(readme).toContain('lineage agent claim --project demo-project --scope lineage_workspace');
     expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
-    expect(operator).toContain('lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN"');
-    expect(operator).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --db /absolute/path/to/lineage.sqlite --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
+    expect(operator).toContain('Pass `--profile` on every operational command');
+    expect(operator).toContain('lineage-stable agent claim --profile "$LINEAGE_PROD_PROFILE"');
+    expect(operator).toContain('Heartbeat while working');
+    expect(operator).toContain('`link-child` only for a visible child variation');
     expect(readme).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --confirm-write --json');
     expect(readme).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json');
-    expect(operator).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --db /absolute/path/to/lineage.sqlite --confirm-write --json');
-    expect(operator).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --db /absolute/path/to/lineage.sqlite --confirm-write --json');
+    expect(operator).toContain('`reroll mark`');
+    expect(operator).toContain('Never replace `--profile` with a direct `--db` write');
+    expect(operator).not.toContain('--db /absolute/path/to/lineage.sqlite');
     expect(readme).toContain('`lineage link-child` creates a new visible descendant');
     expect(readme).toContain('`lineage reroll import` updates the target node');
-    expect(operator).toContain('Do not use it for re-rolls.');
+    expect(operator).toContain('Use `reroll mark`, `reroll');
     expect(readme).toContain('Use `project_channel` only for rare work');
-    expect(operator).toContain('Use `project_channel` claims only for rare');
+    expect(operator).toContain('Persistent writes require the profile writer lease');
   });
 });
