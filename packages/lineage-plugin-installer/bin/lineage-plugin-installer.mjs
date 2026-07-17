@@ -24,6 +24,8 @@ const { positionals, values } = parseArgs({
     "release-base-url": { type: "string" },
     "github-repo": { type: "string" },
     "target-dir": { type: "string" },
+    "codex-home": { type: "string" },
+    "no-activate": { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
     json: { type: "boolean", default: false },
   },
@@ -48,13 +50,15 @@ try {
     releaseBaseUrl: values["release-base-url"],
     githubRepo: values["github-repo"],
     targetRoot: values["target-dir"],
+    codexHome: values["codex-home"],
+    activate: values["no-activate"] ? false : undefined,
     dryRun: values["dry-run"],
   });
 
   if (values.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    const mode = result.dryRun ? "Would install" : "Installed";
+    const mode = result.dryRun ? "Would install" : result.activated ? "Installed and activated" : "Installed files for";
     console.log(`${mode} ${result.plugin}@${result.pluginVersion} for ${result.lineagePackage}@${result.lineageVersion}`);
     console.log(result.destination);
   }

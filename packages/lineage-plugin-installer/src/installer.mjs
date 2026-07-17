@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -8,6 +9,9 @@ export const LINEAGE_PACKAGE = "@mean-weasel/lineage";
 export const DEFAULT_GITHUB_REPO = "mean-weasel/lineage";
 export const PLUGIN_ARTIFACT_NAME = "lineage-codex-plugin";
 export const PLUGIN_MANIFEST_PATH = ".codex-plugin/plugin.json";
+export const CODEX_MARKETPLACE_NAME = "lineage";
+export const CODEX_PLUGIN_ID = `${PLUGIN_ARTIFACT_NAME}@${CODEX_MARKETPLACE_NAME}`;
+export const MARKETPLACE_MANIFEST_PATH = ".agents/plugins/marketplace.json";
 
 export function parseLineageVersion(output) {
   const text = String(output || "").trim();
@@ -106,6 +110,29 @@ export function defaultTargetRoot() {
   return path.join(homedir(), ".codex", "plugins", "local");
 }
 
+export function defaultCodexHome(env = process.env) {
+  return path.resolve(env.CODEX_HOME || path.join(homedir(), ".codex"));
+}
+
+export function defaultMarketplaceRoot(codexHome = defaultCodexHome()) {
+  return path.join(path.resolve(codexHome), "marketplaces", CODEX_MARKETPLACE_NAME);
+}
+
+export function createMarketplaceManifest(pluginName = PLUGIN_ARTIFACT_NAME) {
+  return {
+    name: CODEX_MARKETPLACE_NAME,
+    interface: { displayName: "Lineage" },
+    plugins: [
+      {
+        name: pluginName,
+        source: { source: "local", path: `./plugins/${pluginName}` },
+        policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+        category: "Productivity",
+      },
+    ],
+  };
+}
+
 export async function installPluginDirectory({
   pluginDir,
   targetRoot = defaultTargetRoot(),
@@ -121,6 +148,7 @@ export async function installPluginDirectory({
   const plan = {
     ok: true,
     dryRun,
+    activated: false,
     plugin: manifest.name,
     pluginVersion: manifest.version,
     lineagePackage: manifest.lineage.package,
@@ -179,12 +207,164 @@ export async function installPluginDirectory({
   return plan;
 }
 
+export async function installPluginMarketplace({
+  pluginDir,
+  expectedVersion,
+  codexHome = defaultCodexHome(),
+  dryRun = false,
+  runCodex = runCodexCommandSync,
+} = {}) {
+  if (!pluginDir) throw new Error("pluginDir is required.");
+  if (!expectedVersion) throw new Error("expectedVersion is required.");
+
+  const manifest = assertPluginManifest(await loadPluginManifest(pluginDir), expectedVersion);
+  if (manifest.name !== PLUGIN_ARTIFACT_NAME) {
+    throw new Error(`Plugin name ${manifest.name || "<missing>"} does not match ${PLUGIN_ARTIFACT_NAME}.`);
+  }
+
+  const resolvedCodexHome = path.resolve(codexHome);
+  const marketplaceRoot = defaultMarketplaceRoot(resolvedCodexHome);
+  const targetRoot = path.join(marketplaceRoot, "plugins");
+  const destination = path.join(targetRoot, manifest.name);
+  const marketplaceFile = path.join(marketplaceRoot, MARKETPLACE_MANIFEST_PATH);
+  const plan = {
+    ok: true,
+    dryRun,
+    activated: !dryRun,
+    plugin: manifest.name,
+    pluginId: CODEX_PLUGIN_ID,
+    pluginVersion: manifest.version,
+    lineagePackage: manifest.lineage.package,
+    lineageVersion: manifest.lineage.version,
+    source: path.resolve(pluginDir),
+    destination,
+    codexHome: resolvedCodexHome,
+    marketplace: CODEX_MARKETPLACE_NAME,
+    marketplaceRoot,
+    marketplaceFile,
+    registration: [
+      ["codex", "plugin", "marketplace", "add", marketplaceRoot, "--json"],
+      ["codex", "plugin", "add", CODEX_PLUGIN_ID, "--json"],
+    ],
+  };
+
+  if (dryRun) return plan;
+
+  const marketplaceParent = path.dirname(marketplaceRoot);
+  const lock = path.join(marketplaceParent, `.${CODEX_MARKETPLACE_NAME}.activation.lock`);
+  const staging = path.join(marketplaceParent, `.${CODEX_MARKETPLACE_NAME}.staging-${randomUUID()}`);
+  const backup = path.join(marketplaceParent, `.${CODEX_MARKETPLACE_NAME}.activation-backup`);
+  const lockOwner = `${process.pid}:${randomUUID()}`;
+  const codexHomeExisted = await pathExists(resolvedCodexHome);
+  if (!codexHomeExisted) await mkdir(resolvedCodexHome, { recursive: true });
+  try {
+    readCodexPluginState({ codexHome: resolvedCodexHome, runCodex });
+  } catch (error) {
+    if (!codexHomeExisted) await rm(resolvedCodexHome, { recursive: true, force: true });
+    throw error;
+  }
+  await mkdir(marketplaceParent, { recursive: true });
+  await acquireInstallLock(lock, lockOwner, manifest.name, marketplaceParent);
+
+  let movedExisting = false;
+  let placedMarketplace = false;
+  let marketplaceAddAttempted = false;
+  let pluginAddAttempted = false;
+  let priorState;
+  try {
+    priorState = readCodexPluginState({ codexHome: resolvedCodexHome, runCodex });
+    await recoverMarketplaceReplacement({ marketplaceRoot, backup });
+    await installPluginDirectory({
+      pluginDir,
+      targetRoot: path.join(staging, "plugins"),
+      expectedVersion,
+    });
+    const stagingMarketplaceFile = path.join(staging, MARKETPLACE_MANIFEST_PATH);
+    await mkdir(path.dirname(stagingMarketplaceFile), { recursive: true });
+    await writeFile(stagingMarketplaceFile, `${JSON.stringify(createMarketplaceManifest(manifest.name), null, 2)}\n`);
+    assertPluginManifest(
+      await loadPluginManifest(path.join(staging, "plugins", manifest.name)),
+      expectedVersion,
+    );
+
+    try {
+      await rename(marketplaceRoot, backup);
+      movedExisting = true;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await rename(staging, marketplaceRoot);
+    placedMarketplace = true;
+
+    marketplaceAddAttempted = true;
+    const marketplaceResult = runCodexJson({
+      runCodex,
+      codexHome: resolvedCodexHome,
+      args: ["plugin", "marketplace", "add", marketplaceRoot, "--json"],
+      label: "register the Lineage marketplace",
+    });
+    if (marketplaceResult.marketplaceName !== CODEX_MARKETPLACE_NAME) {
+      throw new Error(`Codex registered unexpected marketplace ${marketplaceResult.marketplaceName || "<missing>"}.`);
+    }
+
+    pluginAddAttempted = true;
+    const pluginResult = runCodexJson({
+      runCodex,
+      codexHome: resolvedCodexHome,
+      args: ["plugin", "add", CODEX_PLUGIN_ID, "--json"],
+      label: "install the Lineage plugin",
+    });
+    if (pluginResult.pluginId !== CODEX_PLUGIN_ID || pluginResult.version !== expectedVersion) {
+      throw new Error(
+        `Codex installed ${pluginResult.pluginId || "<missing>"}@${pluginResult.version || "<missing>"}, expected ${CODEX_PLUGIN_ID}@${expectedVersion}.`,
+      );
+    }
+
+    const installedState = readCodexPluginState({ codexHome: resolvedCodexHome, runCodex });
+    assertActivatedState(installedState, { expectedVersion, marketplaceRoot });
+    if (movedExisting) await rm(backup, { recursive: true, force: true });
+  } catch (error) {
+    const rollbackErrors = [];
+    try {
+      await restoreMarketplaceReplacement({ marketplaceRoot, backup, movedExisting, placedMarketplace, staging });
+    } catch (rollbackError) {
+      rollbackErrors.push(`filesystem: ${rollbackError.message}`);
+    }
+    if (priorState && (marketplaceAddAttempted || pluginAddAttempted)) {
+      try {
+        restoreCodexPluginState({ priorState, codexHome: resolvedCodexHome, runCodex });
+      } catch (rollbackError) {
+        rollbackErrors.push(`Codex registration: ${rollbackError.message}`);
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new Error(`${error.message} Rollback failed (${rollbackErrors.join("; ")}).`, { cause: error });
+    }
+    throw error;
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+    await releaseInstallLock(lock, lockOwner);
+  }
+
+  return plan;
+}
+
 export async function installFromOptions(options = {}) {
   const expectedVersion = await resolveLineageVersion(options);
+  const activate = options.activate ?? !options.targetRoot;
   if (options.pluginDir) {
+    if (activate) {
+      return installPluginMarketplace({
+        pluginDir: options.pluginDir,
+        expectedVersion,
+        codexHome: options.codexHome,
+        dryRun: options.dryRun,
+        runCodex: options.runCodex,
+      });
+    }
     return installPluginDirectory({
       pluginDir: options.pluginDir,
-      targetRoot: options.targetRoot,
+      targetRoot: options.targetRoot || (options.codexHome ? path.join(options.codexHome, "plugins", "local") : undefined),
       expectedVersion,
       dryRun: options.dryRun,
     });
@@ -197,10 +377,13 @@ export async function installFromOptions(options = {}) {
     checksumUrl: options.checksumUrl,
     releaseBaseUrl: options.releaseBaseUrl,
     githubRepo: options.githubRepo,
-    targetRoot: options.targetRoot,
+    targetRoot: options.targetRoot || (options.codexHome ? path.join(options.codexHome, "plugins", "local") : undefined),
     expectedVersion,
     dryRun: options.dryRun,
     fetchBytes: options.fetchBytes,
+    activate,
+    codexHome: options.codexHome,
+    runCodex: options.runCodex,
   });
 }
 
@@ -215,6 +398,9 @@ export async function installPluginArtifact({
   expectedVersion,
   dryRun = false,
   fetchBytes = fetchBytesFromUrl,
+  activate = false,
+  codexHome,
+  runCodex = runCodexCommandSync,
 } = {}) {
   if (!expectedVersion) throw new Error("expectedVersion is required.");
 
@@ -241,12 +427,9 @@ export async function installPluginArtifact({
     assertSafeTarballEntries(artifactPath);
     extractTarball(artifactPath, tempRoot);
     const pluginDir = path.join(tempRoot, "package");
-    const result = await installPluginDirectory({
-      pluginDir,
-      targetRoot,
-      expectedVersion,
-      dryRun,
-    });
+    const result = activate
+      ? await installPluginMarketplace({ pluginDir, expectedVersion, codexHome, dryRun, runCodex })
+      : await installPluginDirectory({ pluginDir, targetRoot, expectedVersion, dryRun });
     return {
       ...result,
       checksum,
@@ -325,6 +508,134 @@ export function runCommandSync(command, args) {
     stdout: result.stdout || "",
     stderr: result.stderr || result.error?.message || "",
   };
+}
+
+export function runCodexCommandSync(command, args, { codexHome } = {}) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ...(codexHome ? { CODEX_HOME: path.resolve(codexHome) } : {}),
+    },
+  });
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout || "",
+    stderr: result.stderr || result.error?.message || "",
+  };
+}
+
+function runCodexJson({ runCodex, codexHome, args, label }) {
+  const result = runCodex("codex", args, { codexHome });
+  if (result.status !== 0) {
+    throw new Error(`Failed to ${label}: ${result.stderr || result.stdout || `exit ${result.status}`}`);
+  }
+  const parsed = safeJsonParse(result.stdout);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error(`Failed to ${label}: Codex returned non-JSON output.`);
+  }
+  return parsed;
+}
+
+function readCodexPluginState({ codexHome, runCodex }) {
+  const marketplaceOutput = runCodexJson({
+    runCodex,
+    codexHome,
+    args: ["plugin", "marketplace", "list", "--json"],
+    label: "inspect Codex marketplaces",
+  });
+  const pluginOutput = runCodexJson({
+    runCodex,
+    codexHome,
+    args: ["plugin", "list", "--available", "--json"],
+    label: "inspect Codex plugins",
+  });
+  const marketplace = (marketplaceOutput.marketplaces || []).find(
+    (candidate) => candidate?.name === CODEX_MARKETPLACE_NAME,
+  );
+  const plugins = [...(pluginOutput.installed || []), ...(pluginOutput.available || [])];
+  const plugin = plugins.find((candidate) => candidate?.pluginId === CODEX_PLUGIN_ID);
+  return {
+    marketplace: marketplace
+      ? { name: marketplace.name, root: canonicalPath(marketplace.root) }
+      : null,
+    plugin: plugin
+      ? {
+          pluginId: plugin.pluginId,
+          version: plugin.version || null,
+          installed: plugin.installed === true,
+          enabled: plugin.enabled === true,
+        }
+      : null,
+  };
+}
+
+function assertActivatedState(state, { expectedVersion, marketplaceRoot }) {
+  if (state.marketplace?.root !== canonicalPath(marketplaceRoot)) {
+    throw new Error(
+      `Codex marketplace root ${state.marketplace?.root || "<missing>"} does not match ${canonicalPath(marketplaceRoot)}.`,
+    );
+  }
+  if (!state.plugin?.installed || !state.plugin?.enabled || state.plugin.version !== expectedVersion) {
+    throw new Error(
+      `Codex plugin state is installed=${state.plugin?.installed === true}, enabled=${state.plugin?.enabled === true}, version=${state.plugin?.version || "<missing>"}; expected installed=true, enabled=true, version=${expectedVersion}.`,
+    );
+  }
+}
+
+function restoreCodexPluginState({ priorState, codexHome, runCodex }) {
+  if (priorState.plugin?.installed) {
+    runCodexJson({
+      runCodex,
+      codexHome,
+      args: ["plugin", "add", CODEX_PLUGIN_ID, "--json"],
+      label: "restore the prior Lineage plugin installation",
+    });
+  } else {
+    runCodex("codex", ["plugin", "remove", CODEX_PLUGIN_ID, "--json"], { codexHome });
+  }
+
+  if (!priorState.marketplace) {
+    runCodex("codex", ["plugin", "marketplace", "remove", CODEX_MARKETPLACE_NAME, "--json"], { codexHome });
+  }
+
+  const restored = readCodexPluginState({ codexHome, runCodex });
+  if (!sameCodexPluginState(priorState, restored)) {
+    throw new Error(`post-rollback Codex state does not match the pre-install state`);
+  }
+}
+
+function sameCodexPluginState(left, right) {
+  return left.marketplace?.root === right.marketplace?.root
+    && left.plugin?.pluginId === right.plugin?.pluginId
+    && left.plugin?.version === right.plugin?.version
+    && left.plugin?.installed === right.plugin?.installed
+    && left.plugin?.enabled === right.plugin?.enabled;
+}
+
+function canonicalPath(value) {
+  try {
+    return realpathSync(path.resolve(value));
+  } catch {
+    return path.resolve(value);
+  }
+}
+
+async function recoverMarketplaceReplacement({ marketplaceRoot, backup }) {
+  const backupExists = await pathExists(backup);
+  const marketplaceExists = await pathExists(marketplaceRoot);
+  if (backupExists && !marketplaceExists) {
+    await rename(backup, marketplaceRoot);
+  } else if (backupExists) {
+    await rm(backup, { recursive: true, force: true });
+  }
+}
+
+async function restoreMarketplaceReplacement({ marketplaceRoot, backup, movedExisting, placedMarketplace, staging }) {
+  await rm(staging, { recursive: true, force: true });
+  if (placedMarketplace) await rm(marketplaceRoot, { recursive: true, force: true });
+  if (movedExisting) await rename(backup, marketplaceRoot);
 }
 
 function safeJsonParse(text) {

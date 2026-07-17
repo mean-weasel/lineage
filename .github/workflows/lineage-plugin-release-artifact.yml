@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Exact @mean-weasel/lineage version to match, for example 0.1.2"
+        description: "Exact @mean-weasel/lineage release version; must equal the root package and plugin versions"
         required: true
         type: string
       dry_run:

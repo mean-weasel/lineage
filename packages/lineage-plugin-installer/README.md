@@ -1,7 +1,8 @@
 # Lineage Plugin Installer
 
 npm-powered installer that installs the Codex Lineage plugin matching a
-resolved `@mean-weasel/lineage` version.
+resolved `@mean-weasel/lineage` version and activates it through Codex's
+supported marketplace commands.
 
 The installer verifies the plugin manifest before writing anything:
 
@@ -50,19 +51,22 @@ Show the installed installer package version:
 lineage-plugin-installer --version
 ```
 
-Local plugin directory, useful while developing the plugin:
+Local plugin directory, useful while developing the plugin. This dry-run plans
+registration in the selected temporary Codex home without mutating it. Set
+`LINEAGE_VERSION` to the exact root Lineage/plugin version first:
 
 ```bash
-lineage-plugin-installer install --version 0.1.2 --plugin ../../plugins/lineage-codex-plugin --dry-run --json
+lineage-plugin-installer install --version "$LINEAGE_VERSION" --plugin ../../plugins/lineage-codex-plugin \
+  --codex-home /tmp/lineage-codex-home --dry-run --json
 ```
 
 Local release-style artifact, useful for testing a GitHub release asset before
 uploading it:
 
 ```bash
-lineage-plugin-installer install --version 0.1.2 \
-  --artifact-file ./dist/lineage-codex-plugin-0.1.2.tgz \
-  --checksum-file ./dist/lineage-codex-plugin-0.1.2.tgz.sha256 \
+lineage-plugin-installer install --version "$LINEAGE_VERSION" \
+  --artifact-file "./dist/lineage-codex-plugin-${LINEAGE_VERSION}.tgz" \
+  --checksum-file "./dist/lineage-codex-plugin-${LINEAGE_VERSION}.tgz.sha256" \
   --dry-run --json
 ```
 
@@ -87,4 +91,14 @@ https://github.com/mean-weasel/lineage/releases/download/v<VERSION>/lineage-code
 
 The installer downloads both files, verifies the checksum, extracts the artifact
 to a temporary directory, validates `.codex-plugin/plugin.json`, and only then
-installs or dry-runs the target plugin directory.
+replaces its dedicated marketplace tree. It registers the marketplace with
+`codex plugin marketplace add`, installs with `codex plugin add`, and verifies
+the exact plugin is installed and enabled. A failure restores the prior tree and
+Codex registration state. An explicit `--target-dir` keeps the earlier files-only
+mode for packaging checks; `--no-activate` also suppresses registration.
+
+Before changing a real Codex profile, run the isolated activation oracle:
+
+```bash
+npm run plugin:codex-smoke
+```
