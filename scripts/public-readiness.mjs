@@ -105,6 +105,9 @@ for (const required of [
   'link-child --profile',
   'profile clone --source-db',
   'profile clone-assets --source-asset-root',
+  'profile repin-runtime',
+  '--checkout-root',
+  'make repin-dev',
   'lineage-stable-service',
 ]) {
   if (!operatorSkill.includes(required)) hits.push(`plugin operator skill is missing ${required}`);

@@ -46,6 +46,7 @@ import {
   cloneLineageProfileAssets,
   cloneLineageProfileDatabase,
   doctorLineageProfile,
+  repinLineageDevelopmentProfileRuntime,
   resolveLineageProfile,
 } from '../server/lineageProfiles';
 import { executeManagedWriterCommand } from '../server/managedWriterRouting';
@@ -55,6 +56,7 @@ import type {
   LineageProfileBindResult,
   LineageProfileCloneResult,
   LineageProfileDoctorResult,
+  LineageProfileRuntimeRepinResult,
   ResolvedLineageProfile,
 } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeCodeIdentity, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
@@ -229,6 +231,7 @@ Usage:
   ${config.binName} profile bind --profile <id-or-manifest> --confirm-write [--json]
   ${config.binName} profile clone --source-db <snapshot-source> --target-profile <id-or-manifest> --confirm-write [--json]
   ${config.binName} profile clone-assets --source-asset-root <path> --target-profile <id-or-manifest> --confirm-write [--json]
+  ${config.binName} profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]
   ${config.binName} runtime info [--json]
   ${config.binName} runtime doctor [--json]
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
@@ -638,12 +641,13 @@ export function runLineageProfileCommand(config: LineageCliConfig, command: 'doc
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'bind', args: string[]): LineageProfileBindResult;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'clone', args: string[]): Promise<LineageProfileCloneResult>;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'clone-assets', args: string[]): LineageProfileAssetsCloneResult;
-export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | Promise<LineageProfileCloneResult>;
+export function runLineageProfileCommand(config: LineageCliConfig, command: 'repin-runtime', args: string[]): LineageProfileRuntimeRepinResult;
+export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult>;
 export function runLineageProfileCommand(
   config: LineageCliConfig,
   command: string,
   args: string[],
-): LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | Promise<LineageProfileCloneResult> {
+): LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult> {
   const runtime = getLineageRuntimeInfo({ channel: config.channel });
   const runtimeIdentity = { channel: config.channel, code: runtime.code, gitSha: runtime.git_sha, version: runtime.version };
   if (command === 'clone') {
@@ -676,6 +680,18 @@ export function runLineageProfileCommand(
   const selector = profileSelector(args);
   if (!selector) throw new Error(`lineage profile ${command} requires --profile or LINEAGE_PROFILE`);
   if (command === 'doctor') return doctorLineageProfile(selector, runtimeIdentity);
+  if (command === 'repin-runtime') {
+    const checkoutRoot = readOption(args, '--checkout-root');
+    if (!checkoutRoot) throw new Error('Profile runtime repin requires --checkout-root');
+    if (!args.includes('--confirm-write')) throw new Error('Profile runtime repin requires --confirm-write');
+    const profile = resolveLineageProfile(selector);
+    const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
+    try {
+      return repinLineageDevelopmentProfileRuntime(selector, checkoutRoot, runtimeIdentity, true);
+    } finally {
+      writerLease.release();
+    }
+  }
   if (command === 'bind') {
     if (!args.includes('--confirm-write')) throw new Error('Profile bind requires --confirm-write');
     const profile = resolveLineageProfile(selector);
@@ -689,7 +705,7 @@ export function runLineageProfileCommand(
   throw new Error(`Unknown profile command: ${command}`);
 }
 
-function printProfileResult(result: LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileCloneResult | LineageProfileAssetsCloneResult, json: boolean): void {
+function printProfileResult(result: LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileCloneResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -702,6 +718,9 @@ function printProfileResult(result: LineageProfileDoctorResult | LineageProfileB
   } else if (result.schema_version === 'lineage.profile_clone_receipt.v1') {
     console.log(`Cloned ${result.source_database_path} to ${result.database_path} for ${result.target_identity.profile_id}`);
     console.log(`Receipt: ${result.receipt_path}`);
+  } else if (result.schema_version === 'lineage.profile_runtime_repin_receipt.v1') {
+    console.log(`${result.changed ? 'Repinned' : 'Already pinned'} ${result.profile_id} to checkout ${result.checkout_root}`);
+    console.log(`Code fingerprint: ${result.new_code_fingerprint}`);
   } else {
     console.log(`Cloned ${result.files_copied} referenced asset file(s) into ${result.asset_root}`);
     console.log(`Receipt: ${result.receipt_path}`);

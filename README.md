@@ -19,7 +19,7 @@ lineage-channel install preview
 
 By default the installer writes immutable version/integrity roots beneath
 `~/Library/Application Support/Lineage/runtimes`, plus channel-qualified
-launchers in its `bin` directory. Every launcher is pinned to an absolute
+launchers under `~/.local/bin`. Every launcher is pinned to an absolute
 package root and install receipt; it does not select code from `PATH` at runtime.
 
 The three exact channel meanings are:
@@ -130,6 +130,30 @@ can be bound or used for writes. `profile bind` may add a fingerprint to a
 matching legacy identity, but refuses a conflicting identity. An unprofiled
 CLI or service is `legacy-unbound` and read-only; mutating CLI commands and HTTP
 methods fail with a profile-required error instead of creating a database.
+
+Checkout fingerprints intentionally change as tracked or untracked source
+changes. To repin an existing development profile, first stop its managed
+service, then run the guarded checkout-only workflow:
+
+```bash
+make repin-dev LINEAGE_DEV_PROFILE=team-development
+```
+
+The underlying explicit command is:
+
+```bash
+npm run lineage:dev -- profile repin-runtime \
+  --profile team-development --checkout-root "$PWD" --confirm-write --json
+```
+
+Repin accepts only a verified dev checkout whose canonical root equals
+`--checkout-root`, an owner-only development manifest already pinned to
+dev/checkout, and an available profile writer lease. It atomically replaces
+only `expected_runtime`; profile/database identity, paths, environment,
+service origin, and migrations stay unchanged. Production, preview, package,
+wrong-root, unsafe-manifest, unconfirmed, and active-service cases fail closed.
+The command may prepare a new structurally valid development manifest before
+its database and asset root are cloned.
 
 To create a realistic preview or development database without copying a live
 SQLite file directly, define a new non-production target profile whose database

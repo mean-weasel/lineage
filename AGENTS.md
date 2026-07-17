@@ -4,6 +4,14 @@ Use an adversarial proof standard. Before declaring work complete, state the use
 
 Do not commit private media, credentials, private campaign data, real presigned URLs, customer content, or local SQLite databases.
 
+Five-step channel gate before any operation:
+
+1. Choose exactly one channel: `lineage-stable`, `lineage-preview`, or checkout-only `npm run lineage:dev --`.
+2. Set its matching named profile; never reuse a stable profile for preview/dev.
+3. Run runtime doctor, profile doctor, and `db info --profile <profile> --json` with that same launcher.
+4. Confirm code root/origin/fingerprint, channel, profile/environment/fingerprint, database identity, and service origin all agree.
+5. Stop on any mismatch. For an intentional checkout change, stop the dev service, run `make repin-dev LINEAGE_DEV_PROFILE=<profile>`, then repeat the gate. Repin never applies to stable/preview/package code.
+
 Runtime channel memory:
 
 - `stable` resolves npm `latest` once into an isolated, receipt-bound code root and is launched with `lineage-stable` (normally through `make start-prod`).
@@ -11,7 +19,7 @@ Runtime channel memory:
 - `dev` is checkout-only. Run it with `npm run lineage:dev -- <command>` or the `make start-dev*` targets; a published `lineage-dev` must fail closed.
 - Never install `latest` and `next` into the same global npm prefix. Do not use PATH-resolved `lineage-dev` as evidence that checkout code is running.
 - Run `<launcher> runtime doctor --json` before operational commands and check `code.root`, `code.fingerprint`, `code.verified`, channel, profile, and SQLite identity. Use `runtime info` only to diagnose an unverified install.
-- Check `lineage-stable db info --json`, `lineage-preview db info --json`, or `npm run lineage:dev -- db info --json` before assuming which SQLite database a CLI/app session is using.
+- Check `lineage-stable db info --profile <profile> --json`, `lineage-preview db info --profile <profile> --json`, or `npm run lineage:dev -- db info --profile <profile> --json` before assuming which SQLite database a CLI/app session is using.
 - Persistent writes require a named profile whose `expected_runtime` pins the verified code origin and fingerprint; `legacy-unbound` CLI and service access is read-only.
 - Before any write, run `profile doctor --profile <profile> --json` and confirm the profile fingerprint, code fingerprint, database identity, environment, origin, and service URL all match.
 - Bind an existing database only with `profile bind --profile <profile> --confirm-write`; this is the only in-place legacy identity migration.

@@ -5,11 +5,12 @@ PLUGIN_INSTALLER ?= lineage-plugin-installer
 PROD_TAG ?= latest
 PREVIEW_TAG ?= next
 LINEAGE_RUNTIME_ROOT ?= $(HOME)/Library/Application Support/Lineage/runtimes
+LINEAGE_USER_BIN ?= $(HOME)/.local/bin
 LINEAGE_CHANNEL_CLI ?= node dist/cli/lineage-channel.js
-LINEAGE_STABLE_BIN ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-stable
-LINEAGE_PREVIEW_BIN ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-preview
-LINEAGE_STABLE_SERVICE_MANAGER ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-stable-service
-LINEAGE_PREVIEW_SERVICE_MANAGER ?= $(LINEAGE_RUNTIME_ROOT)/bin/lineage-preview-service
+LINEAGE_STABLE_BIN ?= $(LINEAGE_USER_BIN)/lineage-stable
+LINEAGE_PREVIEW_BIN ?= $(LINEAGE_USER_BIN)/lineage-preview
+LINEAGE_STABLE_SERVICE_MANAGER ?= $(LINEAGE_USER_BIN)/lineage-stable-service
+LINEAGE_PREVIEW_SERVICE_MANAGER ?= $(LINEAGE_USER_BIN)/lineage-preview-service
 LINEAGE_DEV_SERVICE_MANAGER ?= node scripts/managed-service.mjs
 LINEAGE_PROD_PROFILE ?=
 LINEAGE_PREVIEW_PROFILE ?=
@@ -19,7 +20,7 @@ START_PROD_CMD = "$(LINEAGE_STABLE_BIN)" start --profile "$(LINEAGE_PROD_PROFILE
 START_PREVIEW_CMD = "$(LINEAGE_PREVIEW_BIN)" start --profile "$(LINEAGE_PREVIEW_PROFILE)" --open
 START_DEV_CMD = npm run --silent lineage:dev -- start --profile "$(LINEAGE_DEV_PROFILE)" --open
 
-.PHONY: help init install-prod install-preview install-dev install-plugin-prod install-plugin-preview start-prod start-preview start-dev start-prod-bg status-prod stop-prod logs-prod start-preview-bg status-preview stop-preview logs-preview start-dev-bg status-dev stop-dev logs-dev dev check test lint build smoke ci release-status
+.PHONY: help init install-prod install-preview install-dev install-plugin-prod install-plugin-preview repin-dev start-prod start-preview start-dev start-prod-bg status-prod stop-prod logs-prod start-preview-bg status-preview stop-preview logs-preview start-dev-bg status-dev stop-dev logs-dev dev check test lint build smoke ci release-status
 
 help:
 	@printf "Lineage shortcuts\n"
@@ -31,6 +32,7 @@ help:
 	@printf "  make install-dev            install checkout dependencies (dev is not published)\n"
 	@printf "  make install-plugin-prod    $(PLUGIN_INSTALLER) install --channel $(PROD_TAG)\n"
 	@printf "  make install-plugin-preview $(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)\n"
+	@printf "  make repin-dev LINEAGE_DEV_PROFILE=<profile>  intentionally pin a stopped dev profile to this checkout\n"
 	@printf "\n"
 	@printf "Foreground (browser opens only after exact runtime readiness):\n"
 	@printf "  make start-prod LINEAGE_PROD_PROFILE=<profile>\n"
@@ -68,6 +70,13 @@ install-plugin-prod:
 
 install-plugin-preview:
 	$(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)
+
+repin-dev:
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
+	npm run --silent lineage:dev -- runtime doctor --json
+	npm run --silent lineage:dev -- profile repin-runtime --profile "$(LINEAGE_DEV_PROFILE)" --checkout-root "$(CURDIR)" --confirm-write --json
+	npm run --silent lineage:dev -- profile doctor --profile "$(LINEAGE_DEV_PROFILE)" --json
+	npm run --silent lineage:dev -- db info --profile "$(LINEAGE_DEV_PROFILE)" --json
 
 start-prod:
 	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }

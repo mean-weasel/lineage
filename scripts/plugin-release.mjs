@@ -55,6 +55,9 @@ try {
     'link-child --profile',
     'profile clone --source-db',
     'profile clone-assets --source-asset-root',
+    'profile repin-runtime',
+    '--checkout-root',
+    'make repin-dev',
     'lineage-stable-service',
     'Legacy-unbound access is diagnostic/read-only',
   ]) {
