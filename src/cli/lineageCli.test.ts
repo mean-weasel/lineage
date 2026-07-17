@@ -86,6 +86,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('[--schema v2]');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
+    expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
     expect(help).toContain('--asset-root <path>');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
   });

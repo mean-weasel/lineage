@@ -4,20 +4,23 @@ export const lineageProfileSchemaVersion = 'lineage.profile.v1' as const;
 export const lineageProfileDoctorSchemaVersion = 'lineage.profile_doctor.v1' as const;
 export const lineageProfileCloneReceiptSchemaVersion = 'lineage.profile_clone_receipt.v1' as const;
 export const lineageProfileAssetsCloneReceiptSchemaVersion = 'lineage.profile_assets_clone_receipt.v1' as const;
+export const lineageProfileRuntimeRepinReceiptSchemaVersion = 'lineage.profile_runtime_repin_receipt.v1' as const;
 
 export type LineageProfileEnvironment = 'production' | 'preview' | 'development';
+
+interface LineageProfileExpectedRuntime {
+  channel?: LineageRuntimeChannel;
+  code_fingerprint?: string;
+  code_origin?: 'checkout' | 'package';
+  git_sha?: string;
+  version?: string;
+}
 
 export interface LineageProfileManifest {
   asset_root: string;
   database_path: string;
   environment: LineageProfileEnvironment;
-  expected_runtime?: {
-    channel?: LineageRuntimeChannel;
-    code_fingerprint?: string;
-    code_origin?: 'checkout' | 'package';
-    git_sha?: string;
-    version?: string;
-  };
+  expected_runtime?: LineageProfileExpectedRuntime;
   profile_id: string;
   required_schema_migrations?: string[];
   schema_version: typeof lineageProfileSchemaVersion;
@@ -68,6 +71,19 @@ export interface LineageProfileAssetsCloneResult {
   schema_version: typeof lineageProfileAssetsCloneReceiptSchemaVersion;
   source_asset_root: string;
   tree_sha256: string;
+}
+
+export interface LineageProfileRuntimeRepinResult {
+  changed: boolean;
+  checkout_root: string;
+  manifest_after_sha256: string;
+  manifest_before_sha256: string;
+  manifest_path: string;
+  new_code_fingerprint: string;
+  previous_code_fingerprint: string;
+  profile_fingerprint: string;
+  profile_id: string;
+  schema_version: typeof lineageProfileRuntimeRepinReceiptSchemaVersion;
 }
 
 type LineageProfileDoctorCheckStatus = 'pass' | 'fail' | 'warning';

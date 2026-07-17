@@ -2,15 +2,21 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
   chmodSync,
+  closeSync,
   constants as fsConstants,
   copyFileSync,
   existsSync,
+  fsyncSync,
   linkSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
+  type Stats,
   writeFileSync,
 } from 'node:fs';
 import { homedir, platform } from 'node:os';
@@ -19,6 +25,7 @@ import {
   lineageProfileAssetsCloneReceiptSchemaVersion,
   lineageProfileCloneReceiptSchemaVersion,
   lineageProfileDoctorSchemaVersion,
+  lineageProfileRuntimeRepinReceiptSchemaVersion,
   lineageProfileSchemaVersion,
   type LineageProfileBindResult,
   type LineageProfileAssetsCloneResult,
@@ -28,6 +35,7 @@ import {
   type LineageProfileEnvironment,
   type LineageProfileIdentity,
   type LineageProfileManifest,
+  type LineageProfileRuntimeRepinResult,
   type ResolvedLineageProfile,
 } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeChannel, LineageRuntimeCodeIdentity, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
@@ -197,6 +205,139 @@ type ProfileRuntime = {
   gitSha?: string;
   version: string;
 };
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function assertOwnerOnlyPath(path: string, kind: 'manifest' | 'profile directory'): Stats {
+  const stats = lstatSync(path);
+  const expectedType = kind === 'manifest' ? stats.isFile() : stats.isDirectory();
+  if (!expectedType || stats.isSymbolicLink()) throw new Error(`Profile ${kind} must be a nonsymlink ${kind === 'manifest' ? 'regular file' : 'directory'}: ${path}`);
+  if ((stats.mode & 0o077) !== 0) throw new Error(`Profile ${kind} must be owner-only: ${path}`);
+  if (typeof process.getuid === 'function' && stats.uid !== process.getuid()) throw new Error(`Profile ${kind} must be owned by the current user: ${path}`);
+  return stats;
+}
+
+function runtimeRepinInvariant(profile: ResolvedLineageProfile): string {
+  return JSON.stringify({
+    asset_root: profile.asset_root,
+    database_path: profile.database_path,
+    environment: profile.environment,
+    profile_fingerprint: profile.profile_fingerprint,
+    profile_id: profile.profile_id,
+    required_schema_migrations: profile.required_schema_migrations || [],
+    schema_version: profile.schema_version,
+    service_origin: profile.service_origin,
+  });
+}
+
+function sameFileIdentity(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev
+    && left.ino === right.ino
+    && left.size === right.size
+    && left.mtimeMs === right.mtimeMs
+    && left.ctimeMs === right.ctimeMs;
+}
+
+export function repinLineageDevelopmentProfileRuntime(
+  selector: string,
+  checkoutRoot: string,
+  runtime: ProfileRuntime,
+  confirmWrite: boolean,
+): LineageProfileRuntimeRepinResult {
+  if (!confirmWrite) throw new Error('Profile runtime repin requires --confirm-write');
+  if (runtime.channel !== 'dev') throw new Error(`Profile runtime repin requires dev code, not ${runtime.channel}`);
+  if (!runtime.code?.verified) throw new Error('Profile runtime repin requires a verified checkout runtime');
+  if (runtime.code.origin !== 'checkout') throw new Error(`Profile runtime repin requires checkout code, not ${runtime.code.origin}`);
+  if (!runtime.code.fingerprint || !/^[a-f0-9]{64}$/i.test(runtime.code.fingerprint)) {
+    throw new Error('Profile runtime repin requires a valid executing code fingerprint');
+  }
+  if (!checkoutRoot.trim()) throw new Error('Profile runtime repin requires --checkout-root');
+  const intendedRoot = realpathSync(resolve(checkoutRoot));
+  if (!statSync(intendedRoot).isDirectory()) throw new Error(`Profile runtime repin checkout root is not a directory: ${intendedRoot}`);
+  const executingRoot = realpathSync(runtime.code.root);
+  if (intendedRoot !== executingRoot) {
+    throw new Error(`Profile runtime repin checkout root ${intendedRoot} does not match executing code root ${executingRoot}`);
+  }
+
+  const profile = resolveLineageProfile(selector);
+  if (profile.environment !== 'development') throw new Error(`Profile runtime repin requires a development profile, not ${profile.environment}`);
+  if (profile.expected_runtime?.channel !== 'dev') throw new Error('Development profile runtime repin requires an existing dev channel pin');
+  if (profile.expected_runtime.code_origin !== 'checkout') throw new Error('Development profile runtime repin requires an existing checkout origin pin');
+  if (!profile.expected_runtime.code_fingerprint) throw new Error('Development profile runtime repin requires an existing code fingerprint pin');
+
+  const manifestPath = profile.manifest_path;
+  assertOwnerOnlyPath(dirname(manifestPath), 'profile directory');
+  const beforeStats = assertOwnerOnlyPath(manifestPath, 'manifest');
+  const beforeText = readFileSync(manifestPath, 'utf8');
+  const beforeHash = sha256(beforeText);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(beforeText);
+  } catch (error) {
+    throw new Error(`Could not parse profile manifest ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Profile manifest must be a JSON object');
+  const previousFingerprint = profile.expected_runtime.code_fingerprint;
+  const nextExpectedRuntime = {
+    channel: 'dev' as const,
+    code_fingerprint: runtime.code.fingerprint,
+    code_origin: 'checkout' as const,
+    ...(runtime.gitSha ? { git_sha: runtime.gitSha } : {}),
+    version: runtime.version,
+  };
+  const updated = { ...(raw as Record<string, unknown>), expected_runtime: nextExpectedRuntime };
+  const afterText = `${JSON.stringify(updated, null, 2)}\n`;
+  const afterHash = sha256(afterText);
+  const result: LineageProfileRuntimeRepinResult = {
+    changed: beforeText !== afterText,
+    checkout_root: intendedRoot,
+    manifest_after_sha256: afterHash,
+    manifest_before_sha256: beforeHash,
+    manifest_path: manifestPath,
+    new_code_fingerprint: runtime.code.fingerprint,
+    previous_code_fingerprint: previousFingerprint,
+    profile_fingerprint: profile.profile_fingerprint,
+    profile_id: profile.profile_id,
+    schema_version: lineageProfileRuntimeRepinReceiptSchemaVersion,
+  };
+  if (!result.changed) return result;
+
+  const temporaryPath = join(dirname(manifestPath), `.profile.runtime-repin-${randomUUID()}.tmp`);
+  let temporaryExists = false;
+  try {
+    writeFileSync(temporaryPath, afterText, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    temporaryExists = true;
+    chmodSync(temporaryPath, 0o600);
+    const temporaryFd = openSync(temporaryPath, 'r');
+    try { fsyncSync(temporaryFd); } finally { closeSync(temporaryFd); }
+    const preparedReplacement = resolveLineageProfile(temporaryPath);
+    if (runtimeRepinInvariant(preparedReplacement) !== runtimeRepinInvariant(profile)) {
+      throw new Error('Profile runtime repin would change immutable profile routing identity');
+    }
+
+    const currentStats = assertOwnerOnlyPath(manifestPath, 'manifest');
+    const currentText = readFileSync(manifestPath, 'utf8');
+    if (!sameFileIdentity(beforeStats, currentStats) || sha256(currentText) !== beforeHash) {
+      throw new Error('Profile manifest changed while runtime repin was being prepared; refusing replacement');
+    }
+    renameSync(temporaryPath, manifestPath);
+    temporaryExists = false;
+    chmodSync(manifestPath, 0o600);
+    const directoryFd = openSync(dirname(manifestPath), 'r');
+    try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+
+    const replacement = resolveLineageProfile(manifestPath);
+    if (runtimeRepinInvariant(replacement) !== runtimeRepinInvariant(profile)) {
+      throw new Error('Profile runtime repin changed immutable profile routing identity');
+    }
+    if (readFileSync(manifestPath, 'utf8') !== afterText) throw new Error('Profile runtime repin replacement bytes do not match the prepared manifest');
+    return result;
+  } finally {
+    if (temporaryExists) rmSync(temporaryPath, { force: true });
+  }
+}
 
 type ProfileAssetReferenceKind = 'root' | 'scratch';
 
@@ -577,6 +718,7 @@ export async function cloneLineageProfileDatabase(
   const source = new DatabaseSync(sourcePath, { readOnly: true });
   try {
     const pagesCopied = await backup(source, temporaryPath);
+    chmodSync(temporaryPath, 0o600);
     const cloned = new DatabaseSync(temporaryPath);
     let identity: LineageProfileIdentity;
     try {

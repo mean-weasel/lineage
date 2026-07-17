@@ -35,6 +35,28 @@ root. Legacy-unbound access is diagnostic/read-only and never authorizes writes.
 For preview, substitute `lineage-preview` and `$LINEAGE_PREVIEW_PROFILE`. For
 dev, substitute `npm run lineage:dev --` and `$LINEAGE_DEV_PROFILE`.
 
+## Repin intentional checkout changes
+
+A normal checkout edit changes the verified dev fingerprint. Stop the managed
+dev service before repinning; an active service owns the profile writer lease
+and must make repin fail. From the exact intended checkout, run:
+
+```bash
+npm run lineage:dev -- profile repin-runtime \
+  --profile "$LINEAGE_DEV_PROFILE" \
+  --checkout-root "$PWD" \
+  --confirm-write \
+  --json
+```
+
+Or use `make repin-dev LINEAGE_DEV_PROFILE="$LINEAGE_DEV_PROFILE"`, which runs
+runtime doctor, the confirmed repin, profile doctor, and profile-selected
+database info in order. Repin is only for an owner-only development manifest
+already marked `dev`/`checkout` and a verified checkout whose canonical root
+matches `--checkout-root`. It changes only `expected_runtime`; never use or
+adapt it for stable, preview, package code, a wrong checkout root, or a running
+service. Stop on any refusal instead of editing the manifest by hand.
+
 ## Start and inspect services
 
 From a checkout, use the profile-scoped managed targets:

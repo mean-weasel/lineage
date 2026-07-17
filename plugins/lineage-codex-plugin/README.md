@@ -12,3 +12,8 @@ Lineage app package owns app and CLI runtime behavior; it does not install Codex
 plugins. The operator skill requires isolated channel launchers, explicit named
 profiles for every operation, profile-scoped managed service status, and
 SQLite-safe non-production cloning.
+
+For checkout development, the operator skill also supplies the exact
+runtime/profile/database identity gate and the confirmed dev-only
+`profile repin-runtime` workflow. Repinning never authorizes stable, preview,
+or package code and never changes a profile's database-routing identity.

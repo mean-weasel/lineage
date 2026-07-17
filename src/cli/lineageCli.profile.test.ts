@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { repoRoot } from '../server/assetCore';
@@ -52,6 +52,62 @@ afterEach(() => {
 });
 
 describe('profile-aware CLI options', () => {
+  it('repins a development manifest through the CLI and releases its writer lease', () => {
+    const manifest = join(scratchRoot, 'development-main', 'profile.json');
+    const payload = JSON.parse(readFileSync(manifest, 'utf8')) as { expected_runtime: { code_fingerprint: string } };
+    payload.expected_runtime.code_fingerprint = 'a'.repeat(64);
+    writeFileSync(manifest, `${JSON.stringify(payload, null, 2)}\n`);
+    chmodSync(join(scratchRoot, 'development-main'), 0o700);
+    chmodSync(manifest, 0o600);
+
+    const result = runLineageProfileCommand(config, 'repin-runtime', [
+      '--profile', 'development-main',
+      '--checkout-root', repoRoot,
+      '--confirm-write',
+      '--json',
+    ]);
+
+    expect(result).toMatchObject({
+      changed: true,
+      profile_id: 'development-main',
+      previous_code_fingerprint: 'a'.repeat(64),
+      new_code_fingerprint: getLineageCodeIdentity('dev').fingerprint,
+      schema_version: 'lineage.profile_runtime_repin_receipt.v1',
+    });
+    expect(resolveLineageProfile('development-main').expected_runtime?.code_fingerprint)
+      .toBe(getLineageCodeIdentity('dev').fingerprint);
+    expect(statSync(manifest).mode & 0o777).toBe(0o600);
+    expect(existsSync(profileWriterLockPath(resolveLineageProfile('development-main')))).toBe(false);
+  });
+
+  it('requires explicit repin inputs and refuses an active profile writer', () => {
+    const manifest = join(scratchRoot, 'development-main', 'profile.json');
+    chmodSync(join(scratchRoot, 'development-main'), 0o700);
+    chmodSync(manifest, 0o600);
+
+    expect(() => runLineageProfileCommand(config, 'repin-runtime', ['--profile', 'development-main']))
+      .toThrow('requires --checkout-root');
+    expect(() => runLineageProfileCommand(config, 'repin-runtime', [
+      '--profile', 'development-main', '--checkout-root', repoRoot,
+    ])).toThrow('requires --confirm-write');
+    expect(() => runLineageProfileCommand(config, 'repin-runtime', [
+      '--profile', 'development-main', '--checkout-root', repoRoot, '--confirm-write', '--db', '/tmp/wrong.sqlite',
+    ])).toThrow('cannot be combined with --db');
+    expect(() => runLineageProfileCommand(config, 'repin-runtime', [
+      '--profile', 'development-main', '--checkout-root', repoRoot, '--confirm-write', '--asset-root', '/tmp/wrong-assets',
+    ])).toThrow('cannot be combined with --asset-root');
+
+    const profile = resolveLineageProfile('development-main');
+    const serviceLease = acquireProfileWriterLease(profile, 'dev', 'service');
+    try {
+      expect(() => runLineageProfileCommand(config, 'repin-runtime', [
+        '--profile', 'development-main', '--checkout-root', repoRoot, '--confirm-write',
+      ])).toThrow('already has an active service writer');
+    } finally {
+      serviceLease.release();
+    }
+  });
+
   it('supports --profile and sources all protected paths and origin from its manifest', () => {
     const options = resolveStartOptions(config, ['--profile', 'development-main', '--json']);
 

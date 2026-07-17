@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { defaultProject, defaultProduct, listAssets, listProjects, loadCatalog, localPreviewPath, packageRoot, presignAsset, previewPlacement, repoRoot, setLineageAssetRoot } from './assetCore';
+import { defaultProject, defaultProduct, ensureUploadDir, listAssets, listProjects, loadCatalog, localPreviewPath, packageRoot, presignAsset, previewPlacement, repoRoot, setLineageAssetRoot } from './assetCore';
 import { initProject } from './assetProjects';
 import { lineageDbPath } from './assetLineageDb';
 
@@ -12,6 +12,24 @@ afterEach(() => {
 });
 
 describe('asset core catalog listing', () => {
+  it('creates and repairs the managed upload directory as owner-only', () => {
+    const externalRoot = join(defaultAssetRoot, '.asset-scratch', 'vitest-upload-dir-mode');
+    const uploadDir = join(externalRoot, '.asset-scratch', 'studio-uploads');
+    rmSync(externalRoot, { force: true, recursive: true });
+    mkdirSync(uploadDir, { recursive: true });
+    chmodSync(uploadDir, 0o755);
+
+    try {
+      setLineageAssetRoot(externalRoot);
+
+      expect(ensureUploadDir()).toBe(uploadDir);
+      expect(statSync(uploadDir).mode & 0o777).toBe(0o700);
+    } finally {
+      setLineageAssetRoot(defaultAssetRoot);
+      rmSync(externalRoot, { force: true, recursive: true });
+    }
+  });
+
   it('loads a non-demo project catalog from an explicit external asset root', () => {
     const externalRoot = join(defaultAssetRoot, '.asset-scratch', 'vitest-external-asset-root');
     const project = 'external-consumer-project';

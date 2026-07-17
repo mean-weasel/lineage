@@ -1,9 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { repoRoot } from './assetCore';
-import { assertProfileChannel, assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, cloneLineageProfileAssets, cloneLineageProfileDatabase, doctorLineageProfile, resolveLineageProfile, runtimeProfileIdentity } from './lineageProfiles';
+import { assertProfileChannel, assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, cloneLineageProfileAssets, cloneLineageProfileDatabase, doctorLineageProfile, repinLineageDevelopmentProfileRuntime, resolveLineageProfile, runtimeProfileIdentity } from './lineageProfiles';
 import { getLineageCodeIdentity, getLineageRuntimeInfo } from './runtimeInfo';
 
 const originalEnv = { ...process.env };
@@ -21,6 +21,100 @@ afterEach(() => {
 });
 
 describe('Lineage named profiles', () => {
+  it('repins only expected_runtime for an owner-only development manifest before its targets exist', () => {
+    const manifest = writeProfile('development-repin', 'development', { createAssetRoot: false });
+    const payload = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown> & { expected_runtime: Record<string, unknown> };
+    payload.expected_runtime.code_fingerprint = 'a'.repeat(64);
+    payload.operator_note = 'preserve-me';
+    writeFileSync(manifest, `${JSON.stringify(payload, null, 2)}\n`);
+    chmodSync(dirname(manifest), 0o700);
+    chmodSync(manifest, 0o600);
+    const before = resolveLineageProfile(manifest);
+    const runtime = testRuntime('dev');
+
+    const result = repinLineageDevelopmentProfileRuntime(manifest, repoRoot, runtime, true);
+    const after = resolveLineageProfile(manifest);
+    const rawAfter = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown> & { expected_runtime: Record<string, unknown> };
+
+    expect(result).toMatchObject({
+      changed: true,
+      checkout_root: repoRoot,
+      previous_code_fingerprint: 'a'.repeat(64),
+      new_code_fingerprint: runtime.code.fingerprint,
+      profile_fingerprint: before.profile_fingerprint,
+      schema_version: 'lineage.profile_runtime_repin_receipt.v1',
+    });
+    expect(result.manifest_before_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.manifest_after_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(after.profile_fingerprint).toBe(before.profile_fingerprint);
+    expect(after.expected_runtime).toMatchObject({
+      channel: 'dev',
+      code_fingerprint: runtime.code.fingerprint,
+      code_origin: 'checkout',
+      git_sha: runtime.gitSha,
+      version: runtime.version,
+    });
+    expect(rawAfter.operator_note).toBe('preserve-me');
+    expect(existsSync(after.database_path)).toBe(false);
+    expect(existsSync(after.asset_root)).toBe(false);
+    expect(statSync(manifest).mode & 0o777).toBe(0o600);
+  });
+
+  it('refuses runtime repin outside the exact verified development checkout contract', () => {
+    const developmentManifest = writeProfile('development-repin-refusal', 'development', { createAssetRoot: false });
+    chmodSync(dirname(developmentManifest), 0o700);
+    chmodSync(developmentManifest, 0o600);
+    const devRuntime = testRuntime('dev');
+
+    expect(() => repinLineageDevelopmentProfileRuntime(developmentManifest, repoRoot, devRuntime, false))
+      .toThrow('requires --confirm-write');
+    expect(() => repinLineageDevelopmentProfileRuntime(developmentManifest, scratchRoot, devRuntime, true))
+      .toThrow('does not match executing code root');
+    expect(() => repinLineageDevelopmentProfileRuntime(developmentManifest, repoRoot, {
+      ...devRuntime,
+      channel: 'preview',
+    }, true)).toThrow('requires dev code');
+    expect(() => repinLineageDevelopmentProfileRuntime(developmentManifest, repoRoot, {
+      ...devRuntime,
+      code: { ...devRuntime.code, origin: 'package' },
+    }, true)).toThrow('requires checkout code');
+    expect(() => repinLineageDevelopmentProfileRuntime(developmentManifest, repoRoot, {
+      ...devRuntime,
+      code: { ...devRuntime.code, verified: false },
+    }, true)).toThrow('requires a verified checkout runtime');
+
+    const productionManifest = writeProfile('production-repin-refusal', 'production', { createAssetRoot: false });
+    chmodSync(dirname(productionManifest), 0o700);
+    chmodSync(productionManifest, 0o600);
+    expect(() => repinLineageDevelopmentProfileRuntime(productionManifest, repoRoot, devRuntime, true))
+      .toThrow('requires a development profile');
+
+    const packagePinned = JSON.parse(readFileSync(developmentManifest, 'utf8')) as { expected_runtime: { code_origin: string } };
+    packagePinned.expected_runtime.code_origin = 'package';
+    writeFileSync(developmentManifest, `${JSON.stringify(packagePinned, null, 2)}\n`);
+    chmodSync(developmentManifest, 0o600);
+    expect(() => repinLineageDevelopmentProfileRuntime(developmentManifest, repoRoot, devRuntime, true))
+      .toThrow('requires an existing checkout origin pin');
+  });
+
+  it('refuses unsafe manifest permissions and manifest symlinks without replacement', () => {
+    const manifest = writeProfile('development-repin-files', 'development', { createAssetRoot: false });
+    chmodSync(dirname(manifest), 0o700);
+    chmodSync(manifest, 0o644);
+    const before = readFileSync(manifest, 'utf8');
+
+    expect(() => repinLineageDevelopmentProfileRuntime(manifest, repoRoot, testRuntime('dev'), true))
+      .toThrow('manifest must be owner-only');
+    expect(readFileSync(manifest, 'utf8')).toBe(before);
+
+    chmodSync(manifest, 0o600);
+    const linkedManifest = join(dirname(manifest), 'linked-profile.json');
+    symlinkSync(manifest, linkedManifest);
+    expect(() => repinLineageDevelopmentProfileRuntime(linkedManifest, repoRoot, testRuntime('dev'), true))
+      .toThrow('manifest must be a nonsymlink regular file');
+    expect(readFileSync(manifest, 'utf8')).toBe(before);
+  });
+
   it('resolves distinct named profiles to distinct database and media roots', () => {
     writeProfile('production-main', 'production');
     writeProfile('development-main', 'development');
@@ -217,6 +311,7 @@ describe('Lineage named profiles', () => {
     cloned.close();
     expect(result.pages_copied).toBeGreaterThan(0);
     expect(existsSync(result.receipt_path)).toBe(true);
+    expect(statSync(target.database_path).mode & 0o777).toBe(0o600);
   });
 
   it('refuses clone targets that are production, already exist, or lack explicit confirmation', async () => {
