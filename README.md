@@ -345,8 +345,12 @@ npx @mean-weasel/lineage-plugin-installer install --channel latest
 
 The installer verifies the plugin artifact checksum and rejects plugin manifests
 whose version or `lineage.version` does not exactly match the resolved Lineage
-package version. The plugin artifact and installer package are released from
-this public repository.
+package version. It then creates a dedicated marketplace under the active
+`CODEX_HOME`, registers that marketplace with supported `codex plugin`
+commands, installs the plugin, and verifies that Codex reports the exact version
+as installed and enabled. Use `--target-dir <path>` for a files-only install or
+`--dry-run` for a non-mutating activation plan. The plugin artifact and installer
+package are released from this public repository.
 
 Every Lineage release preflights the current operator skill, packs and checksums
 the exact matching plugin, installs that artifact into a temporary Codex plugin
@@ -354,6 +358,12 @@ root, and attaches both files to the versioned GitHub release before npm publish
 or dist-tag mutation is allowed. Release status reports the local version lock
 and GitHub assets. The installed skill requires isolated channel launchers,
 named profiles, managed service identity status, and profile-only writes.
+
+The checkout also exposes `.agents/plugins/marketplace.json`, which points only
+at the checkout plugin and marks it installed by default for new development
+tasks. That repo marketplace is separate from the installer-managed marketplace
+under `CODEX_HOME`; restart Codex and use a brand-new task when validating either
+activation path.
 
 ## Local Development
 

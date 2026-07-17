@@ -6,6 +6,13 @@ on:
     paths:
       - ".github/workflows/lineage-plugin-installer.yml"
       - ".github/workflows/lineage-plugin-installer-publish.yml"
+      - ".agents/plugins/marketplace.json"
+      - "AGENTS.md"
+      - "README.md"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/plugin-release.mjs"
+      - "scripts/public-readiness.mjs"
       - "packages/lineage-plugin-installer/**"
       - "plugins/lineage-codex-plugin/**"
   push:
@@ -13,6 +20,13 @@ on:
     paths:
       - ".github/workflows/lineage-plugin-installer.yml"
       - ".github/workflows/lineage-plugin-installer-publish.yml"
+      - ".agents/plugins/marketplace.json"
+      - "AGENTS.md"
+      - "README.md"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/plugin-release.mjs"
+      - "scripts/public-readiness.mjs"
       - "packages/lineage-plugin-installer/**"
       - "plugins/lineage-codex-plugin/**"
 
@@ -48,6 +62,9 @@ jobs:
 
       - name: Run installer syntax checks
         run: npm run check --prefix packages/lineage-plugin-installer
+
+      - name: Verify public package and marketplace boundaries
+        run: npm run public:readiness
 
       - name: Dry-run installer package artifact
         run: cd packages/lineage-plugin-installer && npm pack --dry-run --json

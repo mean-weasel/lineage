@@ -42,9 +42,11 @@ For meaningful changes, prefer:
 - `npm run runtime:oracle` for simultaneous stable/preview/dev isolation and named negative-case proof.
 - `npm run e2e` for browser workflow proof.
 - `npm run plugin:smoke` for exact Lineage/plugin version lock, safe guidance, checksum, artifact, and atomic temporary-install proof.
+- `npm run plugin:codex-smoke` for supported marketplace registration, installed/enabled state, reinstall, cleanup, and dry-run proof in an isolated temporary `HOME` and `CODEX_HOME`.
 
 Release memory:
 
 - Root package, plugin package, plugin manifest, and `lineage.version` must match exactly; do not hard-code an older compatibility version in workflows or agent examples.
 - A GitHub release must contain `lineage-codex-plugin-<version>.tgz` and its `.sha256` before npm publish or dist-tag mutation. The Release workflow builds, installs, attaches, and verifies these assets as one gated operation.
 - Never install the plugin into the user's real Codex root during verification; use `npm run plugin:smoke`, which installs only into a temporary target.
+- Do not infer activation from copied files. Use `npm run plugin:codex-smoke` before any real-profile install, then restart Codex and prove skill discovery in a brand-new task.
