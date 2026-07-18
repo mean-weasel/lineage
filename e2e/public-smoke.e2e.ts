@@ -41,7 +41,7 @@ test('shows runtime channel and SQLite identity in settings', async ({ page }) =
   await expect(release).toBeVisible();
   await expect(release.getByText('Version')).toBeVisible();
   await expect(release.getByText('Channel')).toBeVisible();
-  await expect(release.getByText('dev')).toBeVisible();
+  await expect(release.getByText('dev', { exact: true })).toBeVisible();
   await expect(release.getByText('Assets', { exact: true })).toBeVisible();
   await expect(release.getByText('SQLite', { exact: true })).toBeVisible();
   await expect(release.getByText(/lineage-e2e-.*\.sqlite/)).toBeVisible();
@@ -55,7 +55,12 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await page.locator('header.lineage-header .lineage-overflow summary').click();
   const loadDemo = page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first();
   await expect(loadDemo).toBeEnabled();
+  const seedResponse = page.waitForResponse(response => (
+    response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/seed'
+  ));
   await loadDemo.click();
+  expect((await seedResponse).ok()).toBe(true);
 
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept', { timeout: 20_000 });

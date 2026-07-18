@@ -6,6 +6,7 @@
     "src/cli/lineage-channel.ts",
     "src/cli/lineage-dev.ts",
     "src/cli/lineage-preview.ts",
+    "src/web/landing/main.tsx",
     "scripts/*.mjs",
     "vite.config.ts",
     "vitest.config.ts",

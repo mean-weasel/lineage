@@ -1,13 +1,74 @@
 name: CI
 
 on:
+  merge_group:
   pull_request:
   push:
     branches:
       - main
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  ci:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.routes.outputs.app }}
+      landing: ${{ steps.routes.outputs.landing }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: files
+        name: Collect changed files
+        uses: actions/github-script@v9
+        with:
+          result-encoding: string
+          script: |
+            if (context.eventName !== 'pull_request') {
+              return JSON.stringify(['__all__']);
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            return JSON.stringify(files.map(({ filename }) => filename));
+      - name: Test path router
+        run: node --test scripts/ci-paths.test.mjs
+      - id: routes
+        name: Route CI suites
+        env:
+          CHANGED_FILES_JSON: ${{ steps.files.outputs.result }}
+        run: node scripts/ci-paths.mjs >> "$GITHUB_OUTPUT"
+
+  landing:
+    name: Landing CI
+    needs: changes
+    if: needs.changes.outputs.landing == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.22.3'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx eslint src/web/landing --max-warnings=0
+      - run: npm test -- src/web/landing/LandingPage.test.tsx
+      - run: npm run knip
+      - run: npm run build:web
+      - run: npm run public:readiness
+      - run: test -f dist/web/landing/index.html
+
+  app:
+    name: Application CI
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -18,3 +79,22 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run ci
+
+  ci:
+    name: ci
+    needs:
+      - changes
+      - landing
+      - app
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected suite to pass
+        env:
+          APP_RESULT: ${{ needs.app.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          LANDING_RESULT: ${{ needs.landing.result }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          case "$LANDING_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          case "$APP_RESULT" in success|skipped) ;; *) exit 1 ;; esac
