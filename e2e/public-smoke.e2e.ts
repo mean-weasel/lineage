@@ -41,7 +41,7 @@ test('shows runtime channel and SQLite identity in settings', async ({ page }) =
   await expect(release).toBeVisible();
   await expect(release.getByText('Version')).toBeVisible();
   await expect(release.getByText('Channel')).toBeVisible();
-  await expect(release.getByText('dev')).toBeVisible();
+  await expect(release.getByText('dev', { exact: true })).toBeVisible();
   await expect(release.getByText('Assets', { exact: true })).toBeVisible();
   await expect(release.getByText('SQLite', { exact: true })).toBeVisible();
   await expect(release.getByText(/lineage-e2e-.*\.sqlite/)).toBeVisible();
