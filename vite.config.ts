@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const e2ePort = process.env.LINEAGE_E2E_PORT ? Number(process.env.LINEAGE_E2E_PORT) : undefined;
 const packageInfo = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as { version?: string };
@@ -21,6 +22,12 @@ export default defineConfig({
   build: {
     outDir: '../../dist/web',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        app: resolve(new URL('src/web/index.html', import.meta.url).pathname),
+        landing: resolve(new URL('src/web/landing/index.html', import.meta.url).pathname),
+      },
+    },
   },
   server: {
     host: '127.0.0.1',

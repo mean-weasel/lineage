@@ -11,6 +11,7 @@ let tarball;
 const requiredBuildFiles = [
   'dist/server.js',
   'dist/web/index.html',
+  'dist/web/landing/index.html',
   'dist/runtime-build.json',
   'dist/cli/lineage.js',
   'dist/cli/lineage-channel.js',
