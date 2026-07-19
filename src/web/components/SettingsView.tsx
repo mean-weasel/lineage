@@ -1,8 +1,9 @@
-import { AlertCircle, CheckCircle2, Cloud, ImagePlus, Loader2, RefreshCcw, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Cloud, Eye, ImagePlus, Loader2, RefreshCcw, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AdapterSetting, AdapterSettingsSnapshot, AdapterType } from '../../shared/adapterSettingsTypes';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import { api } from '../api';
+import { readHoverPreviewsEnabled, writeHoverPreviewsEnabled } from '../lineagePreferences';
 import { lineageReleaseInfo } from '../releaseInfo';
 import './SettingsView.css';
 
@@ -62,6 +63,17 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
   const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState('');
+  const [hoverPreviewsEnabled, setHoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
+
+  function toggleHoverPreviews() {
+    const enabled = !hoverPreviewsEnabled;
+    if (!writeHoverPreviewsEnabled(enabled)) {
+      props.onToast('error', 'Browser storage is unavailable, so the hover preview preference could not be saved');
+      return;
+    }
+    setHoverPreviewsEnabled(enabled);
+    props.onToast('ok', `Lineage hover previews ${enabled ? 'enabled' : 'disabled'}`);
+  }
 
   async function refresh() {
     setLoading(true);
@@ -166,6 +178,21 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
               <dd>{runtime ? `${runtime.schema.migration_keys.length} migration marker(s)` : 'loading'}</dd>
             </div>
           </dl>
+        </section>
+        <section aria-label="Lineage experience settings" className="settings-section">
+          <h3>Lineage experience</h3>
+          <div className="settings-grid">
+            <article className="settings-card">
+              <div className="settings-card-head">
+                <span className="settings-icon"><Eye size={19} /></span>
+                <div>
+                  <h4>Hover previews</h4>
+                  <p>Show the full asset image when hovering over or focusing a lineage node. Double-click details remain available when this is off.</p>
+                </div>
+                <Switch checked={hoverPreviewsEnabled} label="Enable lineage hover previews" onClick={toggleHoverPreviews} />
+              </div>
+            </article>
+          </div>
         </section>
         {sections.map(section => (
           <section aria-label={section.ariaLabel} className="settings-section" key={section.adapterType}>

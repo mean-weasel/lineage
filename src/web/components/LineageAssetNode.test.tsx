@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { AssetNode, type AssetFlowNode } from './LineageAssetNode';
+import { hoverPreviewPosition } from './lineageHoverPreview';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -44,6 +45,57 @@ describe('AssetNode', () => {
 
     expect(onOpenDetail).toHaveBeenCalledWith('local-node');
     expect(onOpenHistory).not.toHaveBeenCalled();
+  });
+
+  it('marks the lineage root for a persistent visual treatment', () => {
+    renderNode({ root: true });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+
+    expect(node.classList.contains('root-node')).toBe(true);
+    expect(node.dataset.lineageRoot).toBe('true');
+    expect(node.querySelector('.lineage-badges .root')?.textContent).toBe('root');
+  });
+
+  it('requests the full media preview on hover without opening detail', () => {
+    const onOpenDetail = vi.fn();
+    const onOpenHistory = vi.fn();
+    const onPreviewChange = vi.fn();
+    renderNode({ hoverPreviewsEnabled: true, onOpenDetail, onOpenHistory, onPreviewChange, preview_url: '/api/assets/local-node/preview' });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+
+    act(() => node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+
+    expect(onPreviewChange).toHaveBeenCalledWith('hover', 'local-node', expect.objectContaining({ left: expect.any(Number), top: expect.any(Number) }));
+    expect(onOpenDetail).not.toHaveBeenCalled();
+    expect(onOpenHistory).not.toHaveBeenCalled();
+
+    act(() => node.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })));
+    expect(onPreviewChange).toHaveBeenLastCalledWith('hover', 'local-node', null);
+  });
+
+  it('does not request previews when the preference is disabled', () => {
+    const onPreviewChange = vi.fn();
+    renderNode({ hoverPreviewsEnabled: false, onPreviewChange, preview_url: '/api/assets/local-node/preview' });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+
+    act(() => node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+
+    expect(onPreviewChange).not.toHaveBeenCalled();
+    expect(node.title).toBe('Double-click to open detail; drag to reposition');
+    expect(node.textContent).toContain('Double-click for details');
+  });
+
+  it('keeps double-click as the full-detail action', () => {
+    const onOpenDetail = vi.fn();
+    const onPreviewDismiss = vi.fn();
+    renderNode({ onOpenDetail, onPreviewDismiss, preview_url: '/api/assets/local-node/preview' });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+
+    act(() => node.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
+    expect(onOpenDetail).toHaveBeenCalledWith('local-node');
+    expect(onPreviewDismiss).toHaveBeenCalledTimes(1);
   });
 
   it('renders compact badges for pending and locked lineage tasks', () => {
@@ -90,6 +142,16 @@ describe('AssetNode', () => {
     expect(badges[0].className).toContain('pending');
     expect(badges[1].className).toContain('locked');
     expect(container!.textContent).not.toContain('re-roll');
+  });
+});
+
+describe('hoverPreviewPosition', () => {
+  it('places the preview to the right when space is available', () => {
+    expect(hoverPreviewPosition({ bottom: 300, left: 100, right: 300, top: 100 }, 1200, 800)).toEqual({ left: 316, top: 16 });
+  });
+
+  it('flips and clamps the preview near the viewport edge', () => {
+    expect(hoverPreviewPosition({ bottom: 790, left: 900, right: 1100, top: 650 }, 1200, 800)).toEqual({ left: 464, top: 344 });
   });
 });
 
