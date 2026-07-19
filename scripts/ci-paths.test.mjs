@@ -19,7 +19,7 @@ test('routes application-only changes to application CI', () => {
 
 test('routes shared build configuration to both suites', () => {
   assert.deepEqual(
-    classifyChangedFiles(['vite.config.ts']),
+    classifyChangedFiles(['vite.config.ts', '.github/workflows/pages.yml', 'scripts/prepare-pages.mjs']),
     { app: true, landing: true },
   );
 });

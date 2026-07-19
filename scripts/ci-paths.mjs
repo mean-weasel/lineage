@@ -10,6 +10,7 @@ const landingOnlyFiles = new Set([
 
 const sharedFiles = new Set([
   '.github/workflows/ci.yml',
+  '.github/workflows/pages.yml',
   'eslint.config.js',
   'knip.json',
   'package-lock.json',
@@ -17,6 +18,8 @@ const sharedFiles = new Set([
   'scripts/ci-paths.mjs',
   'scripts/ci-paths.test.mjs',
   'scripts/package-smoke.mjs',
+  'scripts/prepare-pages.mjs',
+  'scripts/prepare-pages.test.mjs',
   'scripts/public-readiness.mjs',
   'vite.config.ts',
   'vitest.config.ts',
