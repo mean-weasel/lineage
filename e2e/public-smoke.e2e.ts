@@ -1,8 +1,28 @@
-import { expect, test } from 'playwright/test';
+import { expect, test, type Locator, type Page } from 'playwright/test';
 
 type WorkspaceListResponse = {
   workspaces?: Array<{ id: string; status?: string }>;
 };
+
+async function loadDemoLineage(page: Page, button: Locator) {
+  const actionMenu = page.locator('header.lineage-header .lineage-overflow');
+  await expect(actionMenu.getByText('Checking media')).toHaveCount(0);
+  await expect(button).toBeEnabled();
+  let completedSeedRequests = 0;
+  const finalLineageResponse = page.waitForResponse(response => {
+    const request = response.request();
+    const path = new URL(response.url()).pathname;
+    if (request.method() === 'POST' && path === '/api/lineage-workspaces/demo/seed') {
+      if (response.ok()) completedSeedRequests += 1;
+      return false;
+    }
+    return completedSeedRequests >= 2
+      && request.method() === 'GET'
+      && /^\/api\/lineage\/[^/]+$/.test(path);
+  });
+  await button.click();
+  expect((await finalLineageResponse).ok()).toBe(true);
+}
 
 test.beforeEach(async ({ request }) => {
   const response = await request.get('/api/lineage-workspaces');
@@ -48,19 +68,39 @@ test('shows runtime channel and SQLite identity in settings', async ({ page }) =
   await expect(release.getByText(/projects \/ .*workspaces/)).toBeVisible();
 });
 
+test('lets users disable lineage hover previews without disabling details', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+
+  const hoverPreviewSwitch = page.getByRole('switch', { name: 'Enable lineage hover previews' });
+  await expect(hoverPreviewSwitch).toBeChecked();
+  await hoverPreviewSwitch.click();
+  await expect(hoverPreviewSwitch).not.toBeChecked();
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('switch', { name: 'Enable lineage hover previews' })).not.toBeChecked();
+
+  await page.getByRole('button', { name: 'Lineage' }).click();
+  await page.locator('header.lineage-header .lineage-overflow summary').click();
+  await loadDemoLineage(page, page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first());
+  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
+  await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept');
+  const rootNode = page.locator('.lineage-node.root-node');
+  await expect(rootNode).toBeVisible();
+  await rootNode.hover();
+  await expect(page.getByTestId('lineage-hover-preview')).toHaveCount(0);
+
+  await rootNode.dblclick();
+  await expect(page.getByRole('dialog', { name: 'Initial Demo Concept' })).toBeVisible();
+});
+
 test('loads the demo lineage from first-run lineage controls', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.locator('header.lineage-header').getByText('No workspace selected')).toBeVisible();
   await page.locator('header.lineage-header .lineage-overflow summary').click();
   const loadDemo = page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first();
-  await expect(loadDemo).toBeEnabled();
-  const seedResponse = page.waitForResponse(response => (
-    response.request().method() === 'POST'
-      && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/seed'
-  ));
-  await loadDemo.click();
-  expect((await seedResponse).ok()).toBe(true);
+  await loadDemoLineage(page, loadDemo);
 
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept', { timeout: 20_000 });
@@ -69,6 +109,62 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(page.locator('.lineage-selection-strip')).toHaveCount(0);
   await expect(page.getByText('ROOT SCOPE')).toHaveCount(0);
   await expect(page.getByText('USE FOR NEXT VARIATION')).toHaveCount(0);
+
+  const rootNode = page.locator('.lineage-node.root-node');
+  await expect(rootNode).toHaveAttribute('data-lineage-root', 'true');
+  expect(await rootNode.evaluate(node => node.closest('.react-flow__node')?.getAttribute('tabindex') ?? null)).toBeNull();
+  const inspectingCard = page.getByTestId('lineage-canvas-status');
+  await inspectingCard.getByRole('button', { name: 'Dismiss inspecting card' }).click();
+  await expect(inspectingCard).toHaveCount(0);
+  await page.waitForTimeout(500); // Allow the intentional first-load viewport fit to finish before preview arbitration.
+  await rootNode.hover();
+  const hoverPreview = page.getByTestId('lineage-hover-preview');
+  await expect(hoverPreview).toBeVisible();
+  await expect(hoverPreview.locator('img')).toBeVisible();
+  await expect(hoverPreview).toContainText('Double-click for full details');
+
+  const anotherNode = page.locator('.lineage-node:not(.root-node)').first();
+  const anotherNodeTitle = await anotherNode.locator('strong').textContent();
+  expect(anotherNodeTitle).toBeTruthy();
+  await anotherNode.focus();
+  await expect(hoverPreview).toHaveCount(1);
+  await expect(hoverPreview).toContainText(anotherNodeTitle!);
+  await page.mouse.move(0, 0);
+  await expect(hoverPreview).toContainText(anotherNodeTitle!);
+  await rootNode.hover();
+  await expect(hoverPreview).toContainText('Initial Demo Concept');
+  await page.mouse.move(0, 0);
+  await expect(hoverPreview).toContainText(anotherNodeTitle!);
+  await anotherNode.press('Enter');
+  await expect(hoverPreview).toHaveCount(0);
+  const keyboardDialog = page.getByRole('dialog').first();
+  await expect(keyboardDialog).toBeVisible();
+  await keyboardDialog.getByRole('button', { name: 'Close' }).click();
+
+  await rootNode.hover();
+  await expect(hoverPreview).toBeVisible();
+  await rootNode.click({ button: 'right' });
+  await expect(page.getByRole('menu')).toBeVisible();
+  await expect(hoverPreview).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await inspectingCard.getByRole('button', { name: 'Dismiss inspecting card' }).click();
+  await expect(inspectingCard).toHaveCount(0);
+
+  await rootNode.dblclick();
+  const detailDialog = page.getByRole('dialog', { name: 'Initial Demo Concept' });
+  await expect(detailDialog).toBeVisible();
+  await expect(hoverPreview).toHaveCount(0);
+  await detailDialog.getByTitle('Close detail').click();
+
+  await rootNode.focus();
+  await page.mouse.move(0, 0);
+  await expect(hoverPreview).toContainText('Initial Demo Concept');
+  await page.getByLabel('Lineage graph direction').evaluate((select: HTMLSelectElement) => {
+    select.value = 'TB';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(hoverPreview).toHaveCount(0);
 
   await page.locator('header.lineage-header .lineage-overflow summary').click();
   await page.getByRole('button', { name: 'Manage selection' }).click();
