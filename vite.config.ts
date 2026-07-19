@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 
 const e2ePort = process.env.LINEAGE_E2E_PORT ? Number(process.env.LINEAGE_E2E_PORT) : undefined;
 const packageInfo = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as { version?: string };
+const webBase = process.env.LINEAGE_WEB_BASE || '/';
 const rawReleaseChannel = process.env.LINEAGE_RELEASE_CHANNEL || process.env.LINEAGE_CHANNEL;
 const releaseChannel = rawReleaseChannel === 'preview' || rawReleaseChannel === 'next'
   ? 'preview'
@@ -13,6 +14,7 @@ const releaseChannel = rawReleaseChannel === 'preview' || rawReleaseChannel === 
     : 'dev';
 
 export default defineConfig({
+  base: webBase,
   root: new URL('src/web', import.meta.url).pathname,
   plugins: [react()],
   define: {
