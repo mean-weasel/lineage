@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.15
+
+- Add a subtle root marker that makes the starting point of each lineage tree immediately recognizable.
+- Add full-asset previews on node hover and keyboard focus while preserving double-click for full details and attempt history.
+- Add a browser-local setting to disable hover previews, plus refresh-state safeguards that keep dismissed previews closed during background updates.
+
 ## 0.1.14
 
 - Fix isolated channel installs against npm clients that return registry integrity as a flat `dist.integrity` field, while rejecting missing or conflicting identity metadata.
