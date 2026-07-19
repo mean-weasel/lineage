@@ -1,8 +1,28 @@
-import { expect, test } from 'playwright/test';
+import { expect, test, type Locator, type Page } from 'playwright/test';
 
 type WorkspaceListResponse = {
   workspaces?: Array<{ id: string; status?: string }>;
 };
+
+async function loadDemoLineage(page: Page, button: Locator) {
+  const actionMenu = page.locator('header.lineage-header .lineage-overflow');
+  await expect(actionMenu.getByText('Checking media')).toHaveCount(0);
+  await expect(button).toBeEnabled();
+  let completedSeedRequests = 0;
+  const finalLineageResponse = page.waitForResponse(response => {
+    const request = response.request();
+    const path = new URL(response.url()).pathname;
+    if (request.method() === 'POST' && path === '/api/lineage-workspaces/demo/seed') {
+      if (response.ok()) completedSeedRequests += 1;
+      return false;
+    }
+    return completedSeedRequests >= 2
+      && request.method() === 'GET'
+      && /^\/api\/lineage\/[^/]+$/.test(path);
+  });
+  await button.click();
+  expect((await finalLineageResponse).ok()).toBe(true);
+}
 
 test.beforeEach(async ({ request }) => {
   const response = await request.get('/api/lineage-workspaces');
@@ -62,12 +82,7 @@ test('lets users disable lineage hover previews without disabling details', asyn
 
   await page.getByRole('button', { name: 'Lineage' }).click();
   await page.locator('header.lineage-header .lineage-overflow summary').click();
-  const seedResponse = page.waitForResponse(response => (
-    response.request().method() === 'POST'
-      && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/seed'
-  ));
-  await page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first().click();
-  expect((await seedResponse).ok()).toBe(true);
+  await loadDemoLineage(page, page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first());
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
   await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept');
   const rootNode = page.locator('.lineage-node.root-node');
@@ -85,13 +100,7 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(page.locator('header.lineage-header').getByText('No workspace selected')).toBeVisible();
   await page.locator('header.lineage-header .lineage-overflow summary').click();
   const loadDemo = page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first();
-  await expect(loadDemo).toBeEnabled();
-  const seedResponse = page.waitForResponse(response => (
-    response.request().method() === 'POST'
-      && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/seed'
-  ));
-  await loadDemo.click();
-  expect((await seedResponse).ok()).toBe(true);
+  await loadDemoLineage(page, loadDemo);
 
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept', { timeout: 20_000 });
@@ -104,6 +113,9 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   const rootNode = page.locator('.lineage-node.root-node');
   await expect(rootNode).toHaveAttribute('data-lineage-root', 'true');
   expect(await rootNode.evaluate(node => node.closest('.react-flow__node')?.getAttribute('tabindex') ?? null)).toBeNull();
+  const inspectingCard = page.getByTestId('lineage-canvas-status');
+  await inspectingCard.getByRole('button', { name: 'Dismiss inspecting card' }).click();
+  await expect(inspectingCard).toHaveCount(0);
   await page.waitForTimeout(500); // Allow the intentional first-load viewport fit to finish before preview arbitration.
   await rootNode.hover();
   const hoverPreview = page.getByTestId('lineage-hover-preview');
@@ -136,6 +148,8 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(hoverPreview).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
+  await inspectingCard.getByRole('button', { name: 'Dismiss inspecting card' }).click();
+  await expect(inspectingCard).toHaveCount(0);
 
   await rootNode.dblclick();
   const detailDialog = page.getByRole('dialog', { name: 'Initial Demo Concept' });

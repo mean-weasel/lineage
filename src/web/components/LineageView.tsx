@@ -9,6 +9,7 @@ import { readHoverPreviewsEnabled } from '../lineagePreferences';
 import type { AssetFlowNode } from './LineageAssetNode';
 import { LineageCanvas } from './LineageCanvas';
 import { LineageContextMenu } from './LineageContextMenu';
+import { activeNodeIdAfterRefresh } from './lineageRefreshState';
 import { LineageAttemptHistoryModal } from './LineageAttemptHistoryModal';
 import { LineageDetailModal } from './LineageDetailModal';
 import { LineageNewWorkspaceModal } from './LineageNewWorkspaceModal';
@@ -101,7 +102,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       setSnapshot(next);
       setClaims(nextClaims.claims);
       if (!options.quiet) setBrief(null);
-      setActiveNodeId(current => (current && next.nodes.some(node => node.asset_id === current) ? current : next.active_asset_id));
+      setActiveNodeId(current => activeNodeIdAfterRefresh(current, next.nodes, next.active_asset_id, Boolean(options.quiet)));
     } catch (error) {
       if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return;
       if (!options.quiet && currentProjectRef.current === project) {
