@@ -529,6 +529,21 @@ export interface LineageLinkFields {
   summary?: string; summaryActor?: EdgeSummaryActor;
 }
 
+export interface LineageEdgeSummaryFields {
+  edgeId: string;
+  action: 'set' | 'clear';
+  summary?: unknown;
+  expectedSummaryUpdatedAt?: unknown;
+  confirmWrite: boolean;
+  claimToken?: string;
+}
+
+export interface LineageEdgeSummaryMutationResponse {
+  ok: true;
+  edge: LineageEdge;
+  message: string;
+}
+
 export interface LineageRemoveNodeFields {
   assetId: string; rootAssetId?: string; confirmWrite: boolean; claimToken?: string;
 }

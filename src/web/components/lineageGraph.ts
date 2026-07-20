@@ -47,7 +47,9 @@ export function toGraph(
     const relationship = `${nodeTitles.get(edge.parent_asset_id) || edge.parent_asset_id} to ${nodeTitles.get(edge.child_asset_id) || edge.child_asset_id}`;
     return {
       ariaLabel: edge.summary ? `${relationship}: ${edge.summary}` : relationship,
+      ariaRole: 'button',
       className,
+      domAttributes: { 'aria-keyshortcuts': 'Enter Space' },
       focusable: true,
       id: edge.id,
       markerEnd: { type: MarkerType.ArrowClosed },

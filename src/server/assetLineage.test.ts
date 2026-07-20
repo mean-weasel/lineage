@@ -19,6 +19,7 @@ import {
   promoteLineageAttempt,
   recordLineageRerollAttempt,
   updateAssetReview,
+  updateLineageEdgeSummary,
   updateLineageLayout,
   updateSelectedAsset,
 } from './assetLineage';
@@ -171,6 +172,107 @@ describe('asset lineage index', () => {
     });
 
     expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual([created.edge]);
+  });
+
+  it('adds, replaces, and explicitly clears edge summaries with human provenance', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    const unlabeled = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    }).edge;
+    const agentLabeled = linkLineageAssets(defaultProject, {
+      childAssetId: files.variationId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+      summary: 'Agent draft',
+      summaryActor: 'agent',
+    }).edge;
+
+    const added = updateLineageEdgeSummary(defaultProject, {
+      action: 'set',
+      confirmWrite: true,
+      edgeId: unlabeled.id,
+      expectedSummaryUpdatedAt: null,
+      summary: '  Human\n label ',
+    }).edge;
+    expect(added).toMatchObject({
+      summary: 'Human label',
+      summary_created_by: 'human',
+      summary_updated_by: 'human',
+      summary_updated_at: expect.any(String),
+    });
+
+    const replaced = updateLineageEdgeSummary(defaultProject, {
+      action: 'set',
+      confirmWrite: true,
+      edgeId: agentLabeled.id,
+      expectedSummaryUpdatedAt: agentLabeled.summary_updated_at,
+      summary: 'Human edit',
+    }).edge;
+    expect(replaced).toMatchObject({
+      summary: 'Human edit',
+      summary_created_by: 'agent',
+      summary_updated_by: 'human',
+    });
+    expect(Date.parse(replaced.summary_updated_at!)).toBeGreaterThan(Date.parse(agentLabeled.summary_updated_at!));
+
+    const cleared = updateLineageEdgeSummary(defaultProject, {
+      action: 'clear',
+      confirmWrite: true,
+      edgeId: replaced.id,
+      expectedSummaryUpdatedAt: replaced.summary_updated_at,
+    }).edge;
+    expect(cleared).toMatchObject({
+      summary_created_by: 'agent',
+      summary_updated_by: 'human',
+      summary_updated_at: expect.any(String),
+    });
+    expect(cleared.summary).toBeUndefined();
+    expect(Date.parse(cleared.summary_updated_at!)).toBeGreaterThan(Date.parse(replaced.summary_updated_at!));
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual(expect.arrayContaining([added, cleared]));
+  });
+
+  it('rejects invalid, unconfirmed, missing, unchanged, and stale edge summary writes without data loss', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    const linked = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    }).edge;
+    const request = {
+      action: 'set' as const,
+      confirmWrite: true,
+      edgeId: linked.id,
+      expectedSummaryUpdatedAt: null,
+    };
+
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, summary: 'one two three' })).toThrow('at most 2 words');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, summary: '   ' })).toThrow('required');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, summary: 42 })).toThrow('must be text');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, expectedSummaryUpdatedAt: undefined, summary: 'Valid label' })).toThrow('expectedSummaryUpdatedAt');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, confirmWrite: false, summary: 'Valid label' })).toThrow('confirmWrite=true');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, action: 'clear', summary: undefined })).toThrow('already clear');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, edgeId: 'missing-edge', summary: 'Valid label' })).toThrow('Unknown lineage edge');
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges[0]).toEqual(linked);
+
+    const saved = updateLineageEdgeSummary(defaultProject, { ...request, summary: 'Valid label' }).edge;
+    let stale: unknown;
+    try {
+      updateLineageEdgeSummary(defaultProject, { ...request, summary: 'Stale edit' });
+    } catch (error) {
+      stale = error;
+    }
+    expect(stale).toMatchObject({ message: expect.stringContaining('changed since it was opened'), status: 409 });
+    expect(() => updateLineageEdgeSummary(defaultProject, {
+      ...request,
+      expectedSummaryUpdatedAt: saved.summary_updated_at,
+      summary: ' Valid   label ',
+    })).toThrow('unchanged');
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges[0]).toEqual(saved);
   });
 
   it('keeps unlabeled generic lineage retries compatible', () => {

@@ -138,14 +138,16 @@ describe('lineage graph layout', () => {
 
     expect(graph.edges.map(edge => ({
       ariaLabel: edge.ariaLabel,
+      ariaRole: edge.ariaRole,
       className: edge.className,
+      keyshortcuts: edge.domAttributes?.['aria-keyshortcuts'],
       focusable: edge.focusable,
       id: edge.id,
       label: edge.label,
     }))).toEqual([
-      { ariaLabel: 'root to a: Cleaner type', className: 'lineage-edge-summary', focusable: true, id: 'root-a', label: 'Cleaner type' },
-      { ariaLabel: 'root to b: Warmer light', className: 'lineage-edge-summary', focusable: true, id: 'root-b', label: 'Warmer light' },
-      { ariaLabel: 'root to legacy', className: undefined, focusable: true, id: 'root-legacy', label: undefined },
+      { ariaLabel: 'root to a: Cleaner type', ariaRole: 'button', className: 'lineage-edge-summary', focusable: true, id: 'root-a', keyshortcuts: 'Enter Space', label: 'Cleaner type' },
+      { ariaLabel: 'root to b: Warmer light', ariaRole: 'button', className: 'lineage-edge-summary', focusable: true, id: 'root-b', keyshortcuts: 'Enter Space', label: 'Warmer light' },
+      { ariaLabel: 'root to legacy', ariaRole: 'button', className: undefined, focusable: true, id: 'root-legacy', keyshortcuts: 'Enter Space', label: undefined },
     ]);
     expect(graph.edges[0]).toMatchObject({ labelBgBorderRadius: 4, labelBgPadding: [5, 3], labelShowBg: true });
   });

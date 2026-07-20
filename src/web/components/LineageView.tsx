@@ -3,8 +3,8 @@ import { type Edge, type EdgeChange, type ReactFlowInstance, useEdgesState, useN
 import '@xyflow/react/dist/style.css';
 import './LineageView.css';
 import './LineageFocus.css';
-import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
-import { api } from '../api';
+import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageEdgeSummaryMutationResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
+import { api, ApiError } from '../api';
 import { readHoverPreviewsEnabled } from '../lineagePreferences';
 import type { AssetFlowNode } from './LineageAssetNode';
 import { LineageCanvas } from './LineageCanvas';
@@ -12,6 +12,7 @@ import { LineageContextMenu } from './LineageContextMenu';
 import { activeNodeIdAfterRefresh } from './lineageRefreshState';
 import { LineageAttemptHistoryModal } from './LineageAttemptHistoryModal';
 import { LineageDetailModal } from './LineageDetailModal';
+import { LineageEdgeSummaryDialog, type EdgeSummaryEditAction } from './LineageEdgeSummaryDialog';
 import { LineageNewWorkspaceModal } from './LineageNewWorkspaceModal';
 import { LineageSidePanel } from './LineageSidePanel';
 import { LineageToolbar } from './LineageToolbar';
@@ -35,6 +36,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [edgeSummariesVisible, setEdgeSummariesVisible] = useState(true);
+  const [edgeEditor, setEdgeEditor] = useState<{ edgeId: string; returnFocus: HTMLElement | SVGElement | null } | null>(null);
   const [graphDirection, setGraphDirection] = useState<LineageGraphDirection>('LR');
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
@@ -47,6 +49,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [loading, setLoading] = useState(false);
   const [menuCloseSignal, setMenuCloseSignal] = useState(0);
   const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
+  const editingEdge = snapshot?.edges.find(edge => edge.id === edgeEditor?.edgeId);
   const latestNodes = snapshot?.nodes.filter(node => snapshot.latest.includes(node.asset_id)) || [];
   const selectedNodes = snapshot?.selected.map(assetId => snapshot.nodes.find(node => node.asset_id === assetId)).filter((node): node is LineageNode => Boolean(node)) || [];
   const selectedNode = selectedNodes[0];
@@ -264,6 +267,31 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     }, `Linked ${childAssetId.trim()} from ${activeNode.asset_id}`);
     setChildAssetId('');
   }
+  async function updateEdgeSummary(action: EdgeSummaryEditAction, summary?: string) {
+    if (!editingEdge) return;
+    try {
+      const result = await api<LineageEdgeSummaryMutationResponse>(`/api/lineage/edges/${encodeURIComponent(editingEdge.id)}/summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          confirmWrite: true,
+          expectedSummaryUpdatedAt: editingEdge.summary_updated_at || null,
+          project,
+          ...(action === 'set' ? { summary } : {}),
+        }),
+      });
+      await refresh({ quiet: true });
+      onToast('ok', result.message);
+      setEdgeEditor(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409 && error.message.includes('Edge summary changed since it was opened')) {
+        await refresh({ quiet: true });
+        throw new Error('This edge changed elsewhere. The current label has been reloaded; review it and retry.', { cause: error });
+      }
+      throw error;
+    }
+  }
   async function removeNodeFromLineage(node: LineageNode) {
     if (!snapshot) return;
     if (node.asset_id === snapshot.root_asset_id) {
@@ -456,6 +484,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             inspectingId={inspectingId}
             loading={loading}
             onEdgesChange={handleEdgesChange}
+            onEdgeEdit={(edgeId, returnFocus) => setEdgeEditor({ edgeId, returnFocus })}
             onClearFocus={clearFocus}
             onIndexNow={() => void indexAndRefresh()}
             onNewLineage={() => setNewLineageOpen(true)}
@@ -532,6 +561,16 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         />
       )}
       {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
+      {editingEdge && edgeEditor && snapshot && (
+        <LineageEdgeSummaryDialog
+          childTitle={snapshot.nodes.find(node => node.asset_id === editingEdge.child_asset_id)?.title || editingEdge.child_asset_id}
+          edge={editingEdge}
+          onClose={() => setEdgeEditor(null)}
+          onSubmit={updateEdgeSummary}
+          parentTitle={snapshot.nodes.find(node => node.asset_id === editingEdge.parent_asset_id)?.title || editingEdge.parent_asset_id}
+          returnFocus={edgeEditor.returnFocus}
+        />
+      )}
       <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
     </section>
   );
