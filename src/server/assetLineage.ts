@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { normalizeEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
 import { LINEAGE_NEXT_VARIATION_LIMIT, normalizeSelectionInput, selectedRows, selectionId } from './assetLineageSelection';
@@ -322,6 +323,9 @@ function localPreviewUrl(project: string, localPath?: string): string | undefine
 }
 
 export function linkLineageAssets(project: string, fields: LineageLinkFields) {
+  const summary = normalizeEdgeSummary(fields.summary);
+  if (summary && !fields.summaryActor) throw new LineageError('Lineage edge summary requires an explicit author');
+  if (!summary && fields.summaryActor) throw new LineageError('Lineage edge summary author requires a summary');
   const database = db();
   requireAsset(database, project, fields.parentAssetId);
   requireAsset(database, project, fields.childAssetId);
@@ -340,19 +344,68 @@ export function linkLineageAssets(project: string, fields: LineageLinkFields) {
     database.close();
     throw error;
   }
-  const edge = {
+  const createdAt = nowIso();
+  const edge: LineageEdge = {
     id: edgeId(project, fields.parentAssetId, fields.childAssetId), parent_asset_id: fields.parentAssetId,
-    child_asset_id: fields.childAssetId, relation_type: 'derived_from' as const, created_at: nowIso(),
+    child_asset_id: fields.childAssetId, relation_type: 'derived_from' as const, created_at: createdAt,
+    ...(summary ? {
+      summary,
+      summary_created_by: fields.summaryActor!,
+      summary_updated_by: fields.summaryActor!,
+      summary_updated_at: createdAt,
+    } : {}),
   };
   if (!fields.confirmWrite) {
     database.close();
     return { ok: true as const, dryRun: true, edge };
   }
-  database.prepare(`
-    insert into asset_edges (id, project_id, parent_asset_id, child_asset_id, relation_type, created_at)
-    values (?, ?, ?, ?, 'derived_from', ?)
+  const inserted = database.prepare(`
+    insert into asset_edges (
+      id, project_id, parent_asset_id, child_asset_id, relation_type, created_at,
+      summary, summary_created_by, summary_updated_by, summary_updated_at
+    )
+    values (?, ?, ?, ?, 'derived_from', ?, ?, ?, ?, ?)
     on conflict(project_id, parent_asset_id, child_asset_id, relation_type) do nothing
-  `).run(edge.id, project, edge.parent_asset_id, edge.child_asset_id, edge.created_at);
+  `).run(
+    edge.id,
+    project,
+    edge.parent_asset_id,
+    edge.child_asset_id,
+    edge.created_at,
+    edge.summary || null,
+    edge.summary_created_by || null,
+    edge.summary_updated_by || null,
+    edge.summary_updated_at || null,
+  );
+  if (inserted.changes === 0) {
+    const existingRow = database.prepare(`
+      select id, parent_asset_id, child_asset_id, relation_type, created_at,
+        summary, summary_created_by, summary_updated_by, summary_updated_at
+      from asset_edges
+      where project_id = ? and parent_asset_id = ? and child_asset_id = ? and relation_type = 'derived_from'
+    `).get(project, edge.parent_asset_id, edge.child_asset_id) as Record<string, unknown> | undefined;
+    if (!existingRow) {
+      database.close();
+      throw new LineageError('Lineage edge conflict could not be resolved', 409);
+    }
+    const existingEdge = lineageEdgeFromRow(existingRow);
+    if (summary && (
+      existingEdge.summary !== summary
+      || existingEdge.summary_created_by !== fields.summaryActor
+      || existingEdge.summary_updated_by !== fields.summaryActor
+      || !existingEdge.summary_updated_at
+    )) {
+      database.close();
+      throw new LineageError('Lineage edge already exists with a different summary or provenance', 409);
+    }
+    database.close();
+    return {
+      ok: true as const,
+      idempotent: true as const,
+      message: `Already linked ${existingEdge.child_asset_id} from ${existingEdge.parent_asset_id}`,
+      edge: existingEdge,
+    };
+  }
   database.close();
   return { ok: true as const, message: `Linked ${edge.child_asset_id} from ${edge.parent_asset_id}`, edge };
 }

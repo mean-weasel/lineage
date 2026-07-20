@@ -84,6 +84,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
     expect(help).toContain('[--schema v2]');
+    expect(help).toContain('lineage link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>"');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
     expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
@@ -405,24 +406,69 @@ describe('lineage CLI handoff commands', () => {
       '--project', defaultProject,
       '--root', fixtureRootAssetId,
       '--child', fixtureChildAssetId,
+      '--summary', '  Cleaner\n type  ',
       '--db', cliDbFile,
       '--json',
-    ]) as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string } };
+    ]) as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string; summary?: string; summary_created_by?: string; summary_updated_by?: string } };
 
     expect(dryRun.dryRun).toBe(true);
     expect(dryRun.edge).toMatchObject({
       child_asset_id: fixtureChildAssetId,
       parent_asset_id: fixtureRootAssetId,
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
     });
     expect(() =>
       runLineageDataCommand('link-child', [
         '--project', defaultProject,
         '--root', fixtureRootAssetId,
         '--child', 'missing-child',
+        '--summary', 'Cleaner type',
         '--db', cliDbFile,
         '--json',
       ])
     ).toThrow('Unknown indexed asset: missing-child');
+  });
+
+  it('rejects missing and invalid agent edge summaries before link-child writes', () => {
+    seedCliDb();
+    const rowCount = () => {
+      const database = new DatabaseSync(cliDbFile);
+      const count = Number((database.prepare('select count(*) as count from asset_edges').get() as { count: number }).count);
+      database.close();
+      return count;
+    };
+    const before = rowCount();
+
+    expect(() => runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--db', cliDbFile,
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Edge summary is required');
+    expect(() => runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--summary', '   ',
+      '--db', cliDbFile,
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Edge summary is required');
+    expect(() => runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--summary', 'Much cleaner type',
+      '--db', cliDbFile,
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Edge summary must contain at most 2 words');
+
+    expect(rowCount()).toBe(before);
   });
 
   it('requires a matching claim token for confirmed link-child writes', () => {
@@ -433,6 +479,7 @@ describe('lineage CLI handoff commands', () => {
         '--project', defaultProject,
         '--root', fixtureRootAssetId,
         '--child', fixtureChildAssetId,
+        '--summary', 'Cleaner type',
         '--db', cliDbFile,
         '--confirm-write',
         '--json',
@@ -452,14 +499,21 @@ describe('lineage CLI handoff commands', () => {
       '--project', defaultProject,
       '--root', fixtureRootAssetId,
       '--child', fixtureChildAssetId,
+      '--summary', 'Cleaner type',
       '--db', cliDbFile,
       '--claim-token', claimed.claim_token,
       '--confirm-write',
       '--json',
-    ]) as { child_asset_id: string; edge?: { child_asset_id: string }; message?: string };
+    ]) as { child_asset_id: string; edge?: { child_asset_id: string; summary?: string; summary_created_by?: string; summary_updated_by?: string; summary_updated_at?: string }; message?: string };
 
     expect(linked.child_asset_id).toBe(fixtureChildAssetId);
     expect(linked.edge?.child_asset_id).toBe(fixtureChildAssetId);
+    expect(linked.edge).toMatchObject({
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
+    });
+    expect(linked.edge?.summary_updated_at).toBeTruthy();
     expect(linked.message).toContain('Linked');
   });
 
@@ -477,6 +531,7 @@ describe('lineage CLI handoff commands', () => {
       '--project', defaultProject,
       '--root', fixtureRootAssetId,
       '--child', fixtureChildAssetId,
+      '--summary', 'Cleaner type',
       '--db', cliDbFile,
       '--json',
     ]) as { dryRun?: boolean; warning?: string };
@@ -490,6 +545,7 @@ describe('lineage CLI handoff commands', () => {
         '--project', defaultProject,
         '--root', fixtureRootAssetId,
         '--child', fixtureChildAssetId,
+        '--summary', 'Cleaner type',
         '--db', cliDbFile,
         '--confirm-write',
         '--json',
@@ -831,17 +887,19 @@ describe('lineage CLI handoff commands', () => {
     const operator = readFileSync(join(repoRoot, 'plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md'), 'utf8');
 
     expect(readme).toContain('lineage agent claim --project demo-project --scope lineage_workspace');
-    expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
+    expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --summary "Cleaner type" --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
     expect(operator).toContain('Pass `--profile` on every operational command');
     expect(operator).toContain('lineage-stable agent claim --profile "$LINEAGE_PROD_PROFILE"');
     expect(operator).toContain('Heartbeat while working');
     expect(operator).toContain('`link-child` only for a visible child variation');
+    expect(operator).toContain('`--summary` describing the change from parent to child');
     expect(readme).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --confirm-write --json');
     expect(readme).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json');
     expect(operator).toContain('`reroll mark`');
     expect(operator).toContain('Never replace `--profile` with a direct `--db` write');
     expect(operator).not.toContain('--db /absolute/path/to/lineage.sqlite');
     expect(readme).toContain('`lineage link-child` creates a new visible descendant');
+    expect(readme).toContain('one- or two-word description of the change from parent to child');
     expect(readme).toContain('`lineage reroll import` updates the target node');
     expect(operator).toContain('Use `reroll mark`, `reroll');
     expect(readme).toContain('Use `project_channel` only for rare work');

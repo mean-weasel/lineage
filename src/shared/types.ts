@@ -521,10 +521,12 @@ export interface LineageLayoutFields {
 
 export interface LineageSelectedChildFields {
   rootAssetId?: string; childAssetId: string; confirmWrite: boolean; claimToken?: string;
+  summary?: string; summaryActor?: EdgeSummaryActor;
 }
 
 export interface LineageLinkFields {
   parentAssetId: string; childAssetId: string; confirmWrite: boolean; claimToken?: string;
+  summary?: string; summaryActor?: EdgeSummaryActor;
 }
 
 export interface LineageRemoveNodeFields {

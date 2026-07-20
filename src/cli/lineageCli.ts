@@ -4,6 +4,7 @@ import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { requireEdgeSummary } from '../shared/edgeSummary';
 import {
   createAgentClaim,
   heartbeatAgentClaim,
@@ -88,6 +89,7 @@ interface DataCommandOptions {
   json: boolean;
   project: string;
   rootAssetId?: string;
+  summary?: string;
 }
 
 const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
@@ -238,7 +240,7 @@ Usage:
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--schema v2] [--out <path>] [--strict] [--db <path>] [--json]
-  ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>" [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll mark --root <asset-id> --target <asset-id> [--notes <text>] [--requested-by agent|human|system] [--project <project>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll cancel --root <asset-id> --target <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
@@ -381,6 +383,7 @@ function resolveDataCommandOptions(args: string[]): DataCommandOptions {
     json: args.includes('--json'),
     project: readOption(args, '--project') || process.env.LINEAGE_DEFAULT_PRODUCT || defaultProduct,
     rootAssetId: readOption(args, '--root'),
+    summary: readOption(args, '--summary'),
   };
   if (options.dbPath) process.env.LINEAGE_DB = options.dbPath;
   return options;
@@ -426,11 +429,14 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
   }
   if (command === 'link-child') {
     if (!options.childAssetId) throw new Error('lineage link-child requires --child');
+    const summary = requireEdgeSummary(options.summary);
     return linkSelectedLineageChild(options.project, {
       childAssetId: options.childAssetId,
       claimToken: options.claimToken,
       confirmWrite: options.confirmWrite,
       rootAssetId: options.rootAssetId || options.assetId,
+      summary,
+      summaryActor: 'agent',
     });
   }
   if (command === 'reroll') {

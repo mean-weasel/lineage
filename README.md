@@ -287,12 +287,13 @@ Keep the claim fresh and pass it to mutating commands:
 
 ```bash
 lineage agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --json
-lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --summary "Cleaner type" --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
 lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
 `lineage link-child` creates a new visible descendant in the lineage graph. Do
-not use it for re-rolls.
+not use it for re-rolls. The coordinating agent must supply `--summary` with a
+one- or two-word description of the change from parent to child.
 
 For re-roll work, mark the target, have the agent plan/import one replacement
 attempt, and cancel only when the request should be abandoned:

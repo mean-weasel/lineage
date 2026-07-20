@@ -128,6 +128,70 @@ describe('asset lineage index', () => {
     });
   });
 
+  it('persists agent summary provenance and rejects conflicting summarized retries', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    const created = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+      summary: '  Cleaner\n type  ',
+      summaryActor: 'agent',
+    });
+    const retried = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+      summary: 'Cleaner type',
+      summaryActor: 'agent',
+    });
+
+    expect(created.edge).toMatchObject({
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
+    });
+    expect(retried).toMatchObject({ idempotent: true, edge: created.edge });
+    let conflict: unknown;
+    try {
+      linkLineageAssets(defaultProject, {
+        childAssetId: files.childId,
+        confirmWrite: true,
+        parentAssetId: files.parentId,
+        summary: 'Bolder type',
+        summaryActor: 'agent',
+      });
+    } catch (error) {
+      conflict = error;
+    }
+    expect(conflict).toMatchObject({
+      message: 'Lineage edge already exists with a different summary or provenance',
+      status: 409,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual([created.edge]);
+  });
+
+  it('keeps unlabeled generic lineage retries compatible', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    const created = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+    const retried = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+
+    expect(retried).toMatchObject({ idempotent: true, edge: created.edge });
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual([created.edge]);
+  });
+
   it('migrates legacy edge rows idempotently and leaves their summaries absent', () => {
     const files = seedFiles();
     const timestamp = '2026-06-29T00:00:00.000Z';
@@ -1233,6 +1297,7 @@ describe('asset lineage index', () => {
     expect(brief.next_asset?.asset_id).toBe(files.childId);
     expect(brief.brief.prompt).toContain('Use the cleanest concept');
     expect(brief.handoff.link_child_command).toContain('link-child');
+    expect(brief.handoff.link_child_command).toContain('--summary "<one-or-two-words>"');
 
     const dryRun = linkSelectedLineageChild(defaultProject, {
       childAssetId: files.variationId,
