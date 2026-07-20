@@ -80,15 +80,19 @@ jobs:
       - name: Promote next to latest dry run
         if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
         run: |
+          git fetch --tags origin
+          release_tag="v$(node -p "require('./package.json').version")"
           npm run release -- --promote-latest --dry-run --skip-ci
-          npm run release:github:dry-run
+          npm run release:github:dry-run -- --target "$release_tag"
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Promote next to latest
         if: ${{ !inputs.dry_run && inputs.operation == 'promote-latest' }}
         run: |
+          git fetch --tags origin
+          release_tag="v$(node -p "require('./package.json').version")"
           npm run release -- --promote-latest --skip-ci
-          npm run release:github
+          npm run release:github -- --target "$release_tag"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GH_TOKEN: ${{ github.token }}
