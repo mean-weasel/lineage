@@ -178,9 +178,7 @@ async function submitEdgeSummary(page: Page, buttonName: 'Save label' | 'Clear l
 }
 
 function readEdgeSummary(edgeId: string): { summary: string | null; summary_created_by: string | null; summary_updated_by: string | null; summary_updated_at: string | null } {
-  const databasePath = process.env.LINEAGE_E2E_DB;
-  if (!databasePath) throw new Error('LINEAGE_E2E_DB is required for edge-summary assertions');
-  const database = new DatabaseSync(databasePath);
+  const database = edgeSummaryDatabase();
   try {
     const row = database.prepare(`
       select summary, summary_created_by, summary_updated_by, summary_updated_at
@@ -194,9 +192,7 @@ function readEdgeSummary(edgeId: string): { summary: string | null; summary_crea
 }
 
 function updateEdgeSummaryDirectly(edgeId: string, summary: string, updatedAt: string) {
-  const databasePath = process.env.LINEAGE_E2E_DB;
-  if (!databasePath) throw new Error('LINEAGE_E2E_DB is required for stale-write proof');
-  const database = new DatabaseSync(databasePath);
+  const database = edgeSummaryDatabase();
   try {
     database.prepare(`
       update asset_edges
@@ -209,9 +205,7 @@ function updateEdgeSummaryDirectly(edgeId: string, summary: string, updatedAt: s
 }
 
 function seedIsolatedEdgeSummaries() {
-  const databasePath = process.env.LINEAGE_E2E_DB;
-  if (!databasePath) throw new Error('LINEAGE_E2E_DB is required for the isolated edge-summary fixture');
-  const database = new DatabaseSync(databasePath);
+  const database = edgeSummaryDatabase();
   try {
     const edges = database.prepare(`
       select id, parent_asset_id, child_asset_id
@@ -236,6 +230,14 @@ function seedIsolatedEdgeSummaries() {
   } finally {
     database.close();
   }
+}
+
+function edgeSummaryDatabase(): DatabaseSync {
+  const databasePath = process.env.LINEAGE_E2E_DB;
+  if (!databasePath) throw new Error('LINEAGE_E2E_DB is required for the isolated edge-summary fixture');
+  const database = new DatabaseSync(databasePath);
+  database.exec('pragma busy_timeout = 5000');
+  return database;
 }
 
 async function selectDirection(page: Page, direction: string) {
