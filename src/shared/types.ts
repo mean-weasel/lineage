@@ -372,12 +372,18 @@ export interface LineageTaskMutationResponse {
   events?: LineageTaskEvent[];
 }
 
+type EdgeSummaryActor = 'human' | 'agent' | 'system';
+
 export interface LineageEdge {
   id: string;
   parent_asset_id: string;
   child_asset_id: string;
   relation_type: 'derived_from';
   created_at: string;
+  summary?: string;
+  summary_created_by?: EdgeSummaryActor;
+  summary_updated_by?: EdgeSummaryActor;
+  summary_updated_at?: string;
 }
 
 export interface LineageSnapshot {

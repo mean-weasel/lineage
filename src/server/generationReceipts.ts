@@ -163,6 +163,7 @@ function receiptFrom(row: Record<string, unknown>): GenerationJobReceipt {
 }
 
 function outputFrom(row: Record<string, unknown>): GenerationJobOutput {
+  const edgeSummary = typeof row.edge_summary === 'string' && row.edge_summary.length > 0 ? row.edge_summary : undefined;
   return {
     id: String(row.id),
     job_id: String(row.job_id),
@@ -175,6 +176,7 @@ function outputFrom(row: Record<string, unknown>): GenerationJobOutput {
     imported_asset_id: String(row.imported_asset_id),
     parent_asset_id: String(row.parent_asset_id),
     imported_at: String(row.imported_at),
+    ...(edgeSummary ? { edge_summary: edgeSummary } : {}),
   };
 }
 

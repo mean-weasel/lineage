@@ -16,7 +16,7 @@ export interface GenerationJobInput {
 export interface GenerationJobOutput {
   id: string; job_id: string; project_id: string; output_index: number; file_path: string;
   checksum_sha256: string; size_bytes: number; content_type: string;
-  imported_asset_id: string; parent_asset_id: string; imported_at: string;
+  imported_asset_id: string; parent_asset_id: string; imported_at: string; edge_summary?: string;
 }
 
 export interface GenerationJobReceipt {

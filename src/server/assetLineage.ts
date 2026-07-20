@@ -194,6 +194,24 @@ function rowString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function lineageEdgeFromRow(row: Record<string, unknown>): LineageEdge {
+  const summary = rowString(row.summary);
+  const summaryCreatedBy = rowString(row.summary_created_by) as LineageEdge['summary_created_by'];
+  const summaryUpdatedBy = rowString(row.summary_updated_by) as LineageEdge['summary_updated_by'];
+  const summaryUpdatedAt = rowString(row.summary_updated_at);
+  return {
+    id: String(row.id),
+    parent_asset_id: String(row.parent_asset_id),
+    child_asset_id: String(row.child_asset_id),
+    relation_type: row.relation_type as LineageEdge['relation_type'],
+    created_at: String(row.created_at),
+    ...(summary ? { summary } : {}),
+    ...(summaryCreatedBy ? { summary_created_by: summaryCreatedBy } : {}),
+    ...(summaryUpdatedBy ? { summary_updated_by: summaryUpdatedBy } : {}),
+    ...(summaryUpdatedAt ? { summary_updated_at: summaryUpdatedAt } : {}),
+  };
+}
+
 function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
   return {
     id: String(row.id),
@@ -347,7 +365,13 @@ function descendants(database: DatabaseSync, project: string, root: string): Lin
     const parent = queue.shift()!;
     if (seen.has(parent)) continue;
     seen.add(parent);
-    const rows = database.prepare('select id, parent_asset_id, child_asset_id, relation_type, created_at from asset_edges where project_id = ? and parent_asset_id = ? order by created_at').all(project, parent) as unknown as LineageEdge[];
+    const rows = (database.prepare(`
+      select id, parent_asset_id, child_asset_id, relation_type, created_at,
+        summary, summary_created_by, summary_updated_by, summary_updated_at
+      from asset_edges
+      where project_id = ? and parent_asset_id = ?
+      order by created_at
+    `).all(project, parent) as Array<Record<string, unknown>>).map(lineageEdgeFromRow);
     edges.push(...rows);
     queue.push(...rows.map(row => row.child_asset_id));
   }

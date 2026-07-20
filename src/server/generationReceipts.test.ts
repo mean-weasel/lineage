@@ -182,6 +182,21 @@ function seedLegacyGenerationReceiptDb(file: string): void {
         selection_snapshot_json text not null,
         unique(job_id, asset_id, role)
       );
+      create table generation_job_outputs (
+        id text primary key,
+        job_id text not null references generation_jobs(id) on delete cascade,
+        project_id text not null references projects(id),
+        output_index integer not null,
+        file_path text not null,
+        checksum_sha256 text not null,
+        size_bytes integer not null,
+        content_type text not null,
+        imported_asset_id text not null references assets(id),
+        parent_asset_id text not null references assets(id),
+        imported_at text not null,
+        unique(job_id, output_index),
+        unique(job_id, file_path)
+      );
       create table generation_job_receipts (
         id text primary key,
         job_id text not null references generation_jobs(id) on delete cascade,
@@ -212,6 +227,12 @@ function seedLegacyGenerationReceiptDb(file: string): void {
         id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json
       ) values ('legacy-input', 'legacy-job', ?, 'legacy-target', 'legacy-root', 'lineage_next_base', 0, 'selected', '{}')
     `).run(defaultProject);
+    database.prepare(`
+      insert into generation_job_outputs (
+        id, job_id, project_id, output_index, file_path, checksum_sha256, size_bytes,
+        content_type, imported_asset_id, parent_asset_id, imported_at
+      ) values ('legacy-output', 'legacy-job', ?, 0, 'legacy-output.png', ?, 1, 'image/png', 'legacy-target', 'legacy-root', ?)
+    `).run(defaultProject, 'a'.repeat(64), timestamp);
     database.prepare(`
       insert into generation_job_receipts (
         id, job_id, receipt_type, status, command, payload_json, created_at
@@ -261,6 +282,7 @@ describe('generation receipts', () => {
     expect(imported.job.status).toBe('imported');
     expect(imported.imported.map(output => output.parent_asset_id)).toEqual([lineage.selectedId, lineage.selectedId]);
     expect(imported.imported.map(output => output.imported_asset_id)).toEqual([localId(firstOutput), localId(secondOutput)]);
+    expect(imported.imported.map(output => output.edge_summary)).toEqual([undefined, undefined]);
     expect(imported.job.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan', 'import']);
 
     const database = lineageDb();
@@ -373,6 +395,32 @@ describe('generation receipts', () => {
     } finally {
       database.close();
     }
+  });
+
+  it('migrates legacy generation output summaries idempotently and reads populated values', () => {
+    seedLegacyGenerationReceiptDb(dbFile);
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const database = lineageDb();
+      try {
+        const columns = database.prepare('pragma table_info(generation_job_outputs)').all() as Array<{ name: string }>;
+        expect(columns.filter(column => column.name === 'edge_summary')).toHaveLength(1);
+      } finally {
+        database.close();
+      }
+    }
+
+    expect(inspectImageGeneration(defaultProject, 'legacy-job').job.outputs[0]).not.toHaveProperty('edge_summary');
+    const database = lineageDb();
+    try {
+      database.prepare("update generation_job_outputs set edge_summary = 'Cleaner type' where id = 'legacy-output'").run();
+    } finally {
+      database.close();
+    }
+    expect(inspectImageGeneration(defaultProject, 'legacy-job').job.outputs[0]).toMatchObject({
+      id: 'legacy-output',
+      edge_summary: 'Cleaner type',
+    });
   });
 
   it('uses the current active workspace even when older workspaces remain active', () => {

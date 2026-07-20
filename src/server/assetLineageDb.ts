@@ -71,6 +71,10 @@ export function lineageDb(): DatabaseSync {
       child_asset_id text not null references assets(id),
       relation_type text not null check (relation_type in ('derived_from')),
       created_at text not null,
+      summary text,
+      summary_created_by text check (summary_created_by in ('human', 'agent', 'system')),
+      summary_updated_by text check (summary_updated_by in ('human', 'agent', 'system')),
+      summary_updated_at text,
       unique (project_id, parent_asset_id, child_asset_id, relation_type)
     );
     create index if not exists edges_parent on asset_edges(project_id, parent_asset_id);
@@ -354,6 +358,7 @@ export function lineageDb(): DatabaseSync {
       imported_asset_id text not null references assets(id),
       parent_asset_id text not null references assets(id),
       imported_at text not null,
+      edge_summary text,
       unique(job_id, output_index),
       unique(job_id, file_path)
     );
@@ -442,6 +447,11 @@ export function lineageDb(): DatabaseSync {
     );
     create index if not exists agent_claim_events_claim_created on agent_claim_events(claim_id, created_at);
   `);
+  ensureColumn(database, 'asset_edges', 'summary', 'text');
+  ensureColumn(database, 'asset_edges', 'summary_created_by', "text check (summary_created_by in ('human', 'agent', 'system'))");
+  ensureColumn(database, 'asset_edges', 'summary_updated_by', "text check (summary_updated_by in ('human', 'agent', 'system'))");
+  ensureColumn(database, 'asset_edges', 'summary_updated_at', 'text');
+  ensureColumn(database, 'generation_job_outputs', 'edge_summary', 'text');
   migrateAssetSelections(database);
   dropLegacyAssetSelectionRootUnique(database);
   ensureColumn(database, 'asset_selections', 'notes', 'text');
