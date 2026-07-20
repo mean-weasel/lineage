@@ -59,6 +59,7 @@ describe('LineageToolbar', () => {
     expect(actions.textContent).toContain('Load SVG placeholder demo');
     expect(actions.textContent).toContain('Load rich image demo');
     expect(actions.textContent).toContain('Direction');
+    expect(actions.textContent).toContain('Hide edge labels');
     expect(actions.textContent).toContain('Left to right');
     expect(actions.textContent).toContain('Fit graph');
     expect(actions.textContent).toContain('Tidy tree');
@@ -69,6 +70,20 @@ describe('LineageToolbar', () => {
     expect(actions.textContent).toContain('Refresh workspaces');
     expect(container!.textContent).not.toContain('Next variation');
   });
+
+  it('exposes a visible-by-default canvas-wide edge-label toggle without persisting it', () => {
+    const onEdgeSummariesVisible = vi.fn();
+    renderToolbar({ onEdgeSummariesVisible });
+
+    const hideButton = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Hide edge labels');
+    expect(hideButton?.getAttribute('aria-pressed')).toBe('true');
+    act(() => hideButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onEdgeSummariesVisible).toHaveBeenCalledOnce();
+
+    renderToolbar({ edgeSummariesVisible: false });
+    const showButton = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Show edge labels');
+    expect(showButton?.getAttribute('aria-pressed')).toBe('false');
+  });
 });
 
 function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> = {}) {
@@ -76,10 +91,12 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
     activeWorkspace: workspace,
     closeSignal: 0,
     demoSeedStatus: demoMediaStatus({ present: 10, total: 10 }),
+    edgeSummariesVisible: true,
     graphDirection: 'LR',
     loading: false,
     onArchiveWorkspace: vi.fn(),
     onDownloadSwissifierMedia: vi.fn(),
+    onEdgeSummariesVisible: vi.fn(),
     onFitGraph: vi.fn(),
     onGraphDirection: vi.fn(),
     onIndexLocal: vi.fn(),

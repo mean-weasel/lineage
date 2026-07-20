@@ -34,6 +34,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [hoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
+  const [edgeSummariesVisible, setEdgeSummariesVisible] = useState(true);
   const [graphDirection, setGraphDirection] = useState<LineageGraphDirection>('LR');
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
@@ -377,7 +378,10 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     return () => window.clearInterval(timer);
   }, [refresh, snapshot?.root_asset_id]);
 
-  const graph = useMemo(() => toGraph(snapshot, activeNodeId, graphDirection), [activeNodeId, graphDirection, snapshot]);
+  const graph = useMemo(
+    () => toGraph(snapshot, activeNodeId, graphDirection, edgeSummariesVisible),
+    [activeNodeId, edgeSummariesVisible, graphDirection, snapshot],
+  );
   const graphKey = useMemo(() => lineageGraphKey(snapshot, graphDirection), [graphDirection, snapshot]);
   authoritativeEdges.current = graph.edges;
 
@@ -414,6 +418,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       <LineageToolbar
         activeWorkspace={activeWorkspace}
         closeSignal={menuCloseSignal}
+        edgeSummariesVisible={edgeSummariesVisible}
         loading={loading}
         graphDirection={graphDirection}
         demoSeedStatus={demoSeedStatus}
@@ -427,6 +432,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         onRestoreDemoMedia={() => void restoreDemoSeedMedia()}
         onRestoreSwissifierMedia={() => void restoreSwissifierDemoMedia()}
         onDownloadSwissifierMedia={() => void downloadSwissifierDemoMedia()}
+        onEdgeSummariesVisible={() => setEdgeSummariesVisible(visible => !visible)}
         onSeedDemo={() => void seedDemoAndRefreshAssets()}
         onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
         onSelectWorkspace={workspaceId => void activateWorkspace(workspaceId)}

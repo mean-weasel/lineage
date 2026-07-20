@@ -5,15 +5,21 @@ import { layoutLineageTree, lineageFocus, toGraph, type LineageGraphDirection } 
 
 const nodeSize = { height: 164, width: 212 };
 
-function snapshot(ids: string[], edges: Array<[string, string]>, positions: Record<string, { x: number; y: number }> = {}): LineageSnapshot {
+function snapshot(ids: string[], edges: Array<[string, string, string?]>, positions: Record<string, { x: number; y: number }> = {}): LineageSnapshot {
   return {
     active_asset_id: ids[0],
-    edges: edges.map(([parent, child]) => ({
+    edges: edges.map(([parent, child, summary]) => ({
       child_asset_id: child,
       created_at: '2026-06-28T00:00:00.000Z',
       id: `${parent}-${child}`,
       parent_asset_id: parent,
       relation_type: 'derived_from',
+      ...(summary ? {
+        summary,
+        summary_created_by: 'agent' as const,
+        summary_updated_at: '2026-06-28T00:00:00.000Z',
+        summary_updated_by: 'agent' as const,
+      } : {}),
     })),
     fetchedAt: '2026-06-28T00:00:00.000Z',
     latest: [ids.at(-1) || ids[0]],
@@ -64,7 +70,7 @@ describe('lineage graph layout', () => {
   ] satisfies Array<[LineageGraphDirection, 'x' | 'y', 'greater' | 'less', Position, Position]>)(
     'orients %s graph layout and node handles together',
     (direction, axis, ordering, targetPosition, sourcePosition) => {
-      const graph = toGraph(snapshot(['root', 'child'], [['root', 'child']]), null, direction);
+      const graph = toGraph(snapshot(['root', 'child'], [['root', 'child', 'Cleaner type']]), null, direction);
       const root = graph.nodes.find(node => node.id === 'root')?.position;
       const child = graph.nodes.find(node => node.id === 'child')?.position;
 
@@ -76,6 +82,12 @@ describe('lineage graph layout', () => {
       expect(graph.nodes[0].sourcePosition).toBe(sourcePosition);
       expect(graph.nodes[0].data.targetPosition).toBe(targetPosition);
       expect(graph.nodes[0].data.sourcePosition).toBe(sourcePosition);
+      expect(graph.edges[0]).toMatchObject({
+        ariaLabel: 'root to child: Cleaner type',
+        label: 'Cleaner type',
+        labelShowBg: true,
+        type: 'smoothstep',
+      });
     }
   );
 
@@ -112,5 +124,41 @@ describe('lineage graph layout', () => {
     expect(focus.edgeClasses.get('root-a')).toContain('lineage-edge-focus-parent');
     expect(focus.edgeClasses.get('a-a1')).toContain('lineage-edge-focus-child');
     expect(focus.edgeClasses.has('root-b')).toBe(false);
+  });
+
+  it('maps each persisted summary to its own stock label and accessible edge name while leaving legacy edges unlabeled', () => {
+    const graph = toGraph(snapshot(
+      ['root', 'a', 'b', 'legacy'],
+      [
+        ['root', 'a', 'Cleaner type'],
+        ['root', 'b', 'Warmer light'],
+        ['root', 'legacy'],
+      ],
+    ), null);
+
+    expect(graph.edges.map(edge => ({
+      ariaLabel: edge.ariaLabel,
+      className: edge.className,
+      focusable: edge.focusable,
+      id: edge.id,
+      label: edge.label,
+    }))).toEqual([
+      { ariaLabel: 'root to a: Cleaner type', className: 'lineage-edge-summary', focusable: true, id: 'root-a', label: 'Cleaner type' },
+      { ariaLabel: 'root to b: Warmer light', className: 'lineage-edge-summary', focusable: true, id: 'root-b', label: 'Warmer light' },
+      { ariaLabel: 'root to legacy', className: undefined, focusable: true, id: 'root-legacy', label: undefined },
+    ]);
+    expect(graph.edges[0]).toMatchObject({ labelBgBorderRadius: 4, labelBgPadding: [5, 3], labelShowBg: true });
+  });
+
+  it('hides all visual labels without discarding summary-aware accessible edge names', () => {
+    const graph = toGraph(snapshot(
+      ['root', 'a', 'legacy'],
+      [['root', 'a', 'Cleaner type'], ['root', 'legacy']],
+    ), null, 'LR', false);
+
+    expect(graph.edges[0]).toMatchObject({ ariaLabel: 'root to a: Cleaner type', className: 'lineage-edge-summary' });
+    expect(graph.edges[0].label).toBeUndefined();
+    expect(graph.edges[1]).toMatchObject({ ariaLabel: 'root to legacy' });
+    expect(graph.edges[1].label).toBeUndefined();
   });
 });

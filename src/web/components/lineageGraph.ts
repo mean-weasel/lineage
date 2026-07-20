@@ -8,7 +8,12 @@ const nodeHeight = 164;
 
 export type LineageGraphDirection = 'BT' | 'LR' | 'RL' | 'TB';
 
-export function toGraph(snapshot: LineageSnapshot | null, activeNodeId: string | null, direction: LineageGraphDirection = 'LR'): { nodes: AssetFlowNode[]; edges: Edge[] } {
+export function toGraph(
+  snapshot: LineageSnapshot | null,
+  activeNodeId: string | null,
+  direction: LineageGraphDirection = 'LR',
+  edgeSummariesVisible = true,
+): { nodes: AssetFlowNode[]; edges: Edge[] } {
   if (!snapshot) return { nodes: [], edges: [] };
   const tidyPositions = layoutLineageTree(snapshot, direction);
   const handlePositions = lineageHandlePositions(direction);
@@ -35,15 +40,29 @@ export function toGraph(snapshot: LineageSnapshot | null, activeNodeId: string |
       },
     };
   });
-  const edges = snapshot.edges.map(edge => ({
-    className: focus.edgeClasses.get(edge.id),
-    id: edge.id,
-    markerEnd: { type: MarkerType.ArrowClosed },
-    source: edge.parent_asset_id,
-    target: edge.child_asset_id,
-    type: 'smoothstep',
-    animated: snapshot.selected.includes(edge.child_asset_id),
-  }));
+  const nodeTitles = new Map(snapshot.nodes.map(node => [node.asset_id, node.title]));
+  const edges = snapshot.edges.map(edge => {
+    const summaryClass = edge.summary ? 'lineage-edge-summary' : '';
+    const className = [focus.edgeClasses.get(edge.id), summaryClass].filter(Boolean).join(' ') || undefined;
+    const relationship = `${nodeTitles.get(edge.parent_asset_id) || edge.parent_asset_id} to ${nodeTitles.get(edge.child_asset_id) || edge.child_asset_id}`;
+    return {
+      ariaLabel: edge.summary ? `${relationship}: ${edge.summary}` : relationship,
+      className,
+      focusable: true,
+      id: edge.id,
+      markerEnd: { type: MarkerType.ArrowClosed },
+      source: edge.parent_asset_id,
+      target: edge.child_asset_id,
+      type: 'smoothstep',
+      animated: snapshot.selected.includes(edge.child_asset_id),
+      ...(edge.summary && edgeSummariesVisible ? {
+        label: edge.summary,
+        labelBgBorderRadius: 4,
+        labelBgPadding: [5, 3] as [number, number],
+        labelShowBg: true,
+      } : {}),
+    } satisfies Edge;
+  });
   return { nodes, edges };
 }
 
