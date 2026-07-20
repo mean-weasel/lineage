@@ -17,6 +17,7 @@ import {
 } from './generationReceipts';
 import { listImageGenerationJobs } from './generationReceiptJobs';
 import { fileSha256 } from './localReview';
+import { generationOutputManifestSchemaVersion, parseGenerationOutputManifest } from '../shared/generationOutputManifest';
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
@@ -614,5 +615,75 @@ describe('generation receipts', () => {
       jobId: plan.job.id,
     })).toThrow('Output count mismatch');
     expect(countRows('generation_job_outputs')).toBe(0);
+  });
+
+  it('can reject an invalid edge-summary manifest before output indexing or import writes', () => {
+    const lineage = setupSelectedLineage('invalid-edge-summary-manifest');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one output for edge-summary manifest validation.',
+    });
+    const output = writeScratch('imports/invalid-edge-summary-manifest.png', 'invalid-edge-summary-manifest');
+    const outputAssetId = localId(output);
+
+    let resolverCalled = false;
+    expect(() => parseGenerationOutputManifest({
+      schema_version: generationOutputManifestSchemaVersion,
+      job_id: plan.job.id,
+      outputs: [{
+        output_index: 0,
+        file_path: output,
+        parent_asset_id: lineage.selectedId,
+        edge_summary: 'Far too many words',
+      }],
+    }, plan.job, {
+      resolveFilePath: filePath => {
+        resolverCalled = true;
+        return filePath;
+      },
+    })).toThrow('Edge summary must contain at most 2 words');
+
+    expect(resolverCalled).toBe(false);
+    expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(0);
+    expect(countRows('generation_job_outputs')).toBe(0);
+    expect(countRows('asset_edges', `where child_asset_id = '${outputAssetId}'`)).toBe(0);
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job.status).toBe('planned');
+  });
+
+  it('characterizes the import rollback boundary when edge insertion fails', () => {
+    const lineage = setupSelectedLineage('edge-insert-rollback');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one output for transaction rollback characterization.',
+    });
+    const output = writeScratch('imports/edge-insert-rollback.png', 'edge-insert-rollback');
+    const outputAssetId = localId(output);
+    const database = lineageDb();
+    try {
+      database.exec(`
+        create trigger generation_edge_summary_experiment_abort
+        before insert on asset_edges
+        begin
+          select raise(abort, 'edge-summary experiment abort');
+        end;
+      `);
+    } finally {
+      database.close();
+    }
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      files: [output],
+      jobId: plan.job.id,
+    })).toThrow('edge-summary experiment abort');
+
+    const inspected = inspectImageGeneration(defaultProject, plan.job.id).job;
+    expect(inspected.status).toBe('planned');
+    expect(inspected.outputs).toEqual([]);
+    expect(inspected.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan']);
+    expect(countRows('asset_edges', `where parent_asset_id = '${lineage.selectedId}' and child_asset_id = '${outputAssetId}'`)).toBe(0);
+    expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(1);
   });
 });
