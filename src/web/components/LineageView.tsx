@@ -56,6 +56,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const nextVariationLimit = 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;
   const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
+  const canvasHoverPreviewsEnabled = hoverPreviewsEnabled && !detailNode && !historyNode && !editingEdge;
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
   const collapseTimer = useRef<number | null>(null);
   const authoritativeEdges = useRef<Edge[]>([]);
@@ -477,7 +478,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             flowEdges={snapshot ? flowEdges : []}
             flowNodes={snapshot ? flowNodes : []}
             graphKey={graphKey}
-            hoverPreviewsEnabled={hoverPreviewsEnabled}
+            hoverPreviewsEnabled={canvasHoverPreviewsEnabled}
             loading={loading}
             onEdgesChange={handleEdgesChange}
             onEdgeEdit={(edgeId, returnFocus) => setEdgeEditor({ edgeId, returnFocus })}

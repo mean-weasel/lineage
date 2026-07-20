@@ -107,6 +107,9 @@ export function LineageCanvas({
     schedulePreviewClose(update);
   }, [cancelPreviewClose, schedulePreviewClose]);
   useEffect(() => dismissPreview(), [dismissPreview, graphKey]);
+  useEffect(() => {
+    if (!hoverPreviewsEnabled) dismissPreview();
+  }, [dismissPreview, hoverPreviewsEnabled]);
   useEffect(() => () => cancelPreviewClose(), [cancelPreviewClose]);
   const openDetail = useCallback((assetId: string) => {
     dismissPreview();

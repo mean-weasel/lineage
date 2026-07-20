@@ -22,6 +22,7 @@ test('browses and promotes re-roll history without panning the background canvas
 
   await node.dblclick();
   await expect(page.getByRole('dialog', { name: 'Attempt history' })).toBeVisible();
+  await expect(page.getByTestId('lineage-hover-preview')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Use .* next variation/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Approve' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reject' })).toBeVisible();
