@@ -8,6 +8,7 @@ import { cancelLineageIterateTasksForAssets, listLineageTasks, resolveLineageTas
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
 import { lineagePublicPackageCommand, lineageRuntimeSelector } from './lineageRuntimeCommand';
+import { createGenerationOutputManifestDraft, parseGenerationOutputManifest, type GenerationOutputManifest } from '../shared/generationOutputManifest';
 import type {
   GenerationHandoffPacket,
   GenerationImportResponse,
@@ -23,7 +24,8 @@ import type {
   LineageRerollRequest,
 } from '../shared/types';
 
-const adapterVersion = 'generation-receipts-v1';
+const legacyAdapterVersion = 'generation-receipts-v1';
+const manifestAdapterVersion = 'generation-receipts-v2';
 const provider: GenerationProvider = 'codex-handoff';
 
 class GenerationReceiptError extends Error {
@@ -76,16 +78,22 @@ function parentMappings(next: LineageNextResponse, perBaseCount: number) {
   }));
 }
 
-function buildHandoff(project: string, id: string, prompt: string, count: number, perBaseCount: number, next: LineageNextResponse): GenerationHandoffPacket {
+function buildHandoff(
+  project: string,
+  id: string,
+  prompt: string,
+  count: number,
+  perBaseCount: number,
+  next: LineageNextResponse,
+  inputs: GenerationJobInput[],
+): GenerationHandoffPacket {
   const parent = next.next_asset;
   if (!parent) throw new GenerationReceiptError('Missing lineage next base');
   const parents = parentMappings(next, perBaseCount);
-  const importFilesFlag = parents.length > 1
-    ? `--parent-files ${quote(parents.map(mapping => `${mapping.parent.asset_id}=<${mapping.output_indexes.map(index => `file-${index}`).join(',')}>`).join(';'))}`
-    : '--files <comma-separated-.asset-scratch-files>';
-  const importCommand = `${lineagePublicPackageCommand()} generate image import --project ${quote(project)} --job-id ${quote(id)} ${importFilesFlag} --confirm-write ${lineageRuntimeSelector()} --json`;
+  const outputManifest = createGenerationOutputManifestDraft({ id, expected_output_count: count, inputs });
+  const importCommand = `${lineagePublicPackageCommand()} generate image import --project ${quote(project)} --job-id ${quote(id)} --manifest ${quote('.asset-scratch/generation-output-manifest.json')} --confirm-write ${lineageRuntimeSelector()} --json`;
   return {
-    schema_version: 'lineage.generation_handoff.v1', provider, project, job_id: id, prompt, expected_output_count: count,
+    schema_version: 'lineage.generation_handoff.v2', provider, project, job_id: id, prompt, expected_output_count: count,
     per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,
     lineage: {
       root_asset_id: next.root_asset_id, parent_asset_id: parent.asset_id, selection_strategy: next.strategy,
@@ -99,10 +107,11 @@ function buildHandoff(project: string, id: string, prompt: string, count: number
       'Use Codex image generation outside Lineage server code.',
       'Write generated output files under .asset-scratch before import.',
       'Do not call live provider APIs from the CLI or server.',
-      'Import the exact expected output count with --confirm-write to persist lineage children.',
-      'For multiple selected bases, prefer --parent-files so each generated file is tied to its selected parent.',
+      'Fill every output_manifest entry with its generated file path and a one- or two-word edge summary.',
+      'Import the completed manifest with --confirm-write to persist every lineage child.',
     ],
     import_command: importCommand,
+    output_manifest: outputManifest,
     guardrails: { live_generation: false, external_services: false, output_root: '.asset-scratch', confirm_write_required: true },
   };
 }
@@ -201,7 +210,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
     id: String(row.id),
     project_id: String(row.project_id),
     provider: row.provider as GenerationProvider,
-    adapter_version: String(row.adapter_version),
+    adapter_version: String(row.adapter_version) as GenerationJob['adapter_version'],
     source_mode: String(row.source_mode) as GenerationSourceMode,
     root_asset_id: String(row.root_asset_id),
     prompt: String(row.prompt),
@@ -237,15 +246,15 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
   if (!positiveInteger(perBaseCount)) throw new GenerationReceiptError('Generation count must be a positive integer');
   if (fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
   const id = jobId();
-  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next);
   const inputs = inputsFrom(id, project, next);
+  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs);
   const mappings = parentMappings(next, perBaseCount).map(mapping => ({ parent_asset_id: mapping.parent.asset_id, output_indexes: mapping.output_indexes }));
   const timestamp = nowIso();
   const preview: GenerationJob = {
     id,
     project_id: project,
     provider,
-    adapter_version: adapterVersion,
+    adapter_version: manifestAdapterVersion,
     source_mode: 'lineage_selection',
     root_asset_id: next.root_asset_id,
     prompt,
@@ -278,7 +287,7 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
           id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
           expected_output_count, status, output_dir, handoff_json, created_at, updated_at
         ) values (?, ?, ?, ?, 'lineage_selection', ?, ?, ?, 'planned', ?, ?, ?, ?)
-      `).run(id, project, provider, adapterVersion, next.root_asset_id, prompt, count, '.asset-scratch', JSON.stringify(handoff), timestamp, timestamp);
+      `).run(id, project, provider, manifestAdapterVersion, next.root_asset_id, prompt, count, '.asset-scratch', JSON.stringify(handoff), timestamp, timestamp);
       const insertInput = database.prepare('insert into generation_job_inputs (id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?)');
       for (const input of inputs) insertInput.run(input.id, id, project, input.asset_id, input.root_asset_id, input.role, input.position, input.selection_strategy, JSON.stringify(next));
       insertReceipt(database, id, 'plan', 'generate image plan', preview.receipts[0].payload);
@@ -337,7 +346,7 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
     id,
     project_id: project,
     provider,
-    adapter_version: adapterVersion,
+    adapter_version: legacyAdapterVersion,
     source_mode: 'lineage_reroll',
     root_asset_id: snapshot.root_asset_id,
     prompt,
@@ -369,7 +378,7 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
           id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
           expected_output_count, status, output_dir, handoff_json, created_at, updated_at
         ) values (?, ?, ?, ?, 'lineage_reroll', ?, ?, 1, 'planned', ?, ?, ?, ?)
-      `).run(id, project, provider, adapterVersion, snapshot.root_asset_id, prompt, '.asset-scratch', JSON.stringify(handoff), timestamp, timestamp);
+      `).run(id, project, provider, legacyAdapterVersion, snapshot.root_asset_id, prompt, '.asset-scratch', JSON.stringify(handoff), timestamp, timestamp);
       database.prepare('insert into generation_job_inputs (id, job_id, project_id, asset_id, root_asset_id, role, position, selection_strategy, selection_snapshot_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .run(input.id, id, project, input.asset_id, input.root_asset_id, input.role, input.position, input.selection_strategy, JSON.stringify(input.selection_snapshot));
       insertReceipt(database, id, 'plan', 'reroll plan', preview.receipts[0].payload);
@@ -438,12 +447,22 @@ function isPathInside(child: string, parent: string): boolean {
   return Boolean(rel) && !rel.startsWith('..') && !rel.startsWith('/');
 }
 
-function resolveScratchFile(file: string): { relativePath: string; checksum: string; size: number; contentType: string; assetId: string } {
+function scratchCandidate(file: string): { candidate: string; scratchRoot: string } {
   const scratchRoot = resolve(repoRoot, '.asset-scratch');
   const candidate = file.startsWith('.asset-scratch/') || resolve(file).startsWith(scratchRoot)
     ? resolve(repoRoot, file)
     : resolve(scratchRoot, file);
   if (!isPathInside(candidate, scratchRoot)) throw new GenerationReceiptError(`Import file must be under .asset-scratch: ${file}`);
+  return { candidate, scratchRoot };
+}
+
+function resolveScratchManifestPath(file: string): string {
+  const { candidate, scratchRoot } = scratchCandidate(file);
+  return relative(scratchRoot, candidate);
+}
+
+function resolveScratchFile(file: string): { relativePath: string; checksum: string; size: number; contentType: string; assetId: string } {
+  const { candidate, scratchRoot } = scratchCandidate(file);
   if (!existsSync(candidate)) throw new GenerationReceiptError(`Missing import file: ${file}`, 404);
   const realScratchRoot = realpathSync(scratchRoot);
   const realCandidate = realpathSync(candidate);
@@ -460,7 +479,52 @@ function resolveScratchFile(file: string): { relativePath: string; checksum: str
   };
 }
 
-export function importImageGenerationOutputs(project = defaultProject, fields: { jobId: string; files?: string[]; parentFiles?: Record<string, string[]>; confirmWrite: boolean }): GenerationImportResponse {
+interface GenerationImportRow {
+  edgeSummary?: string;
+  file: string;
+  parentAssetId: string;
+}
+
+function generationManifestConflict(): never {
+  throw new GenerationReceiptError('Generation import already exists with different output, summary, or provenance', 409);
+}
+
+function confirmManifestRetry(project: string, job: GenerationJob, manifest: GenerationOutputManifest): GenerationImportResponse {
+  if (job.outputs.length !== manifest.outputs.length) generationManifestConflict();
+  const database = lineageDb();
+  try {
+    for (const expected of manifest.outputs) {
+      const recorded = job.outputs.find(output => output.output_index === expected.output_index);
+      if (
+        !recorded
+        || recorded.file_path !== expected.file_path
+        || recorded.parent_asset_id !== expected.parent_asset_id
+        || recorded.edge_summary !== expected.edge_summary
+      ) generationManifestConflict();
+      const edge = database.prepare(`
+        select summary, summary_created_by, summary_updated_by, summary_updated_at
+        from asset_edges
+        where project_id = ? and parent_asset_id = ? and child_asset_id = ? and relation_type = 'derived_from'
+      `).get(project, recorded.parent_asset_id, recorded.imported_asset_id) as Record<string, unknown> | undefined;
+      if (
+        !edge
+        || edge.summary !== expected.edge_summary
+        || edge.summary_created_by !== 'agent'
+        || edge.summary_updated_by !== 'agent'
+        || typeof edge.summary_updated_at !== 'string'
+        || edge.summary_updated_at.length === 0
+      ) generationManifestConflict();
+    }
+    return { ok: true, command: 'generate image import', project, job, imported: job.outputs, idempotent: true };
+  } finally {
+    database.close();
+  }
+}
+
+export function importImageGenerationOutputs(
+  project = defaultProject,
+  fields: { jobId: string; files?: string[]; parentFiles?: Record<string, string[]>; manifest?: unknown; confirmWrite: boolean },
+): GenerationImportResponse {
   if (!fields.jobId) throw new GenerationReceiptError('Missing --job-id');
   if (!fields.confirmWrite) throw new GenerationReceiptError('Generation import requires --confirm-write');
   const database = lineageDb();
@@ -470,18 +534,46 @@ export function importImageGenerationOutputs(project = defaultProject, fields: {
   } finally {
     database.close();
   }
-  if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
-  const hasExplicitParentFiles = Boolean(fields.parentFiles && Object.keys(fields.parentFiles).length > 0);
-  const hasOrderedFiles = Boolean(fields.files && fields.files.map(file => file.trim()).filter(Boolean).length > 0);
-  if (hasExplicitParentFiles && hasOrderedFiles) throw new GenerationReceiptError('Use --files or --parent-files, not both');
-  const parentFileRows = hasExplicitParentFiles
-    ? parentFilesFor(job, fields.parentFiles || {})
-    : orderedFilesFor(job, (fields.files || []).map(file => file.trim()).filter(Boolean));
+  if (job.source_mode !== 'lineage_selection') throw new GenerationReceiptError(`Generation job is not an image-selection job: ${job.source_mode}`);
+
+  const hasManifestInput = fields.manifest !== undefined;
+  const hasParentFilesInput = fields.parentFiles !== undefined;
+  const hasFilesInput = fields.files !== undefined;
+  if (hasManifestInput && (hasParentFilesInput || hasFilesInput)) {
+    throw new GenerationReceiptError('Use --manifest or legacy --files/--parent-files, not both');
+  }
+  if (hasParentFilesInput && hasFilesInput) throw new GenerationReceiptError('Use --files or --parent-files, not both');
+
+  let manifest: GenerationOutputManifest | undefined;
+  let parentFileRows: GenerationImportRow[];
+  let mappingStrategy: 'generation_output_manifest_v1' | 'explicit_parent_files' | 'ordered_per_base';
+  if (job.adapter_version === manifestAdapterVersion) {
+    if (!hasManifestInput) throw new GenerationReceiptError('New generation jobs require --manifest');
+    manifest = parseGenerationOutputManifest(fields.manifest, job, { resolveFilePath: resolveScratchManifestPath });
+    if (job.status === 'imported') return confirmManifestRetry(project, job, manifest);
+    if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
+    parentFileRows = manifest.outputs.map(output => ({
+      edgeSummary: output.edge_summary,
+      file: output.file_path,
+      parentAssetId: output.parent_asset_id,
+    }));
+    mappingStrategy = 'generation_output_manifest_v1';
+  } else if (job.adapter_version === legacyAdapterVersion) {
+    if (hasManifestInput) throw new GenerationReceiptError('Already-planned legacy generation jobs require --files or --parent-files');
+    if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
+    const hasExplicitParentFiles = Boolean(fields.parentFiles && Object.keys(fields.parentFiles).length > 0);
+    parentFileRows = hasExplicitParentFiles
+      ? parentFilesFor(job, fields.parentFiles || {})
+      : orderedFilesFor(job, (fields.files || []).map(file => file.trim()).filter(Boolean));
+    mappingStrategy = hasExplicitParentFiles ? 'explicit_parent_files' : 'ordered_per_base';
+  } else {
+    throw new GenerationReceiptError(`Unsupported generation adapter version: ${job.adapter_version}`);
+  }
   if (parentFileRows.length === 0) throw new GenerationReceiptError('Generation import requires --files or --parent-files');
   if (parentFileRows.length !== job.expected_output_count) {
     throw new GenerationReceiptError(`Output count mismatch: expected ${job.expected_output_count}, received ${parentFileRows.length}`);
   }
-  const resolved = parentFileRows.map(row => ({ ...resolveScratchFile(row.file), parentAssetId: row.parentAssetId }));
+  const resolved = parentFileRows.map(row => ({ ...resolveScratchFile(row.file), edgeSummary: row.edgeSummary, parentAssetId: row.parentAssetId }));
   const uniquePaths = new Set(resolved.map(file => file.relativePath));
   if (uniquePaths.size !== resolved.length) throw new GenerationReceiptError('Generation import files must be unique');
   cancelLineageIterateTasksForAssets(project, {
@@ -500,11 +592,42 @@ export function importImageGenerationOutputs(project = defaultProject, fields: {
         if (!assetRow) throw new GenerationReceiptError(`Indexed local asset was not found: ${file.relativePath}`);
         const outputId = `${fields.jobId}:output:${index}`;
         writeDb.prepare(`insert into generation_job_outputs (
-          id, job_id, project_id, output_index, file_path, checksum_sha256, size_bytes, content_type, imported_asset_id, parent_asset_id, imported_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(outputId, fields.jobId, project, index, file.relativePath, file.checksum, file.size, file.contentType, file.assetId, file.parentAssetId, timestamp);
-        writeDb.prepare(`insert into asset_edges (id, project_id, parent_asset_id, child_asset_id, relation_type, created_at)
-          values (?, ?, ?, ?, 'derived_from', ?) on conflict(project_id, parent_asset_id, child_asset_id, relation_type) do nothing`)
-          .run(`${project}:${file.parentAssetId}:derived_from:${file.assetId}`, project, file.parentAssetId, file.assetId, timestamp);
+          id, job_id, project_id, output_index, file_path, checksum_sha256, size_bytes, content_type,
+          imported_asset_id, parent_asset_id, imported_at, edge_summary
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+          outputId, fields.jobId, project, index, file.relativePath, file.checksum, file.size,
+          file.contentType, file.assetId, file.parentAssetId, timestamp, file.edgeSummary || null,
+        );
+        const insertedEdge = writeDb.prepare(`insert into asset_edges (
+          id, project_id, parent_asset_id, child_asset_id, relation_type, created_at,
+          summary, summary_created_by, summary_updated_by, summary_updated_at
+        ) values (?, ?, ?, ?, 'derived_from', ?, ?, ?, ?, ?)
+        on conflict(project_id, parent_asset_id, child_asset_id, relation_type) do nothing`).run(
+          `${project}:${file.parentAssetId}:derived_from:${file.assetId}`,
+          project,
+          file.parentAssetId,
+          file.assetId,
+          timestamp,
+          file.edgeSummary || null,
+          file.edgeSummary ? 'agent' : null,
+          file.edgeSummary ? 'agent' : null,
+          file.edgeSummary ? timestamp : null,
+        );
+        if (file.edgeSummary && insertedEdge.changes === 0) {
+          const edge = writeDb.prepare(`
+            select summary, summary_created_by, summary_updated_by, summary_updated_at
+            from asset_edges
+            where project_id = ? and parent_asset_id = ? and child_asset_id = ? and relation_type = 'derived_from'
+          `).get(project, file.parentAssetId, file.assetId) as Record<string, unknown> | undefined;
+          if (
+            !edge
+            || edge.summary !== file.edgeSummary
+            || edge.summary_created_by !== 'agent'
+            || edge.summary_updated_by !== 'agent'
+            || typeof edge.summary_updated_at !== 'string'
+            || edge.summary_updated_at.length === 0
+          ) generationManifestConflict();
+        }
       }
       writeDb.prepare(`
         update generation_jobs
@@ -512,8 +635,14 @@ export function importImageGenerationOutputs(project = defaultProject, fields: {
         where project_id = ? and id = ?
       `).run(timestamp, timestamp, project, fields.jobId);
       insertReceipt(writeDb, fields.jobId, 'import', 'generate image import', {
-        mapping_strategy: hasExplicitParentFiles ? 'explicit_parent_files' : 'ordered_per_base',
-        files: resolved.map((file, index) => ({ output_index: index, file_path: file.relativePath, imported_asset_id: file.assetId, parent_asset_id: file.parentAssetId })),
+        mapping_strategy: mappingStrategy,
+        files: resolved.map((file, index) => ({
+          output_index: index,
+          file_path: file.relativePath,
+          imported_asset_id: file.assetId,
+          parent_asset_id: file.parentAssetId,
+          ...(file.edgeSummary ? { edge_summary: file.edgeSummary } : {}),
+        })),
         selection_reset: { root_asset_id: job.root_asset_id, cleared: true },
       });
       writeDb.prepare('delete from asset_selections where project_id = ? and root_asset_id = ?').run(project, job.root_asset_id);

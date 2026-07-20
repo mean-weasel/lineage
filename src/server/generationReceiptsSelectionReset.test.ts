@@ -7,6 +7,7 @@ import { getLineageNextAsset, indexLineageAssets, linkLineageAssets, updateSelec
 import { createLineageWorkspace } from './assetLineageWorkspaces';
 import { importImageGenerationOutputs, planImageGeneration } from './generationReceipts';
 import { fileSha256 } from './localReview';
+import type { GenerationJob } from '../shared/types';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-generation-receipts-selection-reset');
 const dbFile = join(scratchDir, 'generation-receipts-selection-reset.sqlite');
@@ -20,6 +21,19 @@ function writeScratch(relativePath: string, content: string): string {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, content);
   return file;
+}
+
+function outputManifest(job: GenerationJob, files: string[]) {
+  const draft = job.handoff.output_manifest;
+  if (!draft) throw new Error(`Generation job ${job.id} is missing its output manifest draft`);
+  return {
+    ...draft,
+    outputs: draft.outputs.slice(0, files.length).map((output, index) => ({
+      ...output,
+      edge_summary: `Variation ${index + 1}`,
+      file_path: files[index],
+    })),
+  };
 }
 
 function setupSelectedLineage() {
@@ -66,12 +80,12 @@ describe('generation receipt selection reset', () => {
     const imported = importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
       jobId: plan.job.id,
-      parentFiles: { [lineage.selectedId]: [selectedOutput], [lineage.otherId]: [otherOutput] },
+      manifest: outputManifest(plan.job, [selectedOutput, otherOutput]),
     });
     const next = getLineageNextAsset(defaultProject, lineage.rootId);
 
     expect(imported.job.receipts.find(receipt => receipt.receipt_type === 'import')?.payload).toMatchObject({
-      mapping_strategy: 'explicit_parent_files',
+      mapping_strategy: 'generation_output_manifest_v1',
       files: [
         { imported_asset_id: localId(selectedOutput), parent_asset_id: lineage.selectedId },
         { imported_asset_id: localId(otherOutput), parent_asset_id: lineage.otherId },
@@ -95,9 +109,9 @@ describe('generation receipt selection reset', () => {
 
     expect(() => importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
-      files: [output],
       jobId: plan.job.id,
-    })).toThrow('Output count mismatch');
+      manifest: outputManifest(plan.job, [output]),
+    })).toThrow('requires 2 outputs, received 1');
     const next = getLineageNextAsset(defaultProject, lineage.rootId);
     expect([...next.selected].sort()).toEqual([lineage.selectedId, lineage.otherId].sort());
     expect(next.selection_mode).toBe('multiple');

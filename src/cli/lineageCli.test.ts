@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
-import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
+import { createLineageWorkspace, lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { fileSha256 } from '../server/localReview';
 import { acquireProfileWriterLease, type ProfileWriterLease } from '../server/profileWriterLease';
 import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
@@ -85,6 +85,8 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
     expect(help).toContain('[--schema v2]');
     expect(help).toContain('lineage link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>"');
+    expect(help).toContain('lineage generate image plan --prompt <text> --from-lineage-selection');
+    expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
     expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
@@ -571,6 +573,72 @@ describe('lineage CLI handoff commands', () => {
       'Dry run: Link local-child from local-parent',
       'Warning: Pending re-roll exists for local-parent. Use reroll plan/import.',
     ]);
+  });
+
+  it('plans, inspects, and imports a structured generation manifest through the packaged CLI contract', () => {
+    seedCliDb();
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: fixtureRootAssetId,
+      title: 'CLI generation workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+
+    const planned = runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Create one CLI manifest variation.',
+      '--from-lineage-selection',
+      '--count', '1',
+      '--json',
+    ]) as { job: { handoff: { import_command: string; output_manifest?: { outputs: Array<Record<string, unknown>> } }; id: string; status: string } };
+    expect(planned.job).toMatchObject({ status: 'planned' });
+    expect(planned.job.handoff.import_command).toContain('--manifest');
+
+    const outputFile = join(cliScratchDir, 'generation-cli-output.png');
+    const manifestFile = join(cliScratchDir, 'generation-cli-manifest.json');
+    writeFileSync(outputFile, 'generation-cli-output');
+    writeFileSync(manifestFile, `${JSON.stringify({
+      ...planned.job.handoff.output_manifest,
+      outputs: planned.job.handoff.output_manifest?.outputs.map(output => ({
+        ...output,
+        edge_summary: 'Cleaner type',
+        file_path: outputFile,
+      })),
+    })}\n`);
+
+    const imported = runLineageDataCommand('generate', [
+      'image', 'import',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--manifest', manifestFile,
+      '--confirm-write',
+      '--json',
+    ]) as { imported: Array<{ edge_summary?: string }>; job: { status: string } };
+    expect(imported.job.status).toBe('imported');
+    expect(imported.imported.map(output => output.edge_summary)).toEqual(['Cleaner type']);
+
+    const inspected = runLineageDataCommand('generate', [
+      'image', 'inspect',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--json',
+    ]) as { job: { outputs: Array<{ edge_summary?: string }> } };
+    expect(inspected.job.outputs[0].edge_summary).toBe('Cleaner type');
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'import',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--manifest', manifestFile,
+      '--files', outputFile,
+      '--confirm-write',
+    ])).toThrow('Use --manifest or legacy --files/--parent-files, not both');
   });
 
   it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {

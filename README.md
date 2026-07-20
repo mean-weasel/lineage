@@ -295,6 +295,26 @@ lineage agent release --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 not use it for re-rolls. The coordinating agent must supply `--summary` with a
 one- or two-word description of the change from parent to child.
 
+For a coordinated multi-output generation job, plan from the selected lineage
+bases, copy `job.handoff.output_manifest` from the JSON response into a manifest
+file, and fill every output's `file_path` and distinct one- or two-word
+`edge_summary` before import:
+
+```bash
+lineage generate image plan --project demo-project --prompt "Create two variations" --from-lineage-selection --count 2 --json
+lineage generate image inspect --project demo-project --job-id <job-id> --json
+lineage generate image import --project demo-project --job-id <job-id> --manifest .asset-scratch/generation-output-manifest.json --confirm-write --json
+```
+
+Newly planned selection jobs require the versioned manifest and reject mixed
+`--manifest`, `--files`, or `--parent-files` input. Jobs already planned with
+the legacy adapter may still finish with `--files` or `--parent-files`; those
+legacy child edges remain unlabeled. Manifest retries are idempotent only while
+the output mapping, original summary, and current agent provenance still match.
+Asset indexing precedes the receipt transaction, so a later transactional
+failure can leave an indexed asset even though outputs, edges, receipt, job
+status, and selection reset roll back together.
+
 For re-roll work, mark the target, have the agent plan/import one replacement
 attempt, and cancel only when the request should be abandoned:
 

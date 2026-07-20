@@ -95,6 +95,8 @@ lineage-stable inspect --profile "$LINEAGE_PROD_PROFILE" --project demo-project 
 lineage-stable agent claim --profile "$LINEAGE_PROD_PROFILE" --project demo-project --scope lineage_workspace --target <workspace-id> --agent-name "Codex task" --ttl 20m --json
 lineage-stable agent heartbeat --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 lineage-stable link-child --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --child <child-id> --summary "Cleaner type" --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create two variations" --from-lineage-selection --count 2 --json
+lineage-stable generate image import --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --manifest .asset-scratch/generation-output-manifest.json --confirm-write --json
 lineage-stable agent release --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
@@ -102,7 +104,11 @@ Export the returned raw token as `LINEAGE_CLAIM_TOKEN`. Heartbeat while working,
 pass the token to claim-scoped writes, and release it before handoff. Use
 `link-child` only for a visible child variation, and supply a one- or two-word
 `--summary` describing the change from parent to child. Use `reroll mark`, `reroll
-plan`, and `reroll import` for a new attempt on the same node.
+plan`, and `reroll import` for a new attempt on the same node. A new `generate
+image plan` response includes `job.handoff.output_manifest`; copy that draft to
+a JSON file, fill every output path and distinct one- or two-word edge summary,
+and import it with `--manifest`. Do not combine manifest input with legacy
+`--files` or `--parent-files`.
 
 Persistent writes require the profile writer lease and any operation-specific
 `--confirm-write`. Never replace `--profile` with a direct `--db` write.
