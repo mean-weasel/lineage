@@ -84,7 +84,6 @@ test('lets users disable lineage hover previews without disabling details', asyn
   await page.locator('header.lineage-header .lineage-overflow summary').click();
   await loadDemoLineage(page, page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first());
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
-  await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept');
   const rootNode = page.locator('.lineage-node.root-node');
   await expect(rootNode).toBeVisible();
   await rootNode.hover();
@@ -103,7 +102,6 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await loadDemoLineage(page, loadDemo);
 
   await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
-  await expect(page.getByTestId('lineage-inspecting-title')).toHaveText('Initial Demo Concept', { timeout: 20_000 });
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
   await expect(page.locator('.lineage-scope-bar')).toHaveCount(0);
   await expect(page.locator('.lineage-selection-strip')).toHaveCount(0);
@@ -113,19 +111,34 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   const rootNode = page.locator('.lineage-node.root-node');
   await expect(rootNode).toHaveAttribute('data-lineage-root', 'true');
   expect(await rootNode.evaluate(node => node.closest('.react-flow__node')?.getAttribute('tabindex') ?? null)).toBeNull();
-  const inspectingCard = page.getByTestId('lineage-canvas-status');
-  await inspectingCard.getByRole('button', { name: 'Dismiss inspecting card' }).click();
-  await expect(inspectingCard).toHaveCount(0);
+  await expect(page.getByTestId('lineage-canvas-status')).toHaveCount(0);
   await page.waitForTimeout(500); // Allow the intentional first-load viewport fit to finish before preview arbitration.
   await rootNode.hover();
   const hoverPreview = page.getByTestId('lineage-hover-preview');
   await expect(hoverPreview).toBeVisible();
   await expect(hoverPreview.locator('img')).toBeVisible();
-  await expect(hoverPreview).toContainText('Double-click for full details');
+  await expect(hoverPreview).toContainText('Initial Demo Concept');
+  const branchAction = hoverPreview.getByRole('button', { name: /Branch/ });
+  await expect(branchAction).toBeVisible();
+  const rerollAction = hoverPreview.getByRole('button', { name: /Re-roll/ });
+  await expect(rerollAction).toBeVisible();
+  await expect(hoverPreview.getByRole('button', { name: /Details/ })).toBeVisible();
+  await branchAction.hover();
+  await expect(hoverPreview).toBeVisible();
+  await branchAction.click();
+  await expect(branchAction).toHaveAttribute('aria-pressed', 'true');
+  await branchAction.click();
+  await expect(branchAction).toHaveAttribute('aria-pressed', 'false');
+  await rerollAction.click();
+  await expect(rerollAction).toHaveAttribute('aria-pressed', 'true');
+  await rerollAction.click();
+  await expect(rerollAction).toHaveAttribute('aria-pressed', 'false');
 
-  const anotherNode = page.locator('.lineage-node:not(.root-node)').first();
-  const anotherNodeTitle = await anotherNode.locator('strong').textContent();
+  const firstCandidate = page.locator('.lineage-node:not(.root-node)').first();
+  const anotherNodeTitle = await firstCandidate.locator('strong').textContent();
   expect(anotherNodeTitle).toBeTruthy();
+  const anotherNode = page.locator('.lineage-node:not(.root-node)').filter({ hasText: anotherNodeTitle! }).first();
+  await page.mouse.move(0, 0);
   await anotherNode.focus();
   await expect(hoverPreview).toHaveCount(1);
   await expect(hoverPreview).toContainText(anotherNodeTitle!);
@@ -141,6 +154,12 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(keyboardDialog).toBeVisible();
   await keyboardDialog.getByRole('button', { name: 'Close' }).click();
 
+  await rootNode.focus();
+  await rootNode.press('d');
+  const shortcutDetailDialog = page.getByRole('dialog', { name: 'Initial Demo Concept' });
+  await expect(shortcutDetailDialog).toBeVisible();
+  await shortcutDetailDialog.getByTitle('Close detail').click();
+
   await rootNode.hover();
   await expect(hoverPreview).toBeVisible();
   await rootNode.click({ button: 'right' });
@@ -148,8 +167,6 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(hoverPreview).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
-  await inspectingCard.getByRole('button', { name: 'Dismiss inspecting card' }).click();
-  await expect(inspectingCard).toHaveCount(0);
 
   await rootNode.dblclick();
   const detailDialog = page.getByRole('dialog', { name: 'Initial Demo Concept' });

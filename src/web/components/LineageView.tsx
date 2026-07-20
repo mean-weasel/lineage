@@ -52,8 +52,6 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const nextVariationLimit = 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;
   const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
-  const showCanvasStatus = Boolean(activeNodeId && activeNode);
-  const inspectingId = activeNode?.asset_id || 'none';
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
   const collapseTimer = useRef<number | null>(null);
   const authoritativeEdges = useRef<Edge[]>([]);
@@ -159,12 +157,12 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   }
   function setSelected() { if (activeNode) void selectNextBase(activeNode, selectionNote); }
   function saveRationale() { if (activeNode?.user_selected) void selectNextBase(activeNode, selectionNote); }
-  function selectNextBase(node: LineageNode, notes = node.selection_note || '') {
+  async function selectNextBase(node: LineageNode, notes = node.selection_note || '') {
     if (!node.user_selected && selectionFull) {
       onToast('error', `Choose at most ${nextVariationLimit} assets for next variation`);
       return;
     }
-    void mutateLineage('/api/selection', {
+    await mutateLineage('/api/selection', {
       assetId: node.asset_id,
       rootAssetId: snapshot?.root_asset_id,
       mode: node.user_selected ? 'remove' : 'add',
@@ -172,8 +170,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       confirmWrite: true,
     }, node.user_selected ? `Removed ${node.asset_id} from next variation` : `Using ${node.asset_id} for next variation`);
   }
-  function replaceNextVariation(node: LineageNode, notes = node.selection_note || '') {
-    void mutateLineage('/api/selection', {
+  async function replaceNextVariation(node: LineageNode, notes = node.selection_note || '') {
+    await mutateLineage('/api/selection', {
       assetId: node.asset_id,
       rootAssetId: snapshot?.root_asset_id,
       mode: 'replace',
@@ -442,12 +440,10 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       <div className="lineage-workbench" data-testid="lineage-workbench">
         <div className={`lineage-canvas ${activeNodeId ? 'focus-active' : ''}`}>
           <LineageCanvas
-            activeNode={activeNode}
             flowEdges={snapshot ? flowEdges : []}
             flowNodes={snapshot ? flowNodes : []}
             graphKey={graphKey}
             hoverPreviewsEnabled={hoverPreviewsEnabled}
-            inspectingId={inspectingId}
             loading={loading}
             onEdgesChange={handleEdgesChange}
             onClearFocus={clearFocus}
@@ -462,8 +458,10 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
             onSelectedAsset={onSelectedAsset}
+            onToggleBranch={node => node.user_selected ? clearNextVariation(node.asset_id) : selectNextBase(node)}
+            onToggleReroll={node => node.reroll_request?.status === 'pending' ? clearReroll(node) : markReroll(node)}
             onViewportInteraction={markViewportInteraction}
-            showCanvasStatus={showCanvasStatus}
+            selectionFull={selectionFull}
             workspaceRootAssetId={workspaceRootAssetId}
           />
         </div>

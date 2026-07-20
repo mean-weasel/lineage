@@ -24,8 +24,13 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
     await page.locator('header.lineage-header .lineage-overflow summary').click();
     await expect(page.locator('header.lineage-header .lineage-overflow')).toContainText('QA seed media');
     await expect(page.locator('header.lineage-header .lineage-overflow')).toContainText('14/14 PNG images');
+    await page.locator('header.lineage-header .lineage-overflow summary').click();
 
-    const preview = page.locator('.lineage-canvas-status-preview img');
+    const rootNode = page.locator('.lineage-node.root-node');
+    await rootNode.hover();
+    const inspector = page.getByTestId('lineage-hover-preview');
+    await expect(inspector).toBeVisible();
+    const preview = inspector.locator('.lineage-hover-preview-media img');
     await expect(preview).toBeVisible();
     await expect(preview).toHaveAttribute('src', /rich-demo-drafts.*\.png/);
     await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth), {
@@ -44,6 +49,7 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
         naturalHeight: image.naturalHeight,
         renderedWidth: rect.width,
         renderedHeight: rect.height,
+        objectFit: getComputedStyle(image).objectFit,
         src: image.getAttribute('src') || '',
       };
     });
@@ -51,6 +57,7 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
     expect(proof.naturalHeight).toBeGreaterThan(900);
     expect(proof.renderedWidth).toBeGreaterThan(180);
     expect(proof.renderedHeight).toBeGreaterThan(100);
+    expect(proof.objectFit).toBe('contain');
     expect(proof.src).not.toContain('.svg');
 
     const visibleSvgPreviews = await page.locator('.lineage-thumb img[src*=".svg"]:visible').count();
