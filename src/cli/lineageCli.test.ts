@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
-import { lineageWorkspaceId } from '../server/assetLineageWorkspaces';
+import { createLineageWorkspace, lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { fileSha256 } from '../server/localReview';
 import { acquireProfileWriterLease, type ProfileWriterLease } from '../server/profileWriterLease';
 import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
@@ -84,6 +84,9 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
     expect(help).toContain('[--schema v2]');
+    expect(help).toContain('lineage link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>"');
+    expect(help).toContain('lineage generate image plan --prompt <text> --from-lineage-selection');
+    expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
     expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
@@ -405,24 +408,69 @@ describe('lineage CLI handoff commands', () => {
       '--project', defaultProject,
       '--root', fixtureRootAssetId,
       '--child', fixtureChildAssetId,
+      '--summary', '  Cleaner\n type  ',
       '--db', cliDbFile,
       '--json',
-    ]) as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string } };
+    ]) as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string; summary?: string; summary_created_by?: string; summary_updated_by?: string } };
 
     expect(dryRun.dryRun).toBe(true);
     expect(dryRun.edge).toMatchObject({
       child_asset_id: fixtureChildAssetId,
       parent_asset_id: fixtureRootAssetId,
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
     });
     expect(() =>
       runLineageDataCommand('link-child', [
         '--project', defaultProject,
         '--root', fixtureRootAssetId,
         '--child', 'missing-child',
+        '--summary', 'Cleaner type',
         '--db', cliDbFile,
         '--json',
       ])
     ).toThrow('Unknown indexed asset: missing-child');
+  });
+
+  it('rejects missing and invalid agent edge summaries before link-child writes', () => {
+    seedCliDb();
+    const rowCount = () => {
+      const database = new DatabaseSync(cliDbFile);
+      const count = Number((database.prepare('select count(*) as count from asset_edges').get() as { count: number }).count);
+      database.close();
+      return count;
+    };
+    const before = rowCount();
+
+    expect(() => runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--db', cliDbFile,
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Edge summary is required');
+    expect(() => runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--summary', '   ',
+      '--db', cliDbFile,
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Edge summary is required');
+    expect(() => runLineageDataCommand('link-child', [
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--child', fixtureChildAssetId,
+      '--summary', 'Much cleaner type',
+      '--db', cliDbFile,
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Edge summary must contain at most 2 words');
+
+    expect(rowCount()).toBe(before);
   });
 
   it('requires a matching claim token for confirmed link-child writes', () => {
@@ -433,6 +481,7 @@ describe('lineage CLI handoff commands', () => {
         '--project', defaultProject,
         '--root', fixtureRootAssetId,
         '--child', fixtureChildAssetId,
+        '--summary', 'Cleaner type',
         '--db', cliDbFile,
         '--confirm-write',
         '--json',
@@ -452,14 +501,21 @@ describe('lineage CLI handoff commands', () => {
       '--project', defaultProject,
       '--root', fixtureRootAssetId,
       '--child', fixtureChildAssetId,
+      '--summary', 'Cleaner type',
       '--db', cliDbFile,
       '--claim-token', claimed.claim_token,
       '--confirm-write',
       '--json',
-    ]) as { child_asset_id: string; edge?: { child_asset_id: string }; message?: string };
+    ]) as { child_asset_id: string; edge?: { child_asset_id: string; summary?: string; summary_created_by?: string; summary_updated_by?: string; summary_updated_at?: string }; message?: string };
 
     expect(linked.child_asset_id).toBe(fixtureChildAssetId);
     expect(linked.edge?.child_asset_id).toBe(fixtureChildAssetId);
+    expect(linked.edge).toMatchObject({
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
+    });
+    expect(linked.edge?.summary_updated_at).toBeTruthy();
     expect(linked.message).toContain('Linked');
   });
 
@@ -477,6 +533,7 @@ describe('lineage CLI handoff commands', () => {
       '--project', defaultProject,
       '--root', fixtureRootAssetId,
       '--child', fixtureChildAssetId,
+      '--summary', 'Cleaner type',
       '--db', cliDbFile,
       '--json',
     ]) as { dryRun?: boolean; warning?: string };
@@ -490,6 +547,7 @@ describe('lineage CLI handoff commands', () => {
         '--project', defaultProject,
         '--root', fixtureRootAssetId,
         '--child', fixtureChildAssetId,
+        '--summary', 'Cleaner type',
         '--db', cliDbFile,
         '--confirm-write',
         '--json',
@@ -515,6 +573,72 @@ describe('lineage CLI handoff commands', () => {
       'Dry run: Link local-child from local-parent',
       'Warning: Pending re-roll exists for local-parent. Use reroll plan/import.',
     ]);
+  });
+
+  it('plans, inspects, and imports a structured generation manifest through the packaged CLI contract', () => {
+    seedCliDb();
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: fixtureRootAssetId,
+      title: 'CLI generation workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+
+    const planned = runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Create one CLI manifest variation.',
+      '--from-lineage-selection',
+      '--count', '1',
+      '--json',
+    ]) as { job: { handoff: { import_command: string; output_manifest?: { outputs: Array<Record<string, unknown>> } }; id: string; status: string } };
+    expect(planned.job).toMatchObject({ status: 'planned' });
+    expect(planned.job.handoff.import_command).toContain('--manifest');
+
+    const outputFile = join(cliScratchDir, 'generation-cli-output.png');
+    const manifestFile = join(cliScratchDir, 'generation-cli-manifest.json');
+    writeFileSync(outputFile, 'generation-cli-output');
+    writeFileSync(manifestFile, `${JSON.stringify({
+      ...planned.job.handoff.output_manifest,
+      outputs: planned.job.handoff.output_manifest?.outputs.map(output => ({
+        ...output,
+        edge_summary: 'Cleaner type',
+        file_path: outputFile,
+      })),
+    })}\n`);
+
+    const imported = runLineageDataCommand('generate', [
+      'image', 'import',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--manifest', manifestFile,
+      '--confirm-write',
+      '--json',
+    ]) as { imported: Array<{ edge_summary?: string }>; job: { status: string } };
+    expect(imported.job.status).toBe('imported');
+    expect(imported.imported.map(output => output.edge_summary)).toEqual(['Cleaner type']);
+
+    const inspected = runLineageDataCommand('generate', [
+      'image', 'inspect',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--json',
+    ]) as { job: { outputs: Array<{ edge_summary?: string }> } };
+    expect(inspected.job.outputs[0].edge_summary).toBe('Cleaner type');
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'import',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--manifest', manifestFile,
+      '--files', outputFile,
+      '--confirm-write',
+    ])).toThrow('Use --manifest or legacy --files/--parent-files, not both');
   });
 
   it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {
@@ -831,17 +955,19 @@ describe('lineage CLI handoff commands', () => {
     const operator = readFileSync(join(repoRoot, 'plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md'), 'utf8');
 
     expect(readme).toContain('lineage agent claim --project demo-project --scope lineage_workspace');
-    expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
+    expect(readme).toContain('lineage link-child --project demo-project --root <root-asset-id> --child <child-asset-id> --summary "Cleaner type" --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json');
     expect(operator).toContain('Pass `--profile` on every operational command');
     expect(operator).toContain('lineage-stable agent claim --profile "$LINEAGE_PROD_PROFILE"');
     expect(operator).toContain('Heartbeat while working');
     expect(operator).toContain('`link-child` only for a visible child variation');
+    expect(operator).toContain('`--summary` describing the change from parent to child');
     expect(readme).toContain('lineage reroll mark --project demo-project --root <root-asset-id> --target <target-asset-id> --notes "Fix distorted text" --confirm-write --json');
     expect(readme).toContain('lineage reroll cancel --project demo-project --root <root-asset-id> --target <target-asset-id> --confirm-write --json');
     expect(operator).toContain('`reroll mark`');
     expect(operator).toContain('Never replace `--profile` with a direct `--db` write');
     expect(operator).not.toContain('--db /absolute/path/to/lineage.sqlite');
     expect(readme).toContain('`lineage link-child` creates a new visible descendant');
+    expect(readme).toContain('one- or two-word description of the change from parent to child');
     expect(readme).toContain('`lineage reroll import` updates the target node');
     expect(operator).toContain('Use `reroll mark`, `reroll');
     expect(readme).toContain('Use `project_channel` only for rare work');

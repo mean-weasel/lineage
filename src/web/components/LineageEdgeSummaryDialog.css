@@ -1,0 +1,88 @@
+.lineage-edge-summary-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(18, 31, 45, 0.42);
+  padding: 20px;
+}
+
+.lineage-edge-summary-dialog {
+  width: min(430px, 100%);
+  border: 1px solid #b9c9d2;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px rgba(18, 31, 45, 0.24);
+  padding: 18px;
+}
+
+.lineage-edge-summary-dialog header,
+.lineage-edge-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lineage-edge-summary-dialog h3,
+.lineage-edge-summary-dialog p {
+  margin: 0;
+}
+
+.lineage-edge-summary-dialog header p,
+#lineage-edge-summary-provenance,
+#lineage-edge-summary-guidance {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lineage-edge-summary-dialog form {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.lineage-edge-summary-dialog label {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.lineage-edge-summary-dialog input {
+  min-height: 42px;
+  border: 1px solid #aebfc9;
+  border-radius: 8px;
+  padding: 0 11px;
+  font: inherit;
+}
+
+.lineage-edge-summary-dialog input[aria-invalid="true"] {
+  border-color: #b33a3a;
+}
+
+#lineage-edge-summary-guidance.invalid,
+.lineage-edge-summary-error {
+  color: #9c2727;
+}
+
+.lineage-edge-summary-error {
+  border-radius: 7px;
+  background: #fff0f0;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.lineage-edge-summary-actions {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.lineage-edge-summary-actions button:first-child {
+  background: #125d68;
+  color: white;
+}
+
+.lineage-edge-summary-actions .clear {
+  border-color: #c78a8a;
+  color: #8d2525;
+}

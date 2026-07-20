@@ -1,6 +1,7 @@
 import type { LineageNextResponse } from './types';
 
 export type GenerationProvider = 'codex-handoff';
+type GenerationAdapterVersion = 'generation-receipts-v1' | 'generation-receipts-v2';
 type GenerationJobStatus = 'planned' | 'imported' | 'failed' | 'cancelled';
 type GenerationReceiptType = 'plan' | 'import' | 'error';
 type GenerationReceiptStatus = 'ok' | 'error';
@@ -16,7 +17,7 @@ export interface GenerationJobInput {
 export interface GenerationJobOutput {
   id: string; job_id: string; project_id: string; output_index: number; file_path: string;
   checksum_sha256: string; size_bytes: number; content_type: string;
-  imported_asset_id: string; parent_asset_id: string; imported_at: string;
+  imported_asset_id: string; parent_asset_id: string; imported_at: string; edge_summary?: string;
 }
 
 export interface GenerationJobReceipt {
@@ -25,7 +26,7 @@ export interface GenerationJobReceipt {
 }
 
 export interface GenerationHandoffPacket {
-  schema_version: 'lineage.generation_handoff.v1';
+  schema_version: 'lineage.generation_handoff.v1' | 'lineage.generation_handoff.v2';
   provider: GenerationProvider; project: string; job_id: string; prompt: string;
   expected_output_count: number; per_base_count?: number;
   lineage: {
@@ -34,6 +35,11 @@ export interface GenerationHandoffPacket {
     parents?: Array<{ parent_asset_id: string; parent_title: string; parent_local_path?: string; parent_s3_key?: string; output_indexes: number[] }>;
   };
   instructions: string[]; import_command: string;
+  output_manifest?: {
+    schema_version: 'lineage.generation_output_manifest.v1';
+    job_id: string;
+    outputs: Array<{ output_index: number; file_path: ''; parent_asset_id: string; edge_summary: '' }>;
+  };
   guardrails: {
     live_generation: false; external_services: false;
     output_root: '.asset-scratch'; confirm_write_required: true;
@@ -41,7 +47,7 @@ export interface GenerationHandoffPacket {
 }
 
 export interface GenerationJob {
-  id: string; project_id: string; provider: GenerationProvider; adapter_version: string;
+  id: string; project_id: string; provider: GenerationProvider; adapter_version: GenerationAdapterVersion;
   source_mode: GenerationSourceMode; root_asset_id: string; prompt: string;
   expected_output_count: number; status: GenerationJobStatus; output_dir?: string;
   handoff: GenerationHandoffPacket; created_at: string; updated_at: string; imported_at?: string;
@@ -61,5 +67,5 @@ export interface GenerationJobListResponse {
 }
 
 export interface GenerationImportResponse {
-  ok: true; command: 'generate image import' | 'reroll import'; project: string; job: GenerationJob; imported: GenerationJobOutput[];
+  ok: true; command: 'generate image import' | 'reroll import'; project: string; job: GenerationJob; imported: GenerationJobOutput[]; idempotent?: true;
 }

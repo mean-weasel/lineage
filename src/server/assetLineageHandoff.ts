@@ -1,4 +1,5 @@
 import type { LineageBriefResponse, LineageSelectedChildFields } from '../shared/types';
+import { requireEdgeSummary } from '../shared/edgeSummary';
 import { AgentClaimError, validateAgentClaimForWrite } from './agentClaims';
 import { getLineageNextAsset, getLineageWriteClaimContext, LineageError, linkLineageAssets, listLineageRerollRequests } from './assetLineage';
 import { nowIso } from './assetLineageDb';
@@ -10,7 +11,7 @@ function lineageCommand(command: string, project: string, rootAssetId: string): 
 }
 
 function linkChildCommand(project: string, rootAssetId: string): string {
-  return `${lineagePublicPackageCommand()} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --confirm-write ${lineageRuntimeSelector()} --json`;
+  return `${lineagePublicPackageCommand()} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --summary "<one-or-two-words>" --confirm-write ${lineageRuntimeSelector()} --json`;
 }
 
 function rerollImportGuidance(rootAssetId: string, targetAssetId: string): string {
@@ -66,6 +67,7 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
 }
 
 export function linkSelectedLineageChild(project: string, fields: LineageSelectedChildFields) {
+  const summary = fields.summaryActor ? requireEdgeSummary(fields.summary) : fields.summary;
   const next = getLineageNextAsset(project, fields.rootAssetId);
   if (!next.next_asset) throw new LineageError('Cannot link child until a next base is selected or unambiguous');
   const rerollRequests = listLineageRerollRequests(project, next.root_asset_id).requests;
@@ -95,6 +97,8 @@ export function linkSelectedLineageChild(project: string, fields: LineageSelecte
     confirmWrite: fields.confirmWrite,
     claimToken: fields.claimToken,
     parentAssetId: next.next_asset.asset_id,
+    summary,
+    summaryActor: fields.summaryActor,
   });
   return {
     ...result,

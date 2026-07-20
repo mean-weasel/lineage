@@ -4,6 +4,7 @@ import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { requireEdgeSummary } from '../shared/edgeSummary';
 import {
   createAgentClaim,
   heartbeatAgentClaim,
@@ -36,7 +37,13 @@ import {
   startLineageTask,
   updateLineageTaskInstructions,
 } from '../server/assetLineageTasks';
-import { importImageRerollOutput, planImageReroll } from '../server/generationReceipts';
+import {
+  importImageGenerationOutputs,
+  importImageRerollOutput,
+  inspectImageGeneration,
+  planImageGeneration,
+  planImageReroll,
+} from '../server/generationReceipts';
 import { getLineageSelectionPacket } from '../server/lineageSelectionPacket';
 import { assertLineageCodeOrigin, getLineageCodeIdentity, getLineageRuntimeInfo } from '../server/runtimeInfo';
 import {
@@ -88,6 +95,7 @@ interface DataCommandOptions {
   json: boolean;
   project: string;
   rootAssetId?: string;
+  summary?: string;
 }
 
 const signalExitCodes: Partial<Record<NodeJS.Signals, number>> = {
@@ -136,6 +144,28 @@ function readOptions(args: string[], name: string): string[] {
     }
   }
   return values;
+}
+
+function readJsonFile(path: string, label: string): unknown {
+  try {
+    return JSON.parse(readFileSync(resolve(path), 'utf8')) as unknown;
+  } catch (error) {
+    throw new Error(`${label} must be a readable JSON file: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+}
+
+function parentFilesOption(value: string | undefined): Record<string, string[]> | undefined {
+  if (value === undefined) return undefined;
+  const mappings: Record<string, string[]> = {};
+  for (const rawMapping of value.split(';')) {
+    const separator = rawMapping.indexOf('=');
+    const parent = separator >= 0 ? rawMapping.slice(0, separator).trim() : '';
+    const files = separator >= 0 ? rawMapping.slice(separator + 1).split(',').map(file => file.trim()).filter(Boolean) : [];
+    if (!parent || files.length === 0) throw new Error('lineage generate image import --parent-files requires parent=file[,file][;parent=file]');
+    if (Object.hasOwn(mappings, parent)) throw new Error(`Duplicate generation parent mapping: ${parent}`);
+    mappings[parent] = files;
+  }
+  return mappings;
 }
 
 export function resolveStartOptions(config: LineageCliConfig, args: string[]): StartOptions {
@@ -238,7 +268,11 @@ Usage:
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--schema v2] [--out <path>] [--strict] [--db <path>] [--json]
-  ${config.binName} link-child --root <asset-id> --child <asset-id> [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>" [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
+  ${config.binName} generate image plan --prompt <text> --from-lineage-selection [--count <count>|--per-base-count <count>] [--project <project>] [--dry-run] [--db <path>] [--json]
+  ${config.binName} generate image inspect --job-id <job-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} generate image import --job-id <job-id> --manifest <json-file> --confirm-write [--project <project>] [--db <path>] [--json]
+  ${config.binName} generate image import --job-id <legacy-job-id> (--files <file,file>|--parent-files <parent=file;parent=file>) --confirm-write [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll mark --root <asset-id> --target <asset-id> [--notes <text>] [--requested-by agent|human|system] [--project <project>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll cancel --root <asset-id> --target <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
@@ -381,6 +415,7 @@ function resolveDataCommandOptions(args: string[]): DataCommandOptions {
     json: args.includes('--json'),
     project: readOption(args, '--project') || process.env.LINEAGE_DEFAULT_PRODUCT || defaultProduct,
     rootAssetId: readOption(args, '--root'),
+    summary: readOption(args, '--summary'),
   };
   if (options.dbPath) process.env.LINEAGE_DB = options.dbPath;
   return options;
@@ -426,12 +461,56 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
   }
   if (command === 'link-child') {
     if (!options.childAssetId) throw new Error('lineage link-child requires --child');
+    const summary = requireEdgeSummary(options.summary);
     return linkSelectedLineageChild(options.project, {
       childAssetId: options.childAssetId,
       claimToken: options.claimToken,
       confirmWrite: options.confirmWrite,
       rootAssetId: options.rootAssetId || options.assetId,
+      summary,
+      summaryActor: 'agent',
     });
+  }
+  if (command === 'generate') {
+    const [resource, subcommand] = positionalArgs(args);
+    if (resource !== 'image') throw new Error(`Unknown generate command: ${resource}`);
+    if (subcommand === 'plan') {
+      const prompt = readOption(args, '--prompt');
+      const rawCount = readOption(args, '--count');
+      const rawPerBaseCount = readOption(args, '--per-base-count');
+      if (!prompt) throw new Error('lineage generate image plan requires --prompt');
+      return planImageGeneration(options.project, {
+        count: rawCount === undefined ? undefined : Number(rawCount),
+        dryRun: args.includes('--dry-run'),
+        fromLineageSelection: args.includes('--from-lineage-selection'),
+        perBaseCount: rawPerBaseCount === undefined ? undefined : Number(rawPerBaseCount),
+        prompt,
+      });
+    }
+    if (subcommand === 'inspect') {
+      const jobId = readOption(args, '--job-id');
+      if (!jobId) throw new Error('lineage generate image inspect requires --job-id');
+      return inspectImageGeneration(options.project, jobId);
+    }
+    if (subcommand === 'import') {
+      const jobId = readOption(args, '--job-id');
+      const manifestPath = readOption(args, '--manifest');
+      const filesValue = readOption(args, '--files');
+      const parentFilesValue = readOption(args, '--parent-files');
+      if (!jobId) throw new Error('lineage generate image import requires --job-id');
+      if (manifestPath !== undefined && (filesValue !== undefined || parentFilesValue !== undefined)) {
+        throw new Error('Use --manifest or legacy --files/--parent-files, not both');
+      }
+      if (filesValue !== undefined && parentFilesValue !== undefined) throw new Error('Use --files or --parent-files, not both');
+      return importImageGenerationOutputs(options.project, {
+        confirmWrite: options.confirmWrite,
+        files: filesValue === undefined ? undefined : filesValue.split(',').map(file => file.trim()).filter(Boolean),
+        jobId,
+        manifest: manifestPath === undefined ? undefined : readJsonFile(manifestPath, 'Generation output manifest'),
+        parentFiles: parentFilesOption(parentFilesValue),
+      });
+    }
+    throw new Error(`Unknown generate image command: ${subcommand}`);
   }
   if (command === 'reroll') {
     const subcommand = positionalArgs(args)[0] || '';
@@ -586,6 +665,15 @@ export function printDataResult(command: string, result: unknown, json: boolean)
     const link = result as { dryRun?: boolean; edge?: { child_asset_id: string; parent_asset_id: string }; message?: string; warning?: string };
     console.log(link.message || `${link.dryRun ? 'Dry run: ' : ''}Link ${link.edge?.child_asset_id || 'child'} from ${link.edge?.parent_asset_id || 'parent'}`);
     if (link.warning) console.log(`Warning: ${link.warning}`);
+    return;
+  }
+  if (command === 'generate' && result && typeof result === 'object' && 'job' in result) {
+    const generation = result as { idempotent?: boolean; imported?: unknown[]; job?: { id: string; status: string } };
+    if (generation.imported) {
+      console.log(`${generation.idempotent ? 'Already imported' : 'Imported'} ${generation.imported.length} output(s) for ${generation.job?.id || 'job'}`);
+    } else {
+      console.log(`Generation job ${generation.job?.id || 'job'} ${generation.job?.status || 'unknown'}`);
+    }
     return;
   }
   if (command === 'reroll' && result && typeof result === 'object') {
@@ -755,7 +843,9 @@ function printRuntimeResult(result: LineageRuntimeCodeIdentity, json: boolean): 
 
 export function lineageCliRequiresWriterLease(command: string, args: string[]): boolean {
   if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection') return false;
-  const subcommand = positionalArgs(args)[0] || '';
+  const positions = positionalArgs(args);
+  const subcommand = positions[0] || '';
+  if (command === 'generate') return positions[0] !== 'image' || positions[1] !== 'inspect';
   if (command === 'reroll') return subcommand !== 'list';
   if (command === 'tasks') return subcommand !== 'list' && subcommand !== 'inspect';
   if (command === 'db') return subcommand !== 'info';
@@ -764,8 +854,10 @@ export function lineageCliRequiresWriterLease(command: string, args: string[]): 
 }
 
 export function lineageCliCanDelegateMutation(command: string, args: string[]): boolean {
-  const subcommand = positionalArgs(args)[0] || '';
+  const positions = positionalArgs(args);
+  const subcommand = positions[0] || '';
   if (command === 'link-child') return true;
+  if (command === 'generate') return positions[0] === 'image' && ['plan', 'import'].includes(positions[1] || '');
   if (command === 'reroll') return ['mark', 'cancel', 'plan', 'import'].includes(subcommand);
   if (command === 'tasks') return ['claim', 'start', 'comment', 'cancel', 'override', 'instructions'].includes(subcommand);
   if (command === 'agent') return ['claim', 'heartbeat', 'release', 'revoke', 'transfer'].includes(subcommand);
@@ -1149,7 +1241,7 @@ export async function runLineageCli(config: LineageCliConfig, args = process.arg
     process.exit(1);
   }
 
-  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'link-child' || command === 'reroll' || command === 'tasks') {
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'link-child' || command === 'generate' || command === 'reroll' || command === 'tasks') {
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {

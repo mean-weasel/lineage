@@ -781,6 +781,41 @@
   stroke-width: 2;
 }
 
+.lineage-canvas .react-flow__edge.lineage-edge-summary .react-flow__edge-text {
+  fill: #586b76;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  transition: fill 140ms ease, font-weight 140ms ease;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-summary .react-flow__edge-textbg {
+  fill: #fbfdff;
+  fill-opacity: 0.88;
+  stroke: #d4dde3;
+  stroke-opacity: 0.72;
+  stroke-width: 0.75;
+  transition: fill-opacity 140ms ease, stroke 140ms ease, stroke-opacity 140ms ease;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-summary:hover .react-flow__edge-text,
+.lineage-canvas .react-flow__edge.lineage-edge-summary.selected .react-flow__edge-text,
+.lineage-canvas .react-flow__edge.lineage-edge-summary:focus .react-flow__edge-text,
+.lineage-canvas .react-flow__edge.lineage-edge-summary:focus-visible .react-flow__edge-text {
+  fill: #18313c;
+  font-weight: 900;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-summary:hover .react-flow__edge-textbg,
+.lineage-canvas .react-flow__edge.lineage-edge-summary.selected .react-flow__edge-textbg,
+.lineage-canvas .react-flow__edge.lineage-edge-summary:focus .react-flow__edge-textbg,
+.lineage-canvas .react-flow__edge.lineage-edge-summary:focus-visible .react-flow__edge-textbg {
+  fill: var(--surface);
+  fill-opacity: 0.98;
+  stroke: #718a97;
+  stroke-opacity: 0.92;
+}
+
 .lineage-canvas .react-flow__edge.animated .react-flow__edge-path {
   stroke: #278153;
 }

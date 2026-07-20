@@ -17,6 +17,7 @@ import {
   markLineageRerollRequest,
   promoteLineageAttempt,
   updateAssetReview,
+  updateLineageEdgeSummary,
   updateLineageLayout,
   updateSelectedAsset,
 } from './server/assetLineage';
@@ -252,6 +253,17 @@ app.post(
     );
   })
 );
+
+app.post('/api/lineage/edges/:edgeId/summary', asyncRoute((req, res) => {
+  res.json(updateLineageEdgeSummary(projectFrom(req), {
+    edgeId: req.params.edgeId,
+    action: req.body.action,
+    summary: req.body.summary,
+    expectedSummaryUpdatedAt: req.body.expectedSummaryUpdatedAt,
+    confirmWrite: req.body.confirmWrite === true,
+    claimToken: claimTokenFromRequest(req),
+  }));
+}));
 
 app.post('/api/lineage/remove-node', asyncRoute((req, res) => {
   res.json(removeLineageNode(projectFrom(req), { assetId: String(req.body.assetId || ''), rootAssetId: typeof req.body.rootAssetId === 'string' ? req.body.rootAssetId : undefined, confirmWrite: req.body.confirmWrite === true, claimToken: claimTokenFromRequest(req) }));

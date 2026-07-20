@@ -283,10 +283,10 @@ export function getLineageWorkspaceAgentHandoff(project: string): ContentAgentHa
         workspaceActivateCommand: `npx @mean-weasel/lineage workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write --json`,
         lineageNextCommand: `npx @mean-weasel/lineage next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
         lineageBriefCommand: `npx @mean-weasel/lineage brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        linkChildCommand: nextAssets.length > 0 ? `npx @mean-weasel/lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --confirm-write --json` : '',
+        linkChildCommand: nextAssets.length > 0 ? `npx @mean-weasel/lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --summary "<one-or-two-words>" --confirm-write --json` : '',
       },
       instructions: safeToStart
-        ? 'Continue this lineage workspace from the selected next variation base or bases. Generate local variations, index them, and link chosen children back to the workspace root before any S3 backup or external posting.'
+        ? 'Continue this lineage workspace from the selected next variation base or bases. Generate local variations, index them, and link chosen children back to the workspace root with a one- or two-word edge summary before any S3 backup or external posting.'
         : 'Inspect the lineage workspace and ask the human to choose "Use for next variation" before generating more variations.',
       kind: 'continue_lineage_workspace',
       label: 'selected lineage workspace',
