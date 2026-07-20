@@ -15,6 +15,8 @@ type AssetNodeData = LineageNode & {
   onOpenHistory?: (assetId: string) => void;
   onPreviewChange?: (source: LineagePreviewSource, assetId: string, position: HoverPreviewPosition | null) => void;
   onPreviewDismiss?: () => void;
+  onToggleBranch?: (node: LineageNode) => void;
+  onToggleReroll?: (node: LineageNode) => void;
   root: boolean;
   sourcePosition: Position;
   targetPosition: Position;
@@ -45,6 +47,26 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
         }}
         onFocus={data.hoverPreviewsEnabled ? event => showPreview('focus', event.currentTarget) : undefined}
         onKeyDown={event => {
+          const key = event.key.toLowerCase();
+          if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'b') {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onToggleBranch?.(data);
+            return;
+          }
+          if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'r') {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onToggleReroll?.(data);
+            return;
+          }
+          if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'd') {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onPreviewDismiss?.();
+            data.onOpenDetail?.(data.asset_id);
+            return;
+          }
           if (event.key !== 'Enter' && event.key !== ' ') return;
           event.preventDefault();
           event.stopPropagation();

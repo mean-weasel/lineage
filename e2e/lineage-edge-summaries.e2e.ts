@@ -51,9 +51,6 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
       await expectHorizontalLabel(posterEdge.locator('.react-flow__edge-text'));
     }
 
-    const showAll = page.getByTestId('lineage-show-all');
-    await showAll.click();
-    await expect(showAll).toBeHidden();
     const interactionBackground = await visibleSummaryBackground(page);
     const interactionEdge = interactionBackground.locator('xpath=../..');
     const interactionLabel = interactionEdge.locator('.react-flow__edge-text');
@@ -155,7 +152,8 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
 
     const rootNode = page.locator('.react-flow__node').filter({ hasText: 'swissifier linkedin root v1' });
     await rootNode.click();
-    await expect(page.getByTestId('lineage-canvas-status')).toBeVisible();
+    await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
+    await expect(page.getByTestId('lineage-canvas-status')).toHaveCount(0);
   } finally {
     if (seeded.workspace?.id) {
       await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}/archive`, {
@@ -241,16 +239,20 @@ function seedIsolatedEdgeSummaries() {
 }
 
 async function selectDirection(page: Page, direction: string) {
-  const showAll = page.getByTestId('lineage-show-all');
-  if (await showAll.isVisible()) await showAll.click();
-  await expect(showAll).toBeHidden();
   await openLineageActions(page);
   const directionSelect = page.getByLabel('Lineage graph direction');
   const layoutSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/lineage/layout');
+  const lineageRefreshed = page.waitForResponse(response => (
+    response.request().method() === 'GET'
+    && new URL(response.url()).pathname === `/api/lineage/${rootId}`
+  ));
   await directionSelect.selectOption(direction);
   await layoutSaved;
-  await expect(showAll).toBeVisible();
+  await lineageRefreshed;
   await expect(directionSelect).toHaveValue(direction);
+  await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
+  await page.locator('.react-flow__pane').click({ position: { x: 5, y: 5 } });
+  await expect(page.locator('.lineage-canvas')).not.toHaveClass(/focus-active/);
 }
 
 async function openLineageActions(page: Page) {

@@ -187,7 +187,7 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
                 <span className="settings-icon"><Eye size={19} /></span>
                 <div>
                   <h4>Hover previews</h4>
-                  <p>Show the full asset image when hovering over or focusing a lineage node. Double-click details remain available when this is off.</p>
+                  <p>Show the full asset and quick Branch/Re-roll/Details actions when hovering over or focusing a lineage node. Double-click details remain available when this is off.</p>
                 </div>
                 <Switch checked={hoverPreviewsEnabled} label="Enable lineage hover previews" onClick={toggleHoverPreviews} />
               </div>

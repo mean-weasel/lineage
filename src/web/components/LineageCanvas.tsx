@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type EdgeChange, type NodeChange, type ReactFlowInstance } from '@xyflow/react';
-import type { LineageNode } from '../../shared/types';
+import type { LineageNode, LineageTask } from '../../shared/types';
 import { AssetNode, type AssetFlowNode, type LineagePreviewSource } from './LineageAssetNode';
 import type { HoverPreviewPosition } from './lineageHoverPreview';
 import './LineageCanvas.css';
@@ -18,12 +18,10 @@ type PreviewState = {
 const emptyPreviewState: PreviewState = { activeSource: null, focus: null, hover: null };
 
 export function LineageCanvas({
-  activeNode,
   flowEdges,
   flowNodes,
   graphKey,
   hoverPreviewsEnabled,
-  inspectingId,
   loading,
   onSeedDemo,
   onEdgesChange,
@@ -39,16 +37,16 @@ export function LineageCanvas({
   onNodesChange,
   onReady,
   onSelectedAsset,
+  onToggleBranch,
+  onToggleReroll,
   onViewportInteraction,
-  showCanvasStatus,
+  selectionFull,
   workspaceRootAssetId,
 }: {
-  activeNode?: LineageNode;
   flowEdges: Edge[];
   flowNodes: AssetFlowNode[];
   graphKey: string;
   hoverPreviewsEnabled: boolean;
-  inspectingId: string;
   loading: boolean;
   onSeedDemo: () => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
@@ -64,14 +62,34 @@ export function LineageCanvas({
   onNodesChange: (changes: NodeChange<AssetFlowNode>[]) => void;
   onReady: (instance: ReactFlowInstance<AssetFlowNode, Edge>) => void;
   onSelectedAsset: (assetId: string) => void;
+  onToggleBranch: (node: LineageNode) => Promise<void> | void;
+  onToggleReroll: (node: LineageNode) => Promise<void> | void;
   onViewportInteraction: () => void;
-  showCanvasStatus: boolean;
+  selectionFull: boolean;
   workspaceRootAssetId: string;
 }) {
   const [previews, setPreviews] = useState<PreviewState>(emptyPreviewState);
-  const dismissPreview = useCallback(() => setPreviews(emptyPreviewState), []);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const pendingActionRef = useRef(false);
+  const previewCloseTimer = useRef<number | null>(null);
+  const cancelPreviewClose = useCallback(() => {
+    if (previewCloseTimer.current === null) return;
+    window.clearTimeout(previewCloseTimer.current);
+    previewCloseTimer.current = null;
+  }, []);
+  const dismissPreview = useCallback(() => {
+    cancelPreviewClose();
+    setPreviews(emptyPreviewState);
+  }, [cancelPreviewClose]);
+  const schedulePreviewClose = useCallback((action: () => void) => {
+    cancelPreviewClose();
+    previewCloseTimer.current = window.setTimeout(() => {
+      previewCloseTimer.current = null;
+      action();
+    }, 180);
+  }, [cancelPreviewClose]);
   const changePreview = useCallback((source: LineagePreviewSource, assetId: string, position: HoverPreviewPosition | null) => {
-    setPreviews(current => {
+    const update = () => setPreviews(current => {
       if (position) return { ...current, activeSource: source, [source]: { assetId, position } };
       if (current[source]?.assetId !== assetId) return current;
       const next = { ...current, [source]: null };
@@ -81,8 +99,15 @@ export function LineageCanvas({
         activeSource: current.activeSource === source ? (next[otherSource] ? otherSource : null) : current.activeSource,
       };
     });
-  }, []);
+    if (position) {
+      cancelPreviewClose();
+      update();
+      return;
+    }
+    schedulePreviewClose(update);
+  }, [cancelPreviewClose, schedulePreviewClose]);
   useEffect(() => dismissPreview(), [dismissPreview, graphKey]);
+  useEffect(() => () => cancelPreviewClose(), [cancelPreviewClose]);
   const openDetail = useCallback((assetId: string) => {
     dismissPreview();
     onNodeOpenDetail(assetId);
@@ -95,6 +120,19 @@ export function LineageCanvas({
     dismissPreview();
     onNodeActionMenu(assetId, x, y);
   }, [dismissPreview, onNodeActionMenu]);
+  const runQuickAction = useCallback(async (action: 'branch' | 'reroll', node: LineageNode) => {
+    const actionId = `${action}:${node.asset_id}`;
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = true;
+    setPendingAction(actionId);
+    try {
+      if (action === 'branch') await onToggleBranch(node);
+      else await onToggleReroll(node);
+    } finally {
+      pendingActionRef.current = false;
+      setPendingAction(null);
+    }
+  }, [onToggleBranch, onToggleReroll]);
   const interactiveNodes = useMemo(() => flowNodes.map(node => ({
     ...node,
     data: {
@@ -104,8 +142,16 @@ export function LineageCanvas({
       onOpenHistory: openHistory,
       onPreviewChange: hoverPreviewsEnabled ? changePreview : undefined,
       onPreviewDismiss: dismissPreview,
+      onToggleBranch: (target: LineageNode) => {
+        if (quickActionState(target, selectionFull).branchDisabled) return;
+        void runQuickAction('branch', target);
+      },
+      onToggleReroll: (target: LineageNode) => {
+        if (quickActionState(target, selectionFull).rerollDisabled) return;
+        void runQuickAction('reroll', target);
+      },
     },
-  })), [changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory]);
+  })), [changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory, runQuickAction, selectionFull]);
 
   if (!flowNodes.length) {
     return (
@@ -125,6 +171,7 @@ export function LineageCanvas({
   }
   const activePreview = hoverPreviewsEnabled && previews.activeSource ? previews[previews.activeSource] : null;
   const previewNode = activePreview ? flowNodes.find(node => node.id === activePreview.assetId)?.data : undefined;
+  const actionState = previewNode ? quickActionState(previewNode, selectionFull) : null;
   const editFocusedEdge = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const target = event.target instanceof Element ? event.target.closest<SVGElement>('.react-flow__edge') : null;
@@ -138,32 +185,36 @@ export function LineageCanvas({
 
   return (
     <>
-      {showCanvasStatus && activeNode && (
-        <div className="lineage-canvas-status" data-testid="lineage-canvas-status">
-          <div className="lineage-canvas-status-head">
-            <span>Inspecting</span>
-            <button aria-label="Dismiss inspecting card" onClick={() => onNodeInspect(null)} type="button">×</button>
-          </div>
-          <div className="lineage-canvas-status-preview">
-            {activeNode.preview_url && (activeNode.media_type === 'image' || activeNode.media_type === 'gif') ? (
-              <img alt="" src={activeNode.preview_url} />
-            ) : activeNode.preview_url && activeNode.media_type === 'video' ? (
-              <video muted src={activeNode.preview_url} />
-            ) : (
-              <span>{activeNode.media_type}</span>
-            )}
-          </div>
-          <strong data-testid="lineage-inspecting-title">{activeNode.title}</strong><code data-testid="lineage-inspecting-asset-id">{inspectingId}</code>
-          <button data-testid="lineage-open-detail" onClick={() => onNodeOpenDetail(activeNode.asset_id)}>Open detail</button>
-          <button data-testid="lineage-show-all" onClick={onClearFocus}>Show all</button>
-          <button data-testid="lineage-node-actions" onClick={event => openNodeActionMenu(activeNode.asset_id, event.clientX, event.clientY)}>Actions</button>
-        </div>
-      )}
-      {activePreview && previewNode && createPortal(
-        <div
-          aria-hidden="true"
+      {activePreview && previewNode && actionState && createPortal(
+        <section
+          aria-label={`Quick actions for ${previewNode.title}`}
           className="lineage-hover-preview"
           data-testid="lineage-hover-preview"
+          onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node | null)) schedulePreviewClose(dismissPreview);
+          }}
+          onKeyDown={event => {
+            const key = event.key.toLowerCase();
+            if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+            if (key === 'b' && !actionState.branchDisabled) {
+              event.preventDefault();
+              void runQuickAction('branch', previewNode);
+            }
+            if (key === 'r' && !actionState.rerollDisabled) {
+              event.preventDefault();
+              void runQuickAction('reroll', previewNode);
+            }
+            if (key === 'd') {
+              event.preventDefault();
+              openDetail(previewNode.asset_id);
+            }
+          }}
+          onMouseEnter={cancelPreviewClose}
+          onMouseLeave={event => {
+            if (previews.activeSource === 'hover' && !event.currentTarget.contains(document.activeElement)) {
+              changePreview('hover', previewNode.asset_id, null);
+            }
+          }}
           style={{ left: activePreview.position.left, top: activePreview.position.top }}
         >
           <div className="lineage-hover-preview-media">
@@ -175,9 +226,37 @@ export function LineageCanvas({
               <span>{previewNode.media_type} preview unavailable</span>
             )}
           </div>
-          <strong>{previewNode.title}</strong>
-          <span>{(previewNode.attempt_count || 1) > 1 ? 'Double-click for attempt history' : 'Double-click for full details'}</span>
-        </div>,
+          <div className="lineage-hover-preview-copy">
+            <strong>{previewNode.title}</strong>
+            <code>{previewNode.asset_id}</code>
+          </div>
+          <div className="lineage-hover-preview-actions">
+            <button
+              aria-keyshortcuts="B"
+              aria-pressed={previewNode.user_selected}
+              className={previewNode.user_selected ? 'selected' : ''}
+              disabled={actionState.branchDisabled || Boolean(pendingAction)}
+              onClick={() => void runQuickAction('branch', previewNode)}
+              title={actionState.branchTitle}
+              type="button"
+            >
+              <kbd>B</kbd><span>{previewNode.user_selected ? 'Branch queued' : 'Branch'}</span>
+            </button>
+            <button
+              aria-keyshortcuts="R"
+              aria-pressed={actionState.rerollSelected}
+              className={`reroll ${actionState.rerollSelected ? 'selected' : ''}`}
+              disabled={actionState.rerollDisabled || Boolean(pendingAction)}
+              onClick={() => void runQuickAction('reroll', previewNode)}
+              title={actionState.rerollTitle}
+              type="button"
+            >
+              <kbd>R</kbd><span>{actionState.rerollSelected ? 'Re-roll queued' : 'Re-roll'}</span>
+            </button>
+            <button aria-keyshortcuts="D" onClick={() => openDetail(previewNode.asset_id)} type="button"><kbd>D</kbd><span>Details</span></button>
+          </div>
+          {(actionState.branchLocked || actionState.rerollLocked) && <p className="lineage-hover-preview-lock">Active work is managed in the task queue.</p>}
+        </section>,
         document.body,
       )}
       <ReactFlow<AssetFlowNode, Edge>
@@ -215,4 +294,29 @@ export function LineageCanvas({
       </ReactFlow>
     </>
   );
+}
+
+function quickActionState(node: LineageNode, selectionFull: boolean) {
+  const branchLocked = taskIsLocked(node.lineage_tasks?.iterate);
+  const rerollLocked = taskIsLocked(node.lineage_tasks?.reroll);
+  const rerollSelected = node.reroll_request?.status === 'pending';
+  return {
+    branchDisabled: branchLocked || (!node.user_selected && selectionFull),
+    branchLocked,
+    branchTitle: branchLocked
+      ? 'An agent is working on this branch task. Manage it in the task queue.'
+      : !node.user_selected && selectionFull
+        ? 'The branch selection is full.'
+        : node.user_selected ? 'Remove from the next branch (B)' : 'Use as a base for the next branch (B)',
+    rerollDisabled: rerollLocked,
+    rerollLocked,
+    rerollSelected,
+    rerollTitle: rerollLocked
+      ? 'An agent is working on this re-roll. Manage it in the task queue.'
+      : rerollSelected ? 'Remove from the re-roll queue (R)' : 'Add to the re-roll queue (R)',
+  };
+}
+
+function taskIsLocked(task?: LineageTask): boolean {
+  return task?.status === 'claimed' || task?.status === 'in_progress';
 }
