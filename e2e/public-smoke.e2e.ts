@@ -127,11 +127,13 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(hoverPreview).toBeVisible();
   await branchAction.click();
   await expect(branchAction).toHaveAttribute('aria-pressed', 'true');
-  await branchAction.click();
+  await branchAction.focus();
+  await page.keyboard.press('b');
   await expect(branchAction).toHaveAttribute('aria-pressed', 'false');
   await rerollAction.click();
   await expect(rerollAction).toHaveAttribute('aria-pressed', 'true');
-  await rerollAction.click();
+  await rerollAction.focus();
+  await page.keyboard.press('r');
   await expect(rerollAction).toHaveAttribute('aria-pressed', 'false');
 
   const firstCandidate = page.locator('.lineage-node:not(.root-node)').first();

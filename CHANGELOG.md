@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.16
+
+- Add editable one- or two-word lineage edge summaries with agent/human provenance, optimistic concurrency protection, accessible keyboard editing, and consistent labels across every graph orientation.
+- Add a versioned generation-output manifest that binds each new output to its selected parent and required edge summary while preserving completion of already-planned legacy jobs.
+- Upgrade the node inspector with uncropped media, Branch, Re-roll, and Details actions, focus-scoped B/R/D shortcuts, and modal-safe dismissal in place of the redundant fixed Inspecting card.
+
 ## 0.1.15
 
 - Add a subtle root marker that makes the starting point of each lineage tree immediately recognizable.
