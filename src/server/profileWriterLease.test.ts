@@ -295,6 +295,7 @@ describe('profile database writer enforcement', () => {
 describe('CLI writer classification', () => {
   it('allows slow imports while bounding ordinary delegated writes', () => {
     expect(managedWriterTimeoutMs('reroll', ['import', '--job-id', 'job'])).toBe(300_000);
+    expect(managedWriterTimeoutMs('generate', ['image', 'import', '--job-id', 'job'])).toBe(300_000);
     expect(managedWriterTimeoutMs('agent', ['claim'])).toBe(30_000);
   });
 
@@ -302,10 +303,13 @@ describe('CLI writer classification', () => {
     expect(lineageCliRequiresWriterLease('db', ['info'])).toBe(false);
     expect(lineageCliRequiresWriterLease('next', ['--root', 'root'])).toBe(false);
     expect(lineageCliRequiresWriterLease('selection', ['packet'])).toBe(false);
+    expect(lineageCliRequiresWriterLease('generate', ['image', 'inspect'])).toBe(false);
     expect(lineageCliRequiresWriterLease('reroll', ['list'])).toBe(false);
     expect(lineageCliRequiresWriterLease('tasks', ['inspect'])).toBe(false);
     expect(lineageCliRequiresWriterLease('agent', ['status'])).toBe(false);
     expect(lineageCliRequiresWriterLease('link-child', ['--confirm-write'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('generate', ['image', 'plan'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('generate', ['image', 'import'])).toBe(true);
     expect(lineageCliRequiresWriterLease('reroll', ['mark'])).toBe(true);
     expect(lineageCliRequiresWriterLease('tasks', ['claim'])).toBe(true);
     expect(lineageCliRequiresWriterLease('agent', ['claim'])).toBe(true);
@@ -314,6 +318,7 @@ describe('CLI writer classification', () => {
   it('allowlists every current delegated mutator and rejects reads or unknown writes', () => {
     for (const [command, args] of [
       ['link-child', ['--confirm-write']],
+      ['generate', ['image', 'plan']], ['generate', ['image', 'import']],
       ['reroll', ['mark']], ['reroll', ['cancel']], ['reroll', ['plan']], ['reroll', ['import']],
       ['tasks', ['claim']], ['tasks', ['start']], ['tasks', ['comment']], ['tasks', ['cancel']], ['tasks', ['override']], ['tasks', ['instructions']],
       ['agent', ['claim']], ['agent', ['heartbeat']], ['agent', ['release']], ['agent', ['revoke']], ['agent', ['transfer']],
@@ -321,6 +326,7 @@ describe('CLI writer classification', () => {
       expect(lineageCliCanDelegateMutation(command, args), `${command} ${args.join(' ')}`).toBe(true);
     }
     expect(lineageCliCanDelegateMutation('agent', ['status'])).toBe(false);
+    expect(lineageCliCanDelegateMutation('generate', ['image', 'inspect'])).toBe(false);
     expect(lineageCliCanDelegateMutation('tasks', ['unknown-write'])).toBe(false);
     expect(lineageCliCanDelegateMutation('unknown', ['write'])).toBe(false);
   });
@@ -427,7 +433,7 @@ function spawnService(profile: ResolvedLineageProfile, channel: 'stable' | 'prev
 function spawnCli(profile: ResolvedLineageProfile, args: string[]): ChildProcess {
   return spawn(process.execPath, ['--import', 'tsx', 'src/cli/lineage-dev.ts', ...args, '--profile', profile.manifest_path], {
     cwd: repoRoot,
-    env: { ...originalEnv },
+    env: { ...originalEnv, NODE_NO_WARNINGS: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -437,7 +443,7 @@ function spawnCliUnprofiled(args: string[]): ChildProcess {
   for (const key of ['LINEAGE_PROFILE', 'LINEAGE_PROFILE_ID', 'LINEAGE_PROFILE_ENVIRONMENT', 'LINEAGE_PROFILE_FINGERPRINT', 'LINEAGE_PROFILE_MANIFEST']) delete env[key];
   return spawn(process.execPath, ['--import', 'tsx', 'src/cli/lineage-dev.ts', ...args], {
     cwd: repoRoot,
-    env,
+    env: { ...env, NODE_NO_WARNINGS: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }

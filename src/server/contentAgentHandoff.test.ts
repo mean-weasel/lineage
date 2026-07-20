@@ -277,5 +277,7 @@ describe('content agent handoff', () => {
     const commands = handoff.next_action?.commands as Record<string, string>;
     expect(commands.workspaceInspectCommand).toContain('lineage workspace inspect');
     expect(commands.lineageBriefCommand).toContain(`--root ${shellQuote(rootId)}`);
+    expect(commands.linkChildCommand).toContain('--summary "<one-or-two-words>"');
+    expect(handoff.next_action?.instructions).toContain('one- or two-word edge summary');
   });
 });

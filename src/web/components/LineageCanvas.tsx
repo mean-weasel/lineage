@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type EdgeChange, type NodeChange, type ReactFlowInstance } from '@xyflow/react';
 import type { LineageNode, LineageTask } from '../../shared/types';
@@ -25,6 +25,7 @@ export function LineageCanvas({
   loading,
   onSeedDemo,
   onEdgesChange,
+  onEdgeEdit,
   onIndexNow,
   onNewLineage,
   onClearFocus,
@@ -49,6 +50,7 @@ export function LineageCanvas({
   loading: boolean;
   onSeedDemo: () => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
+  onEdgeEdit: (edgeId: string, trigger: HTMLElement | SVGElement | null) => void;
   onIndexNow: () => void;
   onNewLineage: () => void;
   onClearFocus: () => void;
@@ -170,6 +172,16 @@ export function LineageCanvas({
   const activePreview = hoverPreviewsEnabled && previews.activeSource ? previews[previews.activeSource] : null;
   const previewNode = activePreview ? flowNodes.find(node => node.id === activePreview.assetId)?.data : undefined;
   const actionState = previewNode ? quickActionState(previewNode, selectionFull) : null;
+  const editFocusedEdge = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const target = event.target instanceof Element ? event.target.closest<SVGElement>('.react-flow__edge') : null;
+    const edgeId = target?.dataset.id;
+    if (!edgeId || !flowEdges.some(edge => edge.id === edgeId)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dismissPreview();
+    onEdgeEdit(edgeId, target);
+  };
 
   return (
     <>
@@ -253,7 +265,13 @@ export function LineageCanvas({
         key={graphKey}
         minZoom={0.3}
         nodesFocusable={false}
+        onEdgeDoubleClick={(event, edge) => {
+          event.preventDefault();
+          dismissPreview();
+          onEdgeEdit(edge.id, event.currentTarget as SVGElement);
+        }}
         onEdgesChange={onEdgesChange}
+        onKeyDownCapture={editFocusedEdge}
         onNodeClick={(_event, node) => { onNodeActionMenu('', 0, 0); onNodeInspect(node.id); onSelectedAsset(node.id); }}
         onNodeContextMenu={(event, node) => { event.preventDefault(); onNodeInspect(node.id); openNodeActionMenu(node.id, event.clientX, event.clientY); onSelectedAsset(node.id); }}
         onNodeDoubleClick={(_event, node) => {

@@ -9,10 +9,12 @@ type LineageToolbarProps = {
   activeWorkspace: LineageWorkspace | null;
   closeSignal: number;
   demoSeedStatus: DemoSeedMediaStatus | null;
+  edgeSummariesVisible: boolean;
   graphDirection: LineageGraphDirection;
   loading: boolean;
   onArchiveWorkspace: () => void;
   onDownloadSwissifierMedia: () => void;
+  onEdgeSummariesVisible: () => void;
   onFitGraph: () => void;
   onGraphDirection: (direction: LineageGraphDirection) => void;
   onIndexLocal: () => void;
@@ -38,10 +40,12 @@ export function LineageToolbar({
   activeWorkspace,
   closeSignal,
   demoSeedStatus,
+  edgeSummariesVisible,
   graphDirection,
   loading,
   onArchiveWorkspace,
   onDownloadSwissifierMedia,
+  onEdgeSummariesVisible,
   onFitGraph,
   onGraphDirection,
   onIndexLocal,
@@ -145,6 +149,14 @@ export function LineageToolbar({
               <option value="BT">Bottom to top</option>
             </select>
           </label>
+          <button
+            aria-pressed={edgeSummariesVisible}
+            disabled={!snapshot}
+            onClick={() => runAndClose(onEdgeSummariesVisible)}
+            type="button"
+          >
+            {edgeSummariesVisible ? 'Hide edge labels' : 'Show edge labels'}
+          </button>
           <button disabled={!snapshot} onClick={() => runAndClose(onFitGraph)} type="button">Fit graph</button>
           <button disabled={!snapshot} onClick={() => runAndClose(onTidyGraph)} type="button">Tidy tree</button>
           <button aria-controls="lineage-selection-panel" aria-expanded={sideOpen} disabled={!snapshot} onClick={() => runAndClose(onToggleNextPanel)} type="button">Manage selection</button>

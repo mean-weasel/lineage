@@ -17,6 +17,7 @@ import {
 } from './generationReceipts';
 import { listImageGenerationJobs } from './generationReceiptJobs';
 import { fileSha256 } from './localReview';
+import type { GenerationJob } from '../shared/types';
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
@@ -32,6 +33,28 @@ function writeScratch(relativePath: string, content: string): string {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, content);
   return file;
+}
+
+function outputManifest(job: GenerationJob, files: string[], summaries?: string[]) {
+  const draft = job.handoff.output_manifest;
+  if (!draft) throw new Error(`Generation job ${job.id} is missing its output manifest draft`);
+  return {
+    ...draft,
+    outputs: draft.outputs.slice(0, files.length).map((output, index) => ({
+      ...output,
+      edge_summary: summaries?.[index] || `Variation ${index + 1}`,
+      file_path: files[index],
+    })),
+  };
+}
+
+function markGenerationJobLegacy(jobId: string): void {
+  const database = lineageDb();
+  try {
+    database.prepare("update generation_jobs set adapter_version = 'generation-receipts-v1' where id = ?").run(jobId);
+  } finally {
+    database.close();
+  }
 }
 
 function setupSelectedLineage(prefix = 'generation') {
@@ -181,6 +204,21 @@ function seedLegacyGenerationReceiptDb(file: string): void {
         selection_snapshot_json text not null,
         unique(job_id, asset_id, role)
       );
+      create table generation_job_outputs (
+        id text primary key,
+        job_id text not null references generation_jobs(id) on delete cascade,
+        project_id text not null references projects(id),
+        output_index integer not null,
+        file_path text not null,
+        checksum_sha256 text not null,
+        size_bytes integer not null,
+        content_type text not null,
+        imported_asset_id text not null references assets(id),
+        parent_asset_id text not null references assets(id),
+        imported_at text not null,
+        unique(job_id, output_index),
+        unique(job_id, file_path)
+      );
       create table generation_job_receipts (
         id text primary key,
         job_id text not null references generation_jobs(id) on delete cascade,
@@ -212,6 +250,12 @@ function seedLegacyGenerationReceiptDb(file: string): void {
       ) values ('legacy-input', 'legacy-job', ?, 'legacy-target', 'legacy-root', 'lineage_next_base', 0, 'selected', '{}')
     `).run(defaultProject);
     database.prepare(`
+      insert into generation_job_outputs (
+        id, job_id, project_id, output_index, file_path, checksum_sha256, size_bytes,
+        content_type, imported_asset_id, parent_asset_id, imported_at
+      ) values ('legacy-output', 'legacy-job', ?, 0, 'legacy-output.png', ?, 1, 'image/png', 'legacy-target', 'legacy-root', ?)
+    `).run(defaultProject, 'a'.repeat(64), timestamp);
+    database.prepare(`
       insert into generation_job_receipts (
         id, job_id, receipt_type, status, command, payload_json, created_at
       ) values ('legacy-receipt', 'legacy-job', 'plan', 'ok', 'generate image plan', '{}', ?)
@@ -239,6 +283,9 @@ describe('generation receipts', () => {
     });
 
     expect(plan.job.status).toBe('planned');
+    expect(plan.job.adapter_version).toBe('generation-receipts-v2');
+    expect(plan.job.handoff.schema_version).toBe('lineage.generation_handoff.v2');
+    expect(plan.job.handoff.output_manifest?.outputs).toHaveLength(2);
     expect(plan.job.inputs).toHaveLength(1);
     expect(plan.job.inputs[0]).toMatchObject({ asset_id: lineage.selectedId, role: 'lineage_next_base' });
     expect(plan.job.handoff.provider).toBe('codex-handoff');
@@ -253,23 +300,27 @@ describe('generation receipts', () => {
     const secondOutput = writeScratch('imports/demo-linkedin-generation-output-b.png', 'generation-output-b');
     const imported = importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
-      files: [firstOutput, secondOutput],
       jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [firstOutput, secondOutput], ['Cleaner type', 'Warmer light']),
     });
 
     expect(imported.job.status).toBe('imported');
     expect(imported.imported.map(output => output.parent_asset_id)).toEqual([lineage.selectedId, lineage.selectedId]);
     expect(imported.imported.map(output => output.imported_asset_id)).toEqual([localId(firstOutput), localId(secondOutput)]);
+    expect(imported.imported.map(output => output.edge_summary)).toEqual(['Cleaner type', 'Warmer light']);
     expect(imported.job.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan', 'import']);
 
     const database = lineageDb();
     try {
       const edges = database.prepare(`
-        select child_asset_id from asset_edges
+        select child_asset_id, summary, summary_created_by, summary_updated_by, summary_updated_at from asset_edges
         where project_id = ? and parent_asset_id = ?
         order by child_asset_id
       `).all(defaultProject, lineage.selectedId) as Array<{ child_asset_id: string }>;
-      expect(edges.map(edge => edge.child_asset_id).sort()).toEqual([localId(firstOutput), localId(secondOutput)].sort());
+      expect(edges).toEqual(expect.arrayContaining([
+        expect.objectContaining({ child_asset_id: localId(firstOutput), summary: 'Cleaner type', summary_created_by: 'agent', summary_updated_by: 'agent', summary_updated_at: expect.any(String) }),
+        expect.objectContaining({ child_asset_id: localId(secondOutput), summary: 'Warmer light', summary_created_by: 'agent', summary_updated_by: 'agent', summary_updated_at: expect.any(String) }),
+      ]));
     } finally {
       database.close();
     }
@@ -279,7 +330,7 @@ describe('generation receipts', () => {
     const lineage = setupSelectedLineage('generation-list');
     const plan = planImageGeneration(defaultProject, { count: 1, fromLineageSelection: true, prompt: 'Create one proof-list output.' });
     const output = writeScratch('imports/demo-linkedin-generation-listed-output.png', 'generation-listed-output');
-    const imported = importImageGenerationOutputs(defaultProject, { confirmWrite: true, files: [output], jobId: plan.job.id });
+    const imported = importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, manifest: outputManifest(plan.job, [output]) });
     const outputAssetId = imported.imported[0].imported_asset_id;
 
     const byParent = listImageGenerationJobs(defaultProject, { assetId: lineage.selectedId, rootAssetId: lineage.rootId });
@@ -374,6 +425,32 @@ describe('generation receipts', () => {
     }
   });
 
+  it('migrates legacy generation output summaries idempotently and reads populated values', () => {
+    seedLegacyGenerationReceiptDb(dbFile);
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const database = lineageDb();
+      try {
+        const columns = database.prepare('pragma table_info(generation_job_outputs)').all() as Array<{ name: string }>;
+        expect(columns.filter(column => column.name === 'edge_summary')).toHaveLength(1);
+      } finally {
+        database.close();
+      }
+    }
+
+    expect(inspectImageGeneration(defaultProject, 'legacy-job').job.outputs[0]).not.toHaveProperty('edge_summary');
+    const database = lineageDb();
+    try {
+      database.prepare("update generation_job_outputs set edge_summary = 'Cleaner type' where id = 'legacy-output'").run();
+    } finally {
+      database.close();
+    }
+    expect(inspectImageGeneration(defaultProject, 'legacy-job').job.outputs[0]).toMatchObject({
+      id: 'legacy-output',
+      edge_summary: 'Cleaner type',
+    });
+  });
+
   it('uses the current active workspace even when older workspaces remain active', () => {
     const older = setupSelectedLineage('generation-older');
     const newer = setupSelectedLineage('generation-newer');
@@ -412,24 +489,33 @@ describe('generation receipts', () => {
     expect(plan.job.expected_output_count).toBe(4);
     expect(plan.job.inputs.map(input => input.asset_id)).toEqual([lineage.selectedId, lineage.otherId]);
     expect(plan.job.handoff.lineage.parents?.map(parent => parent.parent_asset_id)).toEqual([lineage.selectedId, lineage.otherId]);
-    expect(plan.job.handoff.import_command).toContain('--parent-files');
+    expect(plan.job.handoff.import_command).toContain('--manifest');
+    expect(plan.job.handoff.output_manifest?.outputs.map(output => output.parent_asset_id)).toEqual([
+      lineage.selectedId, lineage.selectedId, lineage.otherId, lineage.otherId,
+    ]);
     expect(plan.job.receipts[0].payload).toMatchObject({
       expected_output_count: 4,
       per_base_count: 2,
       parent_mappings: [{ parent_asset_id: lineage.selectedId, output_indexes: [0, 1] }, { parent_asset_id: lineage.otherId, output_indexes: [2, 3] }],
     });
     const files = ['multi-a1', 'multi-a2', 'multi-b1', 'multi-b2'].map(name => writeScratch(`imports/${name}.png`, name));
-    const imported = importImageGenerationOutputs(defaultProject, { confirmWrite: true, files, jobId: plan.job.id });
+    const imported = importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, files, ['Cleaner type', 'New crop', 'Warmer light', 'Bolder type']),
+    });
     expect(imported.imported.map(output => output.parent_asset_id)).toEqual([lineage.selectedId, lineage.selectedId, lineage.otherId, lineage.otherId]);
+    expect(imported.imported.map(output => output.edge_summary)).toEqual(['Cleaner type', 'New crop', 'Warmer light', 'Bolder type']);
     const importReceipt = imported.job.receipts.find(receipt => receipt.receipt_type === 'import');
     expect(importReceipt?.payload).toMatchObject({
-      mapping_strategy: 'ordered_per_base',
+      mapping_strategy: 'generation_output_manifest_v1',
       files: [0, 1, 2, 3].map(output_index => ({ output_index, parent_asset_id: output_index < 2 ? lineage.selectedId : lineage.otherId })),
     });
-  }); it('imports explicit parent-keyed files for multi-selected lineage bases', () => {
+  }); it('imports explicit parent-keyed files for an already-planned legacy job', () => {
     const lineage = setupSelectedLineage('explicit-parent-files');
     updateSelectedAsset(defaultProject, { assetIds: [lineage.selectedId, lineage.otherId], confirmWrite: true, mode: 'replace', rootAssetId: lineage.rootId });
     const plan = planImageGeneration(defaultProject, { count: 4, fromLineageSelection: true, perBaseCount: 2, prompt: 'Create two explicit mapped variations from each selected base.' });
+    markGenerationJobLegacy(plan.job.id);
     const selectedFiles = ['explicit-a1', 'explicit-a2'].map(name => writeScratch(`imports/${name}.png`, name));
     const otherFiles = ['explicit-b1', 'explicit-b2'].map(name => writeScratch(`imports/${name}.png`, name));
     const imported = importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, parentFiles: { [lineage.otherId]: otherFiles, [lineage.selectedId]: selectedFiles } });
@@ -440,6 +526,7 @@ describe('generation receipts', () => {
       mapping_strategy: 'explicit_parent_files',
       files: [0, 1, 2, 3].map(output_index => ({ output_index, parent_asset_id: output_index < 2 ? lineage.selectedId : lineage.otherId })),
     });
+    expect(imported.imported.map(output => output.edge_summary)).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
@@ -516,6 +603,7 @@ describe('generation receipts', () => {
     const lineage = setupSelectedLineage('bad-parent-files');
     updateSelectedAsset(defaultProject, { assetIds: [lineage.selectedId, lineage.otherId], confirmWrite: true, mode: 'replace', rootAssetId: lineage.rootId });
     const plan = planImageGeneration(defaultProject, { count: 4, fromLineageSelection: true, perBaseCount: 2, prompt: 'Create two explicit mapped variations for negative proof.' });
+    markGenerationJobLegacy(plan.job.id);
     const output = writeScratch('imports/explicit-missing-a1.png', 'explicit-missing-a1');
     expect(() => importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, parentFiles: { [lineage.selectedId]: [output, output] } })).toThrow(`Missing generation parent mapping for ${lineage.otherId}`);
     expect(countRows('generation_job_outputs')).toBe(0);
@@ -540,6 +628,70 @@ describe('generation receipts', () => {
     expect(countRows('asset_edges', `where parent_asset_id = '${lineage.selectedId}'`)).toBe(0);
   });
 
+  it('requires manifests for new jobs and rejects mixed manifest and legacy inputs before writes', () => {
+    const lineage = setupSelectedLineage('manifest-required');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one manifest-required output.',
+    });
+    const output = writeScratch('imports/manifest-required.png', 'manifest-required');
+    const manifest = outputManifest(plan.job, [output]);
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      files: [output],
+      jobId: plan.job.id,
+    })).toThrow('New generation jobs require --manifest');
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      files: [output],
+      jobId: plan.job.id,
+      manifest,
+    })).toThrow('Use --manifest or legacy --files/--parent-files, not both');
+    expect(countRows('generation_job_outputs')).toBe(0);
+    expect(countRows('asset_edges', `where parent_asset_id = '${lineage.selectedId}' and child_asset_id = '${localId(output)}'`)).toBe(0);
+  });
+
+  it('rolls back a new output when its visible edge has conflicting summary provenance', () => {
+    const lineage = setupSelectedLineage('manifest-edge-conflict');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one output that collides with a human-labeled edge.',
+    });
+    const output = writeScratch('imports/manifest-edge-conflict.png', 'manifest-edge-conflict');
+    const outputAssetId = localId(output);
+    indexLineageAssets(defaultProject);
+    linkLineageAssets(defaultProject, {
+      childAssetId: outputAssetId,
+      confirmWrite: true,
+      parentAssetId: lineage.selectedId,
+      summary: 'Human label',
+      summaryActor: 'human',
+    });
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [output], ['Agent label']),
+    })).toThrow('different output, summary, or provenance');
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job).toMatchObject({ status: 'planned', outputs: [] });
+    const database = lineageDb();
+    try {
+      expect(database.prepare(`
+        select summary, summary_created_by, summary_updated_by from asset_edges
+        where project_id = ? and parent_asset_id = ? and child_asset_id = ?
+      `).get(defaultProject, lineage.selectedId, outputAssetId)).toMatchObject({
+        summary: 'Human label',
+        summary_created_by: 'human',
+        summary_updated_by: 'human',
+      });
+    } finally {
+      database.close();
+    }
+  });
+
   it('rejects missing import files without output rows', () => {
     setupSelectedLineage();
     const plan = planImageGeneration(defaultProject, {
@@ -549,8 +701,8 @@ describe('generation receipts', () => {
     });
     expect(() => importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
-      files: ['imports/not-created.png'],
       jobId: plan.job.id,
+      manifest: outputManifest(plan.job, ['imports/not-created.png']),
     })).toThrow('Missing import file');
     expect(countRows('generation_job_outputs')).toBe(0);
   });
@@ -566,8 +718,8 @@ describe('generation receipts', () => {
 
     expect(() => importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
-      files: [outside],
       jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [outside]),
     })).toThrow('under .asset-scratch');
     expect(countRows('generation_job_outputs')).toBe(0);
   });
@@ -590,8 +742,8 @@ describe('generation receipts', () => {
     try {
       expect(() => importImageGenerationOutputs(defaultProject, {
         confirmWrite: true,
-        files: [symlink],
         jobId: plan.job.id,
+        manifest: outputManifest(plan.job, [symlink]),
       })).toThrow('under .asset-scratch');
       expect(countRows('generation_job_outputs')).toBe(0);
     } finally {
@@ -610,9 +762,104 @@ describe('generation receipts', () => {
 
     expect(() => importImageGenerationOutputs(defaultProject, {
       confirmWrite: true,
-      files: [output],
       jobId: plan.job.id,
-    })).toThrow('Output count mismatch');
+      manifest: outputManifest(plan.job, [output]),
+    })).toThrow('requires 2 outputs, received 1');
     expect(countRows('generation_job_outputs')).toBe(0);
+  });
+
+  it('can reject an invalid edge-summary manifest before output indexing or import writes', () => {
+    setupSelectedLineage('invalid-edge-summary-manifest');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one output for edge-summary manifest validation.',
+    });
+    const output = writeScratch('imports/invalid-edge-summary-manifest.png', 'invalid-edge-summary-manifest');
+    const outputAssetId = localId(output);
+
+    const manifest = outputManifest(plan.job, [output], ['Far too many words']);
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest,
+    })).toThrow('Edge summary must contain at most 2 words');
+
+    expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(0);
+    expect(countRows('generation_job_outputs')).toBe(0);
+    expect(countRows('asset_edges', `where child_asset_id = '${outputAssetId}'`)).toBe(0);
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job.status).toBe('planned');
+  });
+
+  it('makes exact manifest retries idempotent and summary or provenance divergence explicit', () => {
+    const lineage = setupSelectedLineage('manifest-retry');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one output for exact manifest retries.',
+    });
+    const output = writeScratch('imports/manifest-retry.png', 'manifest-retry');
+    const manifest = outputManifest(plan.job, [output], ['Cleaner type']);
+    const imported = importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, manifest });
+    const retried = importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, manifest });
+
+    expect(retried).toMatchObject({ idempotent: true, imported: [{ edge_summary: 'Cleaner type' }] });
+    expect(retried.job.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan', 'import']);
+    expect(retried.imported).toEqual(imported.imported);
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [output], ['Warmer light']),
+    })).toThrow('different output, summary, or provenance');
+
+    const database = lineageDb();
+    try {
+      database.prepare(`
+        update asset_edges set summary_updated_by = 'human'
+        where project_id = ? and parent_asset_id = ? and child_asset_id = ?
+      `).run(defaultProject, lineage.selectedId, imported.imported[0].imported_asset_id);
+    } finally {
+      database.close();
+    }
+    expect(() => importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, manifest }))
+      .toThrow('different output, summary, or provenance');
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job.outputs).toEqual(imported.imported);
+  });
+
+  it('characterizes the import rollback boundary when edge insertion fails', () => {
+    const lineage = setupSelectedLineage('edge-insert-rollback');
+    const plan = planImageGeneration(defaultProject, {
+      count: 1,
+      fromLineageSelection: true,
+      prompt: 'Create one output for transaction rollback characterization.',
+    });
+    const output = writeScratch('imports/edge-insert-rollback.png', 'edge-insert-rollback');
+    const outputAssetId = localId(output);
+    const database = lineageDb();
+    try {
+      database.exec(`
+        create trigger generation_edge_summary_experiment_abort
+        before insert on asset_edges
+        begin
+          select raise(abort, 'edge-summary experiment abort');
+        end;
+      `);
+    } finally {
+      database.close();
+    }
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [output], ['Sharper type']),
+    })).toThrow('edge-summary experiment abort');
+
+    const inspected = inspectImageGeneration(defaultProject, plan.job.id).job;
+    expect(inspected.status).toBe('planned');
+    expect(inspected.outputs).toEqual([]);
+    expect(inspected.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan']);
+    expect(countRows('asset_edges', `where parent_asset_id = '${lineage.selectedId}' and child_asset_id = '${outputAssetId}'`)).toBe(0);
+    expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(1);
   });
 });

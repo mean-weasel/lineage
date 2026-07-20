@@ -46,8 +46,10 @@ export function isManagedWriterRoutingError(error: unknown): error is ManagedWri
 }
 
 export function managedWriterTimeoutMs(command: string, args: string[]): number {
-  const subcommand = args.find(arg => !arg.startsWith('-')) || '';
-  return command === 'reroll' && subcommand === 'import' ? 5 * 60_000 : 30_000;
+  const positions = args.filter(arg => !arg.startsWith('-'));
+  const slowImport = (command === 'reroll' && positions[0] === 'import')
+    || (command === 'generate' && positions[0] === 'image' && positions[1] === 'import');
+  return slowImport ? 5 * 60_000 : 30_000;
 }
 
 function requestBody(value: unknown): ManagedWriterRequest {

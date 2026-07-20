@@ -144,9 +144,12 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(hoverPreview).toContainText(anotherNodeTitle!);
   await page.mouse.move(0, 0);
   await expect(hoverPreview).toContainText(anotherNodeTitle!);
-  await rootNode.hover();
+  await rootNode.evaluate(node => node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
   await expect(hoverPreview).toContainText('Initial Demo Concept');
-  await page.mouse.move(0, 0);
+  await rootNode.evaluate(node => node.dispatchEvent(new MouseEvent('mouseout', {
+    bubbles: true,
+    relatedTarget: document.body,
+  })));
   await expect(hoverPreview).toContainText(anotherNodeTitle!);
   await anotherNode.press('Enter');
   await expect(hoverPreview).toHaveCount(0);

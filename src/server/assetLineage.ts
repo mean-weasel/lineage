@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { EdgeSummaryValidationError, normalizeEdgeSummary, requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
 import { LINEAGE_NEXT_VARIATION_LIMIT, normalizeSelectionInput, selectedRows, selectionId } from './assetLineageSelection';
@@ -13,6 +14,8 @@ import type {
   LineageAttemptsResponse,
   LineageEdge,
   LineageChildrenResponse,
+  LineageEdgeSummaryFields,
+  LineageEdgeSummaryMutationResponse,
   LineageIndexSummary,
   LineageLayoutFields,
   LineageLinkFields,
@@ -194,6 +197,45 @@ function rowString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function lineageEdgeFromRow(row: Record<string, unknown>): LineageEdge {
+  const summary = rowString(row.summary);
+  const summaryCreatedBy = rowString(row.summary_created_by) as LineageEdge['summary_created_by'];
+  const summaryUpdatedBy = rowString(row.summary_updated_by) as LineageEdge['summary_updated_by'];
+  const summaryUpdatedAt = rowString(row.summary_updated_at);
+  return {
+    id: String(row.id),
+    parent_asset_id: String(row.parent_asset_id),
+    child_asset_id: String(row.child_asset_id),
+    relation_type: row.relation_type as LineageEdge['relation_type'],
+    created_at: String(row.created_at),
+    ...(summary ? { summary } : {}),
+    ...(summaryCreatedBy ? { summary_created_by: summaryCreatedBy } : {}),
+    ...(summaryUpdatedBy ? { summary_updated_by: summaryUpdatedBy } : {}),
+    ...(summaryUpdatedAt ? { summary_updated_at: summaryUpdatedAt } : {}),
+  };
+}
+
+function nextEdgeSummaryTimestamp(current?: string): string {
+  const currentMillis = current ? Date.parse(current) : Number.NaN;
+  const nextMillis = Number.isFinite(currentMillis) ? Math.max(Date.now(), currentMillis + 1) : Date.now();
+  return new Date(nextMillis).toISOString();
+}
+
+function expectedEdgeSummaryTimestamp(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value === 'string' && value.length > 0) return value;
+  throw new LineageError('Edge summary update requires expectedSummaryUpdatedAt as a timestamp or null');
+}
+
+function validatedHumanEdgeSummary(value: unknown): string {
+  try {
+    return requireEdgeSummary(value);
+  } catch (error) {
+    if (error instanceof EdgeSummaryValidationError) throw new LineageError(error.message);
+    throw error;
+  }
+}
+
 function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
   return {
     id: String(row.id),
@@ -304,6 +346,9 @@ function localPreviewUrl(project: string, localPath?: string): string | undefine
 }
 
 export function linkLineageAssets(project: string, fields: LineageLinkFields) {
+  const summary = normalizeEdgeSummary(fields.summary);
+  if (summary && !fields.summaryActor) throw new LineageError('Lineage edge summary requires an explicit author');
+  if (!summary && fields.summaryActor) throw new LineageError('Lineage edge summary author requires a summary');
   const database = db();
   requireAsset(database, project, fields.parentAssetId);
   requireAsset(database, project, fields.childAssetId);
@@ -322,21 +367,142 @@ export function linkLineageAssets(project: string, fields: LineageLinkFields) {
     database.close();
     throw error;
   }
-  const edge = {
+  const createdAt = nowIso();
+  const edge: LineageEdge = {
     id: edgeId(project, fields.parentAssetId, fields.childAssetId), parent_asset_id: fields.parentAssetId,
-    child_asset_id: fields.childAssetId, relation_type: 'derived_from' as const, created_at: nowIso(),
+    child_asset_id: fields.childAssetId, relation_type: 'derived_from' as const, created_at: createdAt,
+    ...(summary ? {
+      summary,
+      summary_created_by: fields.summaryActor!,
+      summary_updated_by: fields.summaryActor!,
+      summary_updated_at: createdAt,
+    } : {}),
   };
   if (!fields.confirmWrite) {
     database.close();
     return { ok: true as const, dryRun: true, edge };
   }
-  database.prepare(`
-    insert into asset_edges (id, project_id, parent_asset_id, child_asset_id, relation_type, created_at)
-    values (?, ?, ?, ?, 'derived_from', ?)
+  const inserted = database.prepare(`
+    insert into asset_edges (
+      id, project_id, parent_asset_id, child_asset_id, relation_type, created_at,
+      summary, summary_created_by, summary_updated_by, summary_updated_at
+    )
+    values (?, ?, ?, ?, 'derived_from', ?, ?, ?, ?, ?)
     on conflict(project_id, parent_asset_id, child_asset_id, relation_type) do nothing
-  `).run(edge.id, project, edge.parent_asset_id, edge.child_asset_id, edge.created_at);
+  `).run(
+    edge.id,
+    project,
+    edge.parent_asset_id,
+    edge.child_asset_id,
+    edge.created_at,
+    edge.summary || null,
+    edge.summary_created_by || null,
+    edge.summary_updated_by || null,
+    edge.summary_updated_at || null,
+  );
+  if (inserted.changes === 0) {
+    const existingRow = database.prepare(`
+      select id, parent_asset_id, child_asset_id, relation_type, created_at,
+        summary, summary_created_by, summary_updated_by, summary_updated_at
+      from asset_edges
+      where project_id = ? and parent_asset_id = ? and child_asset_id = ? and relation_type = 'derived_from'
+    `).get(project, edge.parent_asset_id, edge.child_asset_id) as Record<string, unknown> | undefined;
+    if (!existingRow) {
+      database.close();
+      throw new LineageError('Lineage edge conflict could not be resolved', 409);
+    }
+    const existingEdge = lineageEdgeFromRow(existingRow);
+    if (summary && (
+      existingEdge.summary !== summary
+      || existingEdge.summary_created_by !== fields.summaryActor
+      || existingEdge.summary_updated_by !== fields.summaryActor
+      || !existingEdge.summary_updated_at
+    )) {
+      database.close();
+      throw new LineageError('Lineage edge already exists with a different summary or provenance', 409);
+    }
+    database.close();
+    return {
+      ok: true as const,
+      idempotent: true as const,
+      message: `Already linked ${existingEdge.child_asset_id} from ${existingEdge.parent_asset_id}`,
+      edge: existingEdge,
+    };
+  }
   database.close();
   return { ok: true as const, message: `Linked ${edge.child_asset_id} from ${edge.parent_asset_id}`, edge };
+}
+
+export function updateLineageEdgeSummary(project: string, fields: LineageEdgeSummaryFields): LineageEdgeSummaryMutationResponse {
+  if (!fields.confirmWrite) throw new LineageError('Edge summary updates require confirmWrite=true');
+  if (fields.action !== 'set' && fields.action !== 'clear') throw new LineageError('Edge summary action must be set or clear');
+  const expectedUpdatedAt = expectedEdgeSummaryTimestamp(fields.expectedSummaryUpdatedAt);
+  const summary = fields.action === 'set' ? validatedHumanEdgeSummary(fields.summary) : undefined;
+  if (fields.action === 'clear' && fields.summary !== undefined) throw new LineageError('Clear edge summary must not include summary text');
+
+  const database = db();
+  try {
+    const row = database.prepare(`
+      select id, parent_asset_id, child_asset_id, relation_type, created_at,
+        summary, summary_created_by, summary_updated_by, summary_updated_at
+      from asset_edges
+      where project_id = ? and id = ?
+    `).get(project, fields.edgeId) as Record<string, unknown> | undefined;
+    if (!row) throw new LineageError(`Unknown lineage edge: ${fields.edgeId}`, 404);
+    const current = lineageEdgeFromRow(row);
+    const currentUpdatedAt = current.summary_updated_at || null;
+    if (currentUpdatedAt !== expectedUpdatedAt) {
+      throw new LineageError('Edge summary changed since it was opened; refresh and retry', 409);
+    }
+    if (fields.action === 'clear' && !current.summary) throw new LineageError('Edge summary is already clear');
+    if (fields.action === 'set' && summary === current.summary) throw new LineageError('Edge summary is unchanged');
+
+    const claimContext = lineageWriteClaimContext(database, project, current.parent_asset_id);
+    requireLineageWorkspaceClaimForWrite({
+      channel: claimContext.channel,
+      claimToken: fields.claimToken,
+      confirmWrite: fields.confirmWrite,
+      project,
+      rootAssetId: claimContext.rootAssetId,
+      writeKind: 'lineage_edge_summary',
+    });
+
+    const updatedAt = nextEdgeSummaryTimestamp(current.summary_updated_at);
+    const createdBy = fields.action === 'set'
+      ? (current.summary ? current.summary_created_by || 'human' : 'human')
+      : current.summary_created_by || 'human';
+    const result = database.prepare(`
+      update asset_edges
+      set summary = ?, summary_created_by = ?, summary_updated_by = 'human', summary_updated_at = ?
+      where project_id = ? and id = ?
+        and ((summary_updated_at is null and ? is null) or summary_updated_at = ?)
+    `).run(
+      summary || null,
+      createdBy,
+      updatedAt,
+      project,
+      fields.edgeId,
+      expectedUpdatedAt,
+      expectedUpdatedAt,
+    );
+    if (Number(result.changes) !== 1) {
+      throw new LineageError('Edge summary changed since it was opened; refresh and retry', 409);
+    }
+    const updatedRow = database.prepare(`
+      select id, parent_asset_id, child_asset_id, relation_type, created_at,
+        summary, summary_created_by, summary_updated_by, summary_updated_at
+      from asset_edges
+      where project_id = ? and id = ?
+    `).get(project, fields.edgeId) as Record<string, unknown>;
+    const edge = lineageEdgeFromRow(updatedRow);
+    return {
+      ok: true,
+      edge,
+      message: fields.action === 'clear' ? 'Cleared edge label' : `Saved edge label “${edge.summary}”`,
+    };
+  } finally {
+    database.close();
+  }
 }
 
 function descendants(database: DatabaseSync, project: string, root: string): LineageEdge[] {
@@ -347,7 +513,13 @@ function descendants(database: DatabaseSync, project: string, root: string): Lin
     const parent = queue.shift()!;
     if (seen.has(parent)) continue;
     seen.add(parent);
-    const rows = database.prepare('select id, parent_asset_id, child_asset_id, relation_type, created_at from asset_edges where project_id = ? and parent_asset_id = ? order by created_at').all(project, parent) as unknown as LineageEdge[];
+    const rows = (database.prepare(`
+      select id, parent_asset_id, child_asset_id, relation_type, created_at,
+        summary, summary_created_by, summary_updated_by, summary_updated_at
+      from asset_edges
+      where project_id = ? and parent_asset_id = ?
+      order by created_at
+    `).all(project, parent) as Array<Record<string, unknown>>).map(lineageEdgeFromRow);
     edges.push(...rows);
     queue.push(...rows.map(row => row.child_asset_id));
   }

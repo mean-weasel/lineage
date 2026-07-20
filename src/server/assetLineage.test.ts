@@ -19,6 +19,7 @@ import {
   promoteLineageAttempt,
   recordLineageRerollAttempt,
   updateAssetReview,
+  updateLineageEdgeSummary,
   updateLineageLayout,
   updateSelectedAsset,
 } from './assetLineage';
@@ -28,6 +29,7 @@ import { createAgentClaim } from './agentClaims';
 import { createLineageWorkspace, lineageWorkspaceId } from './assetLineageWorkspaces';
 
 const require = createRequire(import.meta.url);
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage');
 const dbFile = join(scratchDir, 'asset-lineage.sqlite');
 function localId(file: string): string {
@@ -125,6 +127,298 @@ describe('asset lineage index', () => {
       is_latest: true,
       user_selected: true,
     });
+  });
+
+  it('persists agent summary provenance and rejects conflicting summarized retries', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    const created = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+      summary: '  Cleaner\n type  ',
+      summaryActor: 'agent',
+    });
+    const retried = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+      summary: 'Cleaner type',
+      summaryActor: 'agent',
+    });
+
+    expect(created.edge).toMatchObject({
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
+    });
+    expect(retried).toMatchObject({ idempotent: true, edge: created.edge });
+    let conflict: unknown;
+    try {
+      linkLineageAssets(defaultProject, {
+        childAssetId: files.childId,
+        confirmWrite: true,
+        parentAssetId: files.parentId,
+        summary: 'Bolder type',
+        summaryActor: 'agent',
+      });
+    } catch (error) {
+      conflict = error;
+    }
+    expect(conflict).toMatchObject({
+      message: 'Lineage edge already exists with a different summary or provenance',
+      status: 409,
+    });
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual([created.edge]);
+  });
+
+  it('adds, replaces, and explicitly clears edge summaries with human provenance', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    const unlabeled = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    }).edge;
+    const agentLabeled = linkLineageAssets(defaultProject, {
+      childAssetId: files.variationId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+      summary: 'Agent draft',
+      summaryActor: 'agent',
+    }).edge;
+
+    const added = updateLineageEdgeSummary(defaultProject, {
+      action: 'set',
+      confirmWrite: true,
+      edgeId: unlabeled.id,
+      expectedSummaryUpdatedAt: null,
+      summary: '  Human\n label ',
+    }).edge;
+    expect(added).toMatchObject({
+      summary: 'Human label',
+      summary_created_by: 'human',
+      summary_updated_by: 'human',
+      summary_updated_at: expect.any(String),
+    });
+
+    const replaced = updateLineageEdgeSummary(defaultProject, {
+      action: 'set',
+      confirmWrite: true,
+      edgeId: agentLabeled.id,
+      expectedSummaryUpdatedAt: agentLabeled.summary_updated_at,
+      summary: 'Human edit',
+    }).edge;
+    expect(replaced).toMatchObject({
+      summary: 'Human edit',
+      summary_created_by: 'agent',
+      summary_updated_by: 'human',
+    });
+    expect(Date.parse(replaced.summary_updated_at!)).toBeGreaterThan(Date.parse(agentLabeled.summary_updated_at!));
+
+    const cleared = updateLineageEdgeSummary(defaultProject, {
+      action: 'clear',
+      confirmWrite: true,
+      edgeId: replaced.id,
+      expectedSummaryUpdatedAt: replaced.summary_updated_at,
+    }).edge;
+    expect(cleared).toMatchObject({
+      summary_created_by: 'agent',
+      summary_updated_by: 'human',
+      summary_updated_at: expect.any(String),
+    });
+    expect(cleared.summary).toBeUndefined();
+    expect(Date.parse(cleared.summary_updated_at!)).toBeGreaterThan(Date.parse(replaced.summary_updated_at!));
+
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual(expect.arrayContaining([added, cleared]));
+  });
+
+  it('rejects invalid, unconfirmed, missing, unchanged, and stale edge summary writes without data loss', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    const linked = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    }).edge;
+    const request = {
+      action: 'set' as const,
+      confirmWrite: true,
+      edgeId: linked.id,
+      expectedSummaryUpdatedAt: null,
+    };
+
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, summary: 'one two three' })).toThrow('at most 2 words');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, summary: '   ' })).toThrow('required');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, summary: 42 })).toThrow('must be text');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, expectedSummaryUpdatedAt: undefined, summary: 'Valid label' })).toThrow('expectedSummaryUpdatedAt');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, confirmWrite: false, summary: 'Valid label' })).toThrow('confirmWrite=true');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, action: 'clear', summary: undefined })).toThrow('already clear');
+    expect(() => updateLineageEdgeSummary(defaultProject, { ...request, edgeId: 'missing-edge', summary: 'Valid label' })).toThrow('Unknown lineage edge');
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges[0]).toEqual(linked);
+
+    const saved = updateLineageEdgeSummary(defaultProject, { ...request, summary: 'Valid label' }).edge;
+    let stale: unknown;
+    try {
+      updateLineageEdgeSummary(defaultProject, { ...request, summary: 'Stale edit' });
+    } catch (error) {
+      stale = error;
+    }
+    expect(stale).toMatchObject({ message: expect.stringContaining('changed since it was opened'), status: 409 });
+    expect(() => updateLineageEdgeSummary(defaultProject, {
+      ...request,
+      expectedSummaryUpdatedAt: saved.summary_updated_at,
+      summary: ' Valid   label ',
+    })).toThrow('unchanged');
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges[0]).toEqual(saved);
+  });
+
+  it('keeps unlabeled generic lineage retries compatible', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+
+    const created = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+    const retried = linkLineageAssets(defaultProject, {
+      childAssetId: files.childId,
+      confirmWrite: true,
+      parentAssetId: files.parentId,
+    });
+
+    expect(retried).toMatchObject({ idempotent: true, edge: created.edge });
+    expect(getLineageSnapshot(defaultProject, files.parentId).edges).toEqual([created.edge]);
+  });
+
+  it('migrates legacy edge rows idempotently and leaves their summaries absent', () => {
+    const files = seedFiles();
+    const timestamp = '2026-06-29T00:00:00.000Z';
+    const edgeId = `${defaultProject}:${files.parentId}:derived_from:${files.childId}`;
+    const legacy = new DatabaseSync(dbFile);
+    try {
+      legacy.exec(`
+        PRAGMA foreign_keys = ON;
+        create table projects (
+          id text primary key, product text not null, catalog_path text,
+          created_at text not null, updated_at text not null
+        );
+        create table assets (
+          id text primary key,
+          project_id text not null references projects(id),
+          source text not null check (source in ('local', 'catalog')),
+          local_path text, s3_key text, checksum_sha256 text,
+          media_type text not null, title text not null, status text not null,
+          channel text, campaign text, audience text, size_bytes integer, content_type text,
+          created_at text not null, updated_at text not null, last_seen_at text not null
+        );
+        create table asset_edges (
+          id text primary key,
+          project_id text not null references projects(id),
+          parent_asset_id text not null references assets(id),
+          child_asset_id text not null references assets(id),
+          relation_type text not null check (relation_type in ('derived_from')),
+          created_at text not null,
+          unique (project_id, parent_asset_id, child_asset_id, relation_type)
+        );
+      `);
+      legacy.prepare('insert into projects (id, product, created_at, updated_at) values (?, ?, ?, ?)')
+        .run(defaultProject, defaultProject, timestamp, timestamp);
+      const insertAsset = legacy.prepare(`
+        insert into assets (
+          id, project_id, source, local_path, media_type, title, status,
+          created_at, updated_at, last_seen_at
+        ) values (?, ?, 'local', ?, 'image', ?, 'working', ?, ?, ?)
+      `);
+      insertAsset.run(files.parentId, defaultProject, 'parent.png', 'Parent', timestamp, timestamp, timestamp);
+      insertAsset.run(files.childId, defaultProject, 'child.png', 'Child', timestamp, timestamp, timestamp);
+      legacy.prepare(`
+        insert into asset_edges (id, project_id, parent_asset_id, child_asset_id, relation_type, created_at)
+        values (?, ?, ?, ?, 'derived_from', ?)
+      `).run(edgeId, defaultProject, files.parentId, files.childId, timestamp);
+    } finally {
+      legacy.close();
+    }
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const migrated = lineageDb();
+      try {
+        const columns = migrated.prepare('pragma table_info(asset_edges)').all() as Array<{ name: string }>;
+        expect(columns.map(column => column.name).filter(name => name.startsWith('summary'))).toEqual([
+          'summary',
+          'summary_created_by',
+          'summary_updated_by',
+          'summary_updated_at',
+        ]);
+        expect(() => migrated.prepare("update asset_edges set summary_created_by = 'robot' where id = ?").run(edgeId)).toThrow();
+      } finally {
+        migrated.close();
+      }
+    }
+
+    const edge = getLineageSnapshot(defaultProject, files.parentId).edges[0];
+    expect(edge).toEqual({
+      id: edgeId,
+      parent_asset_id: files.parentId,
+      child_asset_id: files.childId,
+      relation_type: 'derived_from',
+      created_at: timestamp,
+    });
+  });
+
+  it('reads agent-origin, human-edited, and human-cleared edge summary states', () => {
+    const files = seedFiles();
+    indexLineageAssets(defaultProject);
+    for (const childAssetId of [files.childId, files.variationId, files.alternateId]) {
+      linkLineageAssets(defaultProject, { childAssetId, confirmWrite: true, parentAssetId: files.parentId });
+    }
+    const database = lineageDb();
+    try {
+      database.prepare(`
+        update asset_edges
+        set summary = ?, summary_created_by = 'agent', summary_updated_by = 'agent', summary_updated_at = ?
+        where project_id = ? and child_asset_id = ?
+      `).run('Cleaner type', '2026-07-20T01:00:00.000Z', defaultProject, files.childId);
+      database.prepare(`
+        update asset_edges
+        set summary = ?, summary_created_by = 'agent', summary_updated_by = 'human', summary_updated_at = ?
+        where project_id = ? and child_asset_id = ?
+      `).run('Sharper type', '2026-07-20T02:00:00.000Z', defaultProject, files.variationId);
+      database.prepare(`
+        update asset_edges
+        set summary = null, summary_created_by = 'agent', summary_updated_by = 'human', summary_updated_at = ?
+        where project_id = ? and child_asset_id = ?
+      `).run('2026-07-20T03:00:00.000Z', defaultProject, files.alternateId);
+      expect(() => database.prepare("update asset_edges set summary_updated_by = 'robot' where project_id = ? and child_asset_id = ?")
+        .run(defaultProject, files.childId)).toThrow();
+    } finally {
+      database.close();
+    }
+
+    const edges = getLineageSnapshot(defaultProject, files.parentId).edges;
+    expect(edges.find(edge => edge.child_asset_id === files.childId)).toMatchObject({
+      summary: 'Cleaner type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'agent',
+      summary_updated_at: '2026-07-20T01:00:00.000Z',
+    });
+    expect(edges.find(edge => edge.child_asset_id === files.variationId)).toMatchObject({
+      summary: 'Sharper type',
+      summary_created_by: 'agent',
+      summary_updated_by: 'human',
+      summary_updated_at: '2026-07-20T02:00:00.000Z',
+    });
+    const cleared = edges.find(edge => edge.child_asset_id === files.alternateId);
+    expect(cleared).toMatchObject({
+      summary_created_by: 'agent',
+      summary_updated_by: 'human',
+      summary_updated_at: '2026-07-20T03:00:00.000Z',
+    });
+    expect(cleared?.summary).toBeUndefined();
+    expect(Object.hasOwn(cleared || {}, 'summary')).toBe(false);
   });
 
   it('requires a matching active claim for direct confirmed lineage links on a claimed workspace', () => {
@@ -1105,6 +1399,7 @@ describe('asset lineage index', () => {
     expect(brief.next_asset?.asset_id).toBe(files.childId);
     expect(brief.brief.prompt).toContain('Use the cleanest concept');
     expect(brief.handoff.link_child_command).toContain('link-child');
+    expect(brief.handoff.link_child_command).toContain('--summary "<one-or-two-words>"');
 
     const dryRun = linkSelectedLineageChild(defaultProject, {
       childAssetId: files.variationId,

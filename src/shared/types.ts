@@ -372,12 +372,18 @@ export interface LineageTaskMutationResponse {
   events?: LineageTaskEvent[];
 }
 
+type EdgeSummaryActor = 'human' | 'agent' | 'system';
+
 export interface LineageEdge {
   id: string;
   parent_asset_id: string;
   child_asset_id: string;
   relation_type: 'derived_from';
   created_at: string;
+  summary?: string;
+  summary_created_by?: EdgeSummaryActor;
+  summary_updated_by?: EdgeSummaryActor;
+  summary_updated_at?: string;
 }
 
 export interface LineageSnapshot {
@@ -515,10 +521,27 @@ export interface LineageLayoutFields {
 
 export interface LineageSelectedChildFields {
   rootAssetId?: string; childAssetId: string; confirmWrite: boolean; claimToken?: string;
+  summary?: string; summaryActor?: EdgeSummaryActor;
 }
 
 export interface LineageLinkFields {
   parentAssetId: string; childAssetId: string; confirmWrite: boolean; claimToken?: string;
+  summary?: string; summaryActor?: EdgeSummaryActor;
+}
+
+export interface LineageEdgeSummaryFields {
+  edgeId: string;
+  action: 'set' | 'clear';
+  summary?: unknown;
+  expectedSummaryUpdatedAt?: unknown;
+  confirmWrite: boolean;
+  claimToken?: string;
+}
+
+export interface LineageEdgeSummaryMutationResponse {
+  ok: true;
+  edge: LineageEdge;
+  message: string;
 }
 
 export interface LineageRemoveNodeFields {
