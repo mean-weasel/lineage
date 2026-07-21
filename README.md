@@ -28,6 +28,28 @@ selection, and campaign format; continue from any useful point without losing
 earlier work; and hand a clear, durable work packet to the next human, agent, or
 downstream tool.
 
+## Built with GPT-5.6 Sol in Codex
+
+Lineage is itself a human-agent collaboration. We use GPT-5.6 Sol in Codex
+throughout the project to:
+
+- design and implement the web app, server, CLI, and version-locked Codex plugin;
+- exercise real workflows through the Codex in-app browser and Codex Chrome
+  extension, alongside automated browser tests;
+- shape architecture and safety boundaries for runtime channels, local data,
+  agent claims, and handoffs;
+- diagnose failures, review changes, write tests, and stabilize end-to-end
+  behavior;
+- create and refine the landing page, including its visual design, interactions,
+  and supporting visual assets; and
+- build and verify CI, packaging, release automation, public documentation, and
+  product messaging.
+
+Model-assisted work is held to the same proof standard as any other change. The
+repository's automated gates cover unit, integration, and browser behavior;
+runtime and database isolation; public-readiness checks; installability; plugin
+integrity; and dependency audits.
+
 ## Package Channels
 
 Lineage is packaged as `@mean-weasel/lineage`, but stable and preview must not
