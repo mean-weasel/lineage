@@ -27,38 +27,34 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
     await page.locator('header.lineage-header .lineage-overflow summary').click();
 
     const rootNode = page.locator('.lineage-node.root-node');
-    await rootNode.hover();
+    await expect(rootNode).toHaveAttribute('title', /^Hover to preview;/);
     const inspector = page.getByTestId('lineage-hover-preview');
-    await expect(inspector).toBeVisible();
     const preview = inspector.locator('.lineage-hover-preview-media img');
-    await expect(preview).toBeVisible();
-    await expect(preview).toHaveAttribute('src', /rich-demo-drafts.*\.png/);
-    await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth), {
-      message: 'rich seed preview image decoded width',
-      timeout: 10_000,
-    }).toBeGreaterThan(900);
-    await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalHeight), {
-      message: 'rich seed preview image decoded height',
-      timeout: 10_000,
-    }).toBeGreaterThan(900);
-
-    const proof = await preview.evaluate((image: HTMLImageElement) => {
-      const rect = image.getBoundingClientRect();
-      return {
-        naturalWidth: image.naturalWidth,
-        naturalHeight: image.naturalHeight,
-        renderedWidth: rect.width,
-        renderedHeight: rect.height,
-        objectFit: getComputedStyle(image).objectFit,
-        src: image.getAttribute('src') || '',
-      };
-    });
-    expect(proof.naturalWidth).toBeGreaterThan(900);
-    expect(proof.naturalHeight).toBeGreaterThan(900);
-    expect(proof.renderedWidth).toBeGreaterThan(180);
-    expect(proof.renderedHeight).toBeGreaterThan(100);
-    expect(proof.objectFit).toBe('contain');
-    expect(proof.src).not.toContain('.svg');
+    await expect(async () => {
+      await page.locator('header.lineage-header .lineage-overflow summary').focus();
+      await rootNode.focus();
+      await expect(rootNode).toBeFocused();
+      await expect(inspector).toBeVisible({ timeout: 1_000 });
+      await expect(preview).toBeVisible();
+      await expect(preview).toHaveAttribute('src', /rich-demo-drafts.*\.png/);
+      const proof = await preview.evaluate((image: HTMLImageElement) => {
+        const rect = image.getBoundingClientRect();
+        return {
+          naturalWidth: image.naturalWidth,
+          naturalHeight: image.naturalHeight,
+          renderedWidth: rect.width,
+          renderedHeight: rect.height,
+          objectFit: getComputedStyle(image).objectFit,
+          src: image.getAttribute('src') || '',
+        };
+      });
+      expect(proof.naturalWidth).toBeGreaterThan(900);
+      expect(proof.naturalHeight).toBeGreaterThan(900);
+      expect(proof.renderedWidth).toBeGreaterThan(180);
+      expect(proof.renderedHeight).toBeGreaterThan(100);
+      expect(proof.objectFit).toBe('contain');
+      expect(proof.src).not.toContain('.svg');
+    }).toPass({ intervals: [100, 250, 500], timeout: 15_000 });
 
     const visibleSvgPreviews = await page.locator('.lineage-thumb img[src*=".svg"]:visible').count();
     expect(visibleSvgPreviews).toBe(0);
