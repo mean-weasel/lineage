@@ -39,7 +39,9 @@ throughout the project to:
 - shape architecture and safety boundaries for runtime channels, local data,
   agent claims, and handoffs;
 - diagnose failures, review changes, write tests, and stabilize end-to-end
-  behavior; and
+  behavior;
+- create and refine the landing page, including its visual design, interactions,
+  and supporting visual assets; and
 - build and verify CI, packaging, release automation, public documentation, and
   product messaging.
 
