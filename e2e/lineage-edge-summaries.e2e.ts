@@ -88,7 +88,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);
 
-    await edgeById(page, posterEdgeId).locator('.react-flow__edge-textbg').dblclick();
+    await openEdgeSummaryWithDoubleClick(page, posterEdgeId);
     await expect(page.getByText('Agent-generated', { exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Edge label' }).fill('Human edit');
     await submitEdgeSummary(page, 'Save label', 200);
@@ -165,6 +165,17 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
 
 function edgeById(page: Page, id: string): Locator {
   return page.locator(`.react-flow__edge[data-id="${id}"]`);
+}
+
+async function openEdgeSummaryWithDoubleClick(page: Page, edgeId: string) {
+  const dialog = page.getByRole('dialog', { name: 'Edit edge label' });
+  const target = edgeById(page, edgeId).locator('.react-flow__edge-textbg');
+  await expect(target).toBeVisible();
+  await expect(async () => {
+    if (await dialog.isVisible()) return;
+    await target.dblclick();
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass({ intervals: [100, 250, 500], timeout: 5_000 });
 }
 
 async function submitEdgeSummary(page: Page, buttonName: 'Save label' | 'Clear label', status: number) {

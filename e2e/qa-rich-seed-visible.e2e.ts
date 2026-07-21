@@ -27,7 +27,8 @@ test('QA seed shows rich PNG previews in the first lineage view', async ({ page,
     await page.locator('header.lineage-header .lineage-overflow summary').click();
 
     const rootNode = page.locator('.lineage-node.root-node');
-    await rootNode.hover();
+    await rootNode.focus();
+    await expect(rootNode).toBeFocused();
     const inspector = page.getByTestId('lineage-hover-preview');
     await expect(inspector).toBeVisible();
     const preview = inspector.locator('.lineage-hover-preview-media img');
