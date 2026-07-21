@@ -18,6 +18,8 @@ type AssetNodeData = LineageNode & {
   onToggleBranch?: (node: LineageNode) => void;
   onToggleReroll?: (node: LineageNode) => void;
   root: boolean;
+  replayInteractive?: boolean;
+  replayState?: 'entering' | 'future' | 'visible';
   sourcePosition: Position;
   targetPosition: Position;
 } & Record<string, unknown>;
@@ -26,6 +28,8 @@ export type AssetFlowNode = Node<AssetNodeData, 'assetNode'>;
 export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const storage = storageStateFor({ hasLocal: Boolean(data.local_path), hasS3: Boolean(data.s3_key) });
   const taskBadges = lineageTaskBadges(data.lineage_tasks);
+  const replayState = data.replayState;
+  const replayInteractive = data.replayInteractive !== false;
   const openFromNode = () => {
     data.onPreviewDismiss?.();
     if ((data.attempt_count || 1) > 1) data.onOpenHistory?.(data.asset_id);
@@ -37,7 +41,8 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   return (
     <div
         aria-label={`${data.title} ${((data.attempt_count || 1) > 1) ? 'attempt history' : 'details'}`}
-        className={`lineage-node ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole}`}
+        aria-hidden={replayState === 'future' ? true : undefined}
+        className={`lineage-node ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
         data-focus-role={data.focusRole}
         data-lineage-root={data.root ? 'true' : undefined}
         onBlur={data.hoverPreviewsEnabled ? () => data.onPreviewChange?.('focus', data.asset_id, null) : undefined}
@@ -75,7 +80,7 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
         onMouseEnter={data.hoverPreviewsEnabled ? event => showPreview('hover', event.currentTarget) : undefined}
         onMouseLeave={data.hoverPreviewsEnabled ? () => data.onPreviewChange?.('hover', data.asset_id, null) : undefined}
         role="button"
-        tabIndex={0}
+        tabIndex={replayInteractive ? 0 : -1}
         title={data.hoverPreviewsEnabled
           ? ((data.attempt_count || 1) > 1 ? 'Hover to preview; double-click to open attempt history; drag to reposition' : 'Hover to preview; double-click to open detail; drag to reposition')
           : ((data.attempt_count || 1) > 1 ? 'Double-click to open attempt history; drag to reposition' : 'Double-click to open detail; drag to reposition')}

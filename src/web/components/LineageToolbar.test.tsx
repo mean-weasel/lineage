@@ -40,14 +40,30 @@ describe('LineageToolbar', () => {
     expect(container!.querySelector('.lineage-toolbar-context')?.textContent).toContain('6 links');
   });
 
-  it('keeps only New lineage and Actions as permanent toolbar commands', () => {
+  it('keeps replay, New lineage, and Actions as permanent toolbar commands', () => {
     renderToolbar();
 
     expect(container!.querySelector('.lineage-demo-menu')).toBeNull();
     expect(container!.querySelector('.lineage-next-summary')).toBeNull();
     expect(container!.querySelector('.lineage-direction-control')).toBeNull();
+    expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Replay growth');
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('New lineage');
     expect(container!.querySelector('.lineage-overflow summary')?.textContent).toBe('Actions');
+  });
+
+  it('starts replay from its visible control and disables duplicate entry while active', () => {
+    const onReplayGrowth = vi.fn();
+    renderToolbar({ onReplayGrowth });
+
+    const replay = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Replay growth')!;
+    expect(replay.disabled).toBe(false);
+    act(() => replay.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onReplayGrowth).toHaveBeenCalledOnce();
+
+    renderToolbar({ replayActive: true });
+    const activeReplay = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Replay growth')!;
+    expect(activeReplay.disabled).toBe(true);
+    expect(activeReplay.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('keeps moved graph, demo, refresh, and archive controls reachable in Actions', () => {
@@ -103,6 +119,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
     onNewLineage: vi.fn(),
     onRefreshLineage: vi.fn(),
     onRefreshWorkspaces: vi.fn(),
+    onReplayGrowth: vi.fn(),
     onRestoreDemoMedia: vi.fn(),
     onRestoreSwissifierMedia: vi.fn(),
     onSeedDemo: vi.fn(),
@@ -110,6 +127,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
     onSelectWorkspace: vi.fn(),
     onTidyGraph: vi.fn(),
     onToggleNextPanel: vi.fn(),
+    replayActive: false,
     sideOpen: false,
     snapshot,
     swissifierDemoStatus: demoMediaStatus({ download_available: true, present: 7, total: 14 }),

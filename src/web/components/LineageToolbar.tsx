@@ -21,6 +21,7 @@ type LineageToolbarProps = {
   onNewLineage: () => void;
   onRefreshLineage: () => void;
   onRefreshWorkspaces: () => void;
+  onReplayGrowth: () => void;
   onRestoreDemoMedia: () => void;
   onRestoreSwissifierMedia: () => void;
   onSeedDemo: () => void;
@@ -29,6 +30,7 @@ type LineageToolbarProps = {
   onTidyGraph: () => void;
   onToggleNextPanel: () => void;
   sideOpen: boolean;
+  replayActive: boolean;
   snapshot: LineageSnapshot | null;
   swissifierDemoStatus: DemoSeedMediaStatus | null;
   workspaceLoading: boolean;
@@ -52,6 +54,7 @@ export function LineageToolbar({
   onNewLineage,
   onRefreshLineage,
   onRefreshWorkspaces,
+  onReplayGrowth,
   onRestoreDemoMedia,
   onRestoreSwissifierMedia,
   onSeedDemo,
@@ -60,6 +63,7 @@ export function LineageToolbar({
   onTidyGraph,
   onToggleNextPanel,
   sideOpen,
+  replayActive,
   snapshot,
   swissifierDemoStatus,
   workspaceLoading,
@@ -110,6 +114,15 @@ export function LineageToolbar({
           workspaces={workspaces}
         />
         <p className="lineage-toolbar-context">{workspaceContext}</p>
+        <button
+          aria-pressed={replayActive}
+          className="secondary-button lineage-replay-launch"
+          disabled={replayActive || !snapshot || snapshot.nodes.length < 2 || snapshot.edges.length === 0}
+          onClick={onReplayGrowth}
+          type="button"
+        >
+          Replay growth
+        </button>
         <button className="primary-button" onClick={onNewLineage} type="button">New lineage</button>
       </div>
       <details className="lineage-overflow" onToggle={event => setActionsOpen(event.currentTarget.open)} open={actionsOpen}>

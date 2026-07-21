@@ -438,6 +438,13 @@ describe('lineage workspaces', () => {
     });
     expect(snapshot.nodes).toHaveLength(14);
     expect(snapshot.edges).toHaveLength(13);
+    expect(snapshot.edges.every(edge => edge.summary)).toBe(true);
+    expect(snapshot.edges.find(edge => edge.child_asset_id === 'local-befe299c503d')).toMatchObject({
+      summary: 'Poster branch',
+      summary_created_by: 'system',
+      summary_updated_by: 'system',
+      summary_updated_at: expect.any(String),
+    });
     expect(snapshot.selected).toEqual(['local-27050bc5c393', 'local-6d06bdbd9f56']);
     expect(snapshot.nodes.find(node => node.asset_id === seeded.root_asset_id)).toMatchObject({
       channel: 'linkedin',
@@ -481,6 +488,34 @@ describe('lineage workspaces', () => {
       total: 14,
     });
     expect(seeded.reroll_attempts).toEqual({ total: 3 });
+
+    const database = lineageDb();
+    database.prepare(`
+      update asset_edges
+      set summary = 'Human edit', summary_created_by = 'system', summary_updated_by = 'human', summary_updated_at = '2026-07-21T12:00:00.000Z'
+      where project_id = ? and child_asset_id = 'local-befe299c503d'
+    `).run(defaultProject);
+    database.prepare(`
+      update asset_edges
+      set summary = null, summary_created_by = null, summary_updated_by = null, summary_updated_at = null
+      where project_id = ? and child_asset_id = 'local-2e102785131f'
+    `).run(defaultProject);
+    database.close();
+
+    seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+    const reseeded = getLineageSnapshot(defaultProject, seeded.root_asset_id);
+    expect(reseeded.edges.find(edge => edge.child_asset_id === 'local-befe299c503d')).toMatchObject({
+      summary: 'Human edit',
+      summary_created_by: 'system',
+      summary_updated_by: 'human',
+      summary_updated_at: '2026-07-21T12:00:00.000Z',
+    });
+    expect(reseeded.edges.find(edge => edge.child_asset_id === 'local-2e102785131f')).toMatchObject({
+      summary: 'Drill branch',
+      summary_created_by: 'system',
+      summary_updated_by: 'system',
+      summary_updated_at: expect.any(String),
+    });
   });
 
   it('reports Swissifier media status and requires an optional source to restore it', () => {

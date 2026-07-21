@@ -215,7 +215,14 @@ function seedIsolatedEdgeSummaries() {
     `).all(project) as Array<{ child_asset_id: string; id: string; parent_asset_id: string }>;
     let generatedIndex = 0;
     for (const edge of edges) {
-      if (edge.parent_asset_id === rootId && edge.child_asset_id === legacyId) continue;
+      if (edge.parent_asset_id === rootId && edge.child_asset_id === legacyId) {
+        database.prepare(`
+          update asset_edges
+          set summary = null, summary_created_by = null, summary_updated_by = null, summary_updated_at = null
+          where id = ?
+        `).run(edge.id);
+        continue;
+      }
       const summary = edge.parent_asset_id === rootId && edge.child_asset_id === posterId
         ? 'Poster focus'
         : edge.parent_asset_id === rootId && edge.child_asset_id === drillId

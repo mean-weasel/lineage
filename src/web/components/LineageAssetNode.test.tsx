@@ -56,6 +56,15 @@ describe('AssetNode', () => {
     expect(node.querySelector('.lineage-badges .root')?.textContent).toBe('root');
   });
 
+  it('keeps future replay nodes mounted but hidden from keyboard and accessibility interaction', () => {
+    renderNode({ replayInteractive: false, replayState: 'future' });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+
+    expect(node.classList.contains('lineage-node-replay-future')).toBe(true);
+    expect(node.getAttribute('aria-hidden')).toBe('true');
+    expect(node.getAttribute('tabindex')).toBe('-1');
+  });
+
   it('requests the full media preview on hover without opening detail', () => {
     const onOpenDetail = vi.fn();
     const onOpenHistory = vi.fn();
