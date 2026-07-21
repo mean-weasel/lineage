@@ -824,6 +824,85 @@
   fill: #278153;
 }
 
+.lineage-canvas.lineage-replay-active:not(.lineage-replay-interactive) .react-flow__node,
+.lineage-canvas.lineage-replay-active:not(.lineage-replay-interactive) .react-flow__edge {
+  pointer-events: none;
+}
+
+.lineage-canvas.lineage-replay-active:not(.lineage-replay-interactive) .react-flow__minimap {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lineage-node.lineage-node-replay-future {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.96);
+}
+
+.lineage-node.lineage-node-replay-entering {
+  animation: lineage-replay-node-in var(--lineage-replay-node-duration, 200ms) cubic-bezier(0.2, 0.9, 0.28, 1.12) both;
+  pointer-events: none;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-replay-future {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-replay-entering .react-flow__edge-path {
+  animation: lineage-replay-edge-in var(--lineage-replay-edge-duration, 320ms) ease-out both;
+  stroke: #0b7f88;
+  stroke-dasharray: 1000;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-replay-entering marker path {
+  animation: lineage-replay-marker-in var(--lineage-replay-edge-duration, 320ms) ease-out both;
+  fill: #0b7f88;
+}
+
+.lineage-canvas .react-flow__edge.lineage-edge-replay-entering .react-flow__edge-text,
+.lineage-canvas .react-flow__edge.lineage-edge-replay-entering .react-flow__edge-textbg {
+  opacity: 0;
+}
+
+.lineage-canvas.lineage-replay-paused .lineage-node-replay-entering,
+.lineage-canvas.lineage-replay-paused .lineage-edge-replay-entering .react-flow__edge-path,
+.lineage-canvas.lineage-replay-paused .lineage-edge-replay-entering marker path {
+  animation-play-state: paused;
+}
+
+@keyframes lineage-replay-node-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes lineage-replay-edge-in {
+  from {
+    opacity: 0.25;
+    stroke-dashoffset: 1000;
+  }
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes lineage-replay-marker-in {
+  0%, 72% {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .lineage-node.active {
   border-color: var(--accent-2);
   box-shadow: 0 0 0 4px rgba(13, 91, 146, 0.14), 0 10px 24px rgba(24, 36, 46, 0.08);
@@ -1118,6 +1197,16 @@
 @media (prefers-reduced-motion: reduce) {
   .lineage-hover-preview {
     animation: none;
+  }
+
+  .lineage-node.lineage-node-replay-entering,
+  .lineage-canvas .react-flow__edge.lineage-edge-replay-entering .react-flow__edge-path,
+  .lineage-canvas .react-flow__edge.lineage-edge-replay-entering marker path {
+    animation: none;
+    opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    transform: none;
   }
 }
 

@@ -214,18 +214,18 @@
     }
   ],
   "edges": [
-    { "parent": "local-5748fb8ba6df", "child": "local-befe299c503d" },
-    { "parent": "local-5748fb8ba6df", "child": "local-2e102785131f" },
-    { "parent": "local-5748fb8ba6df", "child": "local-27050bc5c393" },
-    { "parent": "local-befe299c503d", "child": "local-cce63eed23a3" },
-    { "parent": "local-befe299c503d", "child": "local-425b87091830" },
-    { "parent": "local-2e102785131f", "child": "local-50301c939ad8" },
-    { "parent": "local-2e102785131f", "child": "local-6d06bdbd9f56" },
-    { "parent": "local-27050bc5c393", "child": "local-111fceddec13" },
-    { "parent": "local-27050bc5c393", "child": "local-5f51b8356e70" },
-    { "parent": "local-27050bc5c393", "child": "local-d49cb3a68453" },
-    { "parent": "local-6d06bdbd9f56", "child": "local-4f2733e9ff40" },
-    { "parent": "local-6d06bdbd9f56", "child": "local-0f885a18d5ce" },
-    { "parent": "local-6d06bdbd9f56", "child": "local-463b433de01a" }
+    { "parent": "local-5748fb8ba6df", "child": "local-befe299c503d", "summary": "Poster branch" },
+    { "parent": "local-5748fb8ba6df", "child": "local-2e102785131f", "summary": "Drill branch" },
+    { "parent": "local-5748fb8ba6df", "child": "local-27050bc5c393", "summary": "Comparison branch" },
+    { "parent": "local-befe299c503d", "child": "local-cce63eed23a3", "summary": "Bauhaus grid" },
+    { "parent": "local-befe299c503d", "child": "local-425b87091830", "summary": "Pastel circles" },
+    { "parent": "local-2e102785131f", "child": "local-50301c939ad8", "summary": "Color grid" },
+    { "parent": "local-2e102785131f", "child": "local-6d06bdbd9f56", "summary": "Mint diagonal" },
+    { "parent": "local-27050bc5c393", "child": "local-111fceddec13", "summary": "Cosmic portal" },
+    { "parent": "local-27050bc5c393", "child": "local-5f51b8356e70", "summary": "Alien lab" },
+    { "parent": "local-27050bc5c393", "child": "local-d49cb3a68453", "summary": "Space poster" },
+    { "parent": "local-6d06bdbd9f56", "child": "local-4f2733e9ff40", "summary": "Asteroid tool" },
+    { "parent": "local-6d06bdbd9f56", "child": "local-0f885a18d5ce", "summary": "Blacklight drill" },
+    { "parent": "local-6d06bdbd9f56", "child": "local-463b433de01a", "summary": "Cosmic blueprint" }
   ]
 }

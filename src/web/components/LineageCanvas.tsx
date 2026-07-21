@@ -41,6 +41,7 @@ export function LineageCanvas({
   onToggleBranch,
   onToggleReroll,
   onViewportInteraction,
+  replayInteractive,
   selectionFull,
   workspaceRootAssetId,
 }: {
@@ -66,6 +67,7 @@ export function LineageCanvas({
   onToggleBranch: (node: LineageNode) => Promise<void> | void;
   onToggleReroll: (node: LineageNode) => Promise<void> | void;
   onViewportInteraction: () => void;
+  replayInteractive: boolean;
   selectionFull: boolean;
   workspaceRootAssetId: string;
 }) {
@@ -177,6 +179,7 @@ export function LineageCanvas({
   const previewNode = activePreview ? flowNodes.find(node => node.id === activePreview.assetId)?.data : undefined;
   const actionState = previewNode ? quickActionState(previewNode, selectionFull) : null;
   const editFocusedEdge = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!replayInteractive) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const target = event.target instanceof Element ? event.target.closest<SVGElement>('.react-flow__edge') : null;
     const edgeId = target?.dataset.id;
@@ -266,11 +269,15 @@ export function LineageCanvas({
       <ReactFlow<AssetFlowNode, Edge>
         defaultViewport={{ x: 80, y: 120, zoom: 0.82 }} edges={flowEdges} nodes={interactiveNodes} nodeTypes={nodeTypes}
         deleteKeyCode={null}
+        edgesFocusable={replayInteractive}
+        elementsSelectable={replayInteractive}
         key={graphKey}
         minZoom={0.3}
+        nodesDraggable={replayInteractive}
         nodesFocusable={false}
         onEdgeDoubleClick={(event, edge) => {
           event.preventDefault();
+          if (!replayInteractive) return;
           dismissPreview();
           onEdgeEdit(edge.id, event.currentTarget as SVGElement);
         }}

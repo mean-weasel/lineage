@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { dirname, join, posix } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, packageRoot, repoRoot } from './assetCore';
 import { linkLineageAssets, updateLineageLayout, updateSelectedAsset } from './assetLineage';
 import { lineageDb, nowIso } from './assetLineageDb';
@@ -54,7 +55,7 @@ interface SwissifierManifest {
   root_asset_id: string;
   selected_asset_ids: string[];
   assets: SwissifierManifestAsset[];
-  edges: Array<{ parent: string; child: string }>;
+  edges: Array<{ parent: string; child: string; summary: string }>;
   reroll_attempts?: SwissifierManifestRerollAttempt[];
 }
 
@@ -662,6 +663,24 @@ function upsertSwissifierRerollAttempts(project: string, manifest: SwissifierMan
   return { total: attempts.length };
 }
 
+function backfillSwissifierEdgeSummaries(project: string, manifest: SwissifierManifest): void {
+  const database = lineageDb();
+  const timestamp = nowIso();
+  try {
+    const statement = database.prepare(`
+      update asset_edges
+      set summary = ?, summary_created_by = 'system', summary_updated_by = 'system', summary_updated_at = ?
+      where project_id = ? and parent_asset_id = ? and child_asset_id = ? and relation_type = 'derived_from'
+        and summary is null and summary_created_by is null and summary_updated_by is null and summary_updated_at is null
+    `);
+    for (const edge of manifest.edges) {
+      statement.run(requireEdgeSummary(edge.summary), timestamp, project, edge.parent, edge.child);
+    }
+  } finally {
+    database.close();
+  }
+}
+
 export function seedDemoLineageWorkspace(project: string, fields: { activate?: boolean; confirmWrite: boolean }) {
   const ids = fields.confirmWrite ? writeDemoFiles(project) : demoAssetIds();
   const rootAssetId = ids.root;
@@ -725,6 +744,7 @@ export function seedSwissifierRichDemoWorkspace(project: string, fields: { activ
   for (const edge of manifest.edges) {
     linkLineageAssets(project, { parentAssetId: edge.parent, childAssetId: edge.child, confirmWrite: true });
   }
+  backfillSwissifierEdgeSummaries(project, manifest);
   const reroll_attempts = upsertSwissifierRerollAttempts(project, manifest);
   updateSelectedAsset(project, {
     assetIds: manifest.selected_asset_ids,
