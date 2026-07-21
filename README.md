@@ -1,6 +1,32 @@
 # Lineage
 
-Lineage is a local-first workspace for reviewing creative assets, branching variations, choosing next bases, and handing a clear work packet to humans or agents.
+**The shared visual workspace where humans and agents shape creative work together.**
+
+Chat is a good interface for directing agent-driven creative work, but it is not
+built to hold the state of that work. Lineage keeps every asset, path, prompt,
+iteration, relationship, selection, and annotation in one local-first record:
+visual enough for humans to review and direct, and precise enough for agents to
+retrieve through the CLI and continue accurately.
+
+[See the landing page](https://mean-weasel.github.io/lineage/) ·
+[Install Lineage](#package-channels) ·
+[Use the Codex plugin](#codex-plugin) ·
+[Develop locally](#local-development)
+
+## One creative state for humans and agents
+
+- **Humans keep the history organized.** Review branches and attempts, compare
+  results, choose the exact asset to continue from, and annotate the next move.
+- **Agents keep the context behind the work.** Read the same assets, prompts,
+  relationships, and decisions instead of reconstructing them from chat.
+- **Context travels both ways.** Agent-created work returns to the visual record;
+  human selections and annotations become precise context for the next agent
+  action.
+
+With Lineage, you can trace an asset from its origin through every branch,
+selection, and campaign format; continue from any useful point without losing
+earlier work; and hand a clear, durable work packet to the next human, agent, or
+downstream tool.
 
 ## Package Channels
 
