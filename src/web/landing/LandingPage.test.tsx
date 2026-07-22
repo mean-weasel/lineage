@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { LandingPage } from './LandingPage';
-import { landingMedia } from './landingMedia';
+import { heroCarousel, landingMedia } from './landingMedia';
 
 describe('Lineage landing page', () => {
   it('uses the approved messaging and renders the active media slots', () => {
@@ -19,16 +19,32 @@ describe('Lineage landing page', () => {
     expect(html).toContain('Review and compare the history, then use selections and annotations to direct the next iteration.');
     expect(html).toContain('Assets + context');
     expect(html).toContain('Selections + annotations');
-    expect(html).toContain('Your creative history, ready to continue.');
+    expect(html).toContain('A shared creative history you and your agents can build on.');
+    expect(html).toContain('Keep every agent attempt tied to your decisions');
+    expect(html).toContain('One durable home for visual work made with your agents.');
     expect(html).not.toContain('The agent writes the work into Lineage.');
     expect(html).not.toContain('Not another generation graph.');
     expect((html.match(/<section/g) ?? []).length).toBe(3);
 
-    for (const id of ['hero-board', 'selection-to-codex', 'reroll-loop'] as const) {
+    expect(heroCarousel).toHaveLength(3);
+    expect(heroCarousel.map((slide) => slide.title)).toEqual([
+      'Turn agent output into visual creative history.',
+      'Keep the reasoning behind the visual work.',
+      'Humans and agents continue from the same place.',
+    ]);
+    expect(heroCarousel[2]?.src).not.toBe(landingMedia['agent-to-canvas'].src);
+    expect(html).not.toContain('Human chooses the next move');
+
+    for (const id of ['agent-to-canvas', 'human-to-agent', 'trace-tree', 'selection-still', 'reroll-history'] as const) {
       expect(landingMedia[id]).toBeDefined();
       expect(html).toContain(`data-media-slot="${id}"`);
     }
-    expect(html).not.toContain('data-media-slot="attempt-history"');
+    expect(html).toContain('data-media-slot="hero-lineage-growth"');
+    expect(html).toContain('Previous carousel slide');
+    expect(html).toContain('Next carousel slide');
+    expect((html.match(/class="video-toggle"/g) ?? []).length).toBe(4);
+    expect(html).toContain('Play Turn agent output into visual creative history.');
+    expect(html).toContain('Play Bring agent results back into the shared state.');
   });
 
   it('links to the public repository and exposes the documented install command', () => {
