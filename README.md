@@ -434,8 +434,15 @@ The versioned Codex plugin lives in `plugins/lineage-codex-plugin`. Install the
 plugin that matches the resolved `@mean-weasel/lineage` package version with:
 
 ```bash
-npx @mean-weasel/lineage-plugin-installer install --channel latest
+npx --yes @mean-weasel/lineage-plugin-installer@latest install --channel latest
+npx --yes @mean-weasel/lineage-plugin-installer@latest doctor --channel latest
 ```
+
+The explicit installer `@latest` prevents `npx` from reusing an older installed
+or cached CLI. Both commands honor `CODEX_HOME`; pass `--codex-home <path>` to
+make the target visible in the command and machine-readable result. `doctor` is
+read-only and fails unless the selected Codex home reports the matching plugin
+installed and enabled from the expected Lineage marketplace root.
 
 The installer verifies the plugin artifact checksum and rejects plugin manifests
 whose version or `lineage.version` does not exactly match the resolved Lineage

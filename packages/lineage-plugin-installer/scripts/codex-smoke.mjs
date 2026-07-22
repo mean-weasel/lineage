@@ -47,6 +47,18 @@ try {
   assert.equal(firstPlugin?.installed, true);
   assert.equal(firstPlugin?.enabled, true);
   assert.equal(firstPlugin?.version, packageInfo.version);
+  const doctor = runJson(process.execPath, [
+    cli,
+    "doctor",
+    "--version",
+    packageInfo.version,
+    "--codex-home",
+    codexHome,
+    "--json",
+  ], childEnv);
+  assert.equal(doctor.ok, true);
+  assert.equal(doctor.codexHome, codexHome);
+  assert.equal(doctor.checks.every((check) => check.status === "pass"), true);
 
   const reinstalled = runJson(process.execPath, installArgs, childEnv);
   assert.equal(reinstalled.activated, true);
@@ -114,6 +126,7 @@ process.exit(result.status ?? 1);
     version: packageInfo.version,
     dryRunNonMutating: true,
     installedEnabled: true,
+    doctorPassed: true,
     reinstallPassed: true,
     cleanupPassed: true,
     rollbackPassed: true,

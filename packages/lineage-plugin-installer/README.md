@@ -51,6 +51,14 @@ Show the installed installer package version:
 lineage-plugin-installer --version
 ```
 
+Show complete non-mutating help, or verify an activated installation in one
+explicit Codex home:
+
+```bash
+lineage-plugin-installer --help
+lineage-plugin-installer doctor --channel latest --codex-home /tmp/lineage-codex-home --json
+```
+
 Local plugin directory, useful while developing the plugin. This dry-run plans
 registration in the selected temporary Codex home without mutating it. Set
 `LINEAGE_VERSION` to the exact root Lineage/plugin version first:
@@ -95,7 +103,8 @@ replaces its dedicated marketplace tree. It registers the marketplace with
 `codex plugin marketplace add`, installs with `codex plugin add`, and verifies
 the exact plugin is installed and enabled. A failure restores the prior tree and
 Codex registration state. An explicit `--target-dir` keeps the earlier files-only
-mode for packaging checks; `--no-activate` also suppresses registration.
+mode for packaging checks and cannot be combined with `--codex-home`;
+`--no-activate` also suppresses registration.
 
 Before changing a real Codex profile, run the isolated activation oracle:
 

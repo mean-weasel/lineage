@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 LINEAGE_PACKAGE ?= @mean-weasel/lineage
-PLUGIN_INSTALLER ?= lineage-plugin-installer
+PLUGIN_INSTALLER ?= npx --yes @mean-weasel/lineage-plugin-installer@latest
 PROD_TAG ?= latest
 PREVIEW_TAG ?= next
 LINEAGE_RUNTIME_ROOT ?= $(HOME)/Library/Application Support/Lineage/runtimes

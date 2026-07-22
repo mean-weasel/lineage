@@ -9,6 +9,7 @@ import {
   MARKETPLACE_MANIFEST_PATH,
   createMarketplaceManifest,
   defaultMarketplaceRoot,
+  doctorPluginInstallation,
   installPluginMarketplace,
 } from "../src/installer.mjs";
 
@@ -93,6 +94,63 @@ test("activation installs, registers, enables, and cleanly reinstalls one verifi
       await readFile(path.join(first.destination, ".codex-plugin", "plugin.json"), "utf8"),
     );
     assert.equal(manifest.version, expectedVersion);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("doctor verifies one explicit Codex home without mutating its plugin state", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-codex-doctor-"));
+  const codexHome = path.join(temp, "codex-home");
+  const fake = createFakeCodex();
+
+  try {
+    await installPluginMarketplace({ pluginDir, expectedVersion, codexHome, runCodex: fake.run });
+    const callsBefore = fake.calls.length;
+    const result = await doctorPluginInstallation({
+      version: expectedVersion,
+      codexHome,
+      runCodex: fake.run,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.codexHome, codexHome);
+    assert.equal(result.expectedLineageVersion, expectedVersion);
+    assert.equal(result.schemaVersion, "lineage.plugin_doctor.v1");
+    assert.deepEqual(result.checks.map((check) => [check.id, check.status]), [
+      ["codex_cli", "pass"],
+      ["marketplace", "pass"],
+      ["plugin_state", "pass"],
+      ["manifest", "pass"],
+    ]);
+    assert.deepEqual(fake.calls.slice(callsBefore).map((call) => call.args.slice(0, 3)), [
+      ["plugin", "marketplace", "list"],
+      ["plugin", "list", "--available"],
+    ]);
+    assert.equal(fake.installed, true);
+    assert.equal(fake.enabled, true);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("doctor returns actionable failures for the wrong or missing Codex home", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-codex-doctor-missing-"));
+  const codexHome = path.join(temp, "codex-home");
+  const fake = createFakeCodex();
+
+  try {
+    const result = await doctorPluginInstallation({
+      version: expectedVersion,
+      codexHome,
+      runCodex: fake.run,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.checks.find((check) => check.id === "marketplace")?.status, "fail");
+    assert.equal(result.checks.find((check) => check.id === "plugin_state")?.status, "fail");
+    assert.match(result.checks.find((check) => check.id === "manifest")?.message || "", /Plugin manifest check failed/);
+    assert.equal(fake.calls.length, 0);
+    await assert.rejects(stat(codexHome), /ENOENT/);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

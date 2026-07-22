@@ -350,6 +350,9 @@ export async function installPluginMarketplace({
 }
 
 export async function installFromOptions(options = {}) {
+  if (options.targetRoot && options.codexHome) {
+    throw new Error("--target-dir is files-only and cannot be combined with --codex-home; choose one isolated destination mode.");
+  }
   const expectedVersion = await resolveLineageVersion(options);
   const activate = options.activate ?? !options.targetRoot;
   if (options.pluginDir) {
@@ -385,6 +388,66 @@ export async function installFromOptions(options = {}) {
     codexHome: options.codexHome,
     runCodex: options.runCodex,
   });
+}
+
+export async function doctorPluginInstallation({
+  version,
+  channel = "latest",
+  codexHome = defaultCodexHome(),
+  runCommand = runCommandSync,
+  runCodex = runCodexCommandSync,
+} = {}) {
+  const expectedVersion = await resolveLineageVersion({ version, channel, runCommand });
+  const resolvedCodexHome = path.resolve(codexHome);
+  const marketplaceRoot = defaultMarketplaceRoot(resolvedCodexHome);
+  const manifestPath = path.join(marketplaceRoot, "plugins", PLUGIN_ARTIFACT_NAME, PLUGIN_MANIFEST_PATH);
+  const checks = [];
+  let state;
+  if (!await pathExists(resolvedCodexHome)) {
+    checks.push({ id: "codex_cli", status: "fail", message: `Codex home does not exist: ${resolvedCodexHome}` });
+  } else {
+    try {
+      state = readCodexPluginState({ codexHome: resolvedCodexHome, runCodex });
+      checks.push({ id: "codex_cli", status: "pass", message: `Codex inspected ${resolvedCodexHome}` });
+    } catch (error) {
+      checks.push({ id: "codex_cli", status: "fail", message: error.message });
+    }
+  }
+
+  const actualMarketplaceRoot = state?.marketplace?.root;
+  checks.push(actualMarketplaceRoot === canonicalPath(marketplaceRoot)
+    ? { id: "marketplace", status: "pass", message: `Lineage marketplace is registered at ${marketplaceRoot}` }
+    : { id: "marketplace", status: "fail", message: `Lineage marketplace root is ${actualMarketplaceRoot || "<missing>"}; expected ${canonicalPath(marketplaceRoot)}` });
+
+  const plugin = state?.plugin;
+  const pluginMatches = plugin?.pluginId === CODEX_PLUGIN_ID
+    && plugin.installed === true
+    && plugin.enabled === true
+    && plugin.version === expectedVersion;
+  checks.push(pluginMatches
+    ? { id: "plugin_state", status: "pass", message: `${CODEX_PLUGIN_ID}@${expectedVersion} is installed and enabled` }
+    : {
+        id: "plugin_state",
+        status: "fail",
+        message: `${CODEX_PLUGIN_ID} is installed=${plugin?.installed === true}, enabled=${plugin?.enabled === true}, version=${plugin?.version || "<missing>"}; expected ${expectedVersion}`,
+      });
+
+  try {
+    assertPluginManifest(JSON.parse(await readFile(manifestPath, "utf8")), expectedVersion);
+    checks.push({ id: "manifest", status: "pass", message: `Verified ${manifestPath}` });
+  } catch (error) {
+    checks.push({ id: "manifest", status: "fail", message: `Plugin manifest check failed at ${manifestPath}: ${error.message}` });
+  }
+
+  return {
+    checks,
+    codexHome: resolvedCodexHome,
+    expectedLineageVersion: expectedVersion,
+    marketplaceRoot,
+    ok: checks.every((check) => check.status === "pass"),
+    pluginId: CODEX_PLUGIN_ID,
+    schemaVersion: "lineage.plugin_doctor.v1",
+  };
 }
 
 export async function installPluginArtifact({
