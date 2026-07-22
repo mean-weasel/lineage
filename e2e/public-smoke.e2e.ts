@@ -52,6 +52,26 @@ test('loads the public demo project and app shell', async ({ page, request }) =>
   await expect(page.getByText('Lineage').first()).toBeVisible();
 });
 
+test('keeps topbar More and lineage Actions mutually exclusive', async ({ page }) => {
+  await page.goto('/');
+  const more = page.getByRole('button', { name: /More/ });
+  const morePopover = page.locator('.more-menu-popover');
+  const actions = page.locator('header.lineage-header .lineage-overflow');
+
+  await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  await expect(morePopover).toBeVisible();
+
+  await actions.locator('summary').click();
+  await expect(actions).toHaveAttribute('open', '');
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(morePopover).toHaveCount(0);
+
+  await more.click();
+  await expect(morePopover).toBeVisible();
+  await expect(actions).not.toHaveAttribute('open', '');
+});
+
 test('shows runtime channel and SQLite identity in settings', async ({ page }) => {
   await page.goto('/');
 

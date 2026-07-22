@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AssetLibrarySnapshot, GrowthAsset, MutationResponse, PresignResponse, ProjectSummary } from '../shared/types';
 import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import { api } from './api';
@@ -57,6 +57,13 @@ export function App() {
   const [workTargetRefreshKey, setWorkTargetRefreshKey] = useState(0);
   const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
   const [runtimeIdentityUnavailable, setRuntimeIdentityUnavailable] = useState(false);
+  const [openToolbarMenu, setOpenToolbarMenu] = useState<'lineage-actions' | 'topbar-more' | null>(null);
+  const setLineageActionsOpen = useCallback((open: boolean) => {
+    setOpenToolbarMenu(current => open ? 'lineage-actions' : current === 'lineage-actions' ? null : current);
+  }, []);
+  const setTopbarMoreOpen = useCallback((open: boolean) => {
+    setOpenToolbarMenu(current => open ? 'topbar-more' : current === 'topbar-more' ? null : current);
+  }, []);
 
   const projectSnapshot = snapshot?.catalog.project === project ? snapshot : null;
   const assets = projectSnapshot?.assets || [];
@@ -287,6 +294,10 @@ export function App() {
   }, [view]);
 
   useEffect(() => {
+    setOpenToolbarMenu(null);
+  }, [view]);
+
+  useEffect(() => {
     if (selectedAssetId) return;
     setAssetDetailsOpen(false);
   }, [selectedAssetId]);
@@ -299,6 +310,8 @@ export function App() {
           assetDetailsOpen={assetDetailsOpen}
           canInspectAsset={Boolean(selected)}
           loading={loading}
+          moreOpen={openToolbarMenu === 'topbar-more'}
+          onMoreOpenChange={setTopbarMoreOpen}
           query={query}
           refresh={refresh}
           runtime={runtime}
@@ -388,7 +401,9 @@ export function App() {
         ) : view === 'settings' ? <SettingsView onToast={(type, message) => setToast({ type, message })} project={project} /> : (
           <LineageView
             asset={selected}
+            actionsOpen={openToolbarMenu === 'lineage-actions'}
             onAssetsChanged={refresh}
+            onActionsOpenChange={setLineageActionsOpen}
             onSelectedAsset={setSelectedId}
             onToast={(type, message) => setToast({ type, message })}
             project={project}

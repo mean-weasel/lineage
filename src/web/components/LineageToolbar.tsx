@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from 'react';
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from 'react';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
 import type { DemoSeedMediaStatus } from './useLineageWorkspaces';
 import type { LineageGraphDirection } from './lineageGraph';
@@ -7,12 +7,14 @@ import './LineageToolbar.css';
 
 type LineageToolbarProps = {
   activeWorkspace: LineageWorkspace | null;
+  actionsOpen: boolean;
   closeSignal: number;
   demoSeedStatus: DemoSeedMediaStatus | null;
   edgeSummariesVisible: boolean;
   graphDirection: LineageGraphDirection;
   loading: boolean;
   onArchiveWorkspace: () => void;
+  onActionsOpenChange: (open: boolean) => void;
   onDownloadSwissifierMedia: () => void;
   onEdgeSummariesVisible: () => void;
   onFitGraph: () => void;
@@ -40,12 +42,14 @@ type LineageToolbarProps = {
 
 export function LineageToolbar({
   activeWorkspace,
+  actionsOpen,
   closeSignal,
   demoSeedStatus,
   edgeSummariesVisible,
   graphDirection,
   loading,
   onArchiveWorkspace,
+  onActionsOpenChange,
   onDownloadSwissifierMedia,
   onEdgeSummariesVisible,
   onFitGraph,
@@ -75,30 +79,28 @@ export function LineageToolbar({
   const swissifierReady = Boolean(swissifierDemoStatus && swissifierDemoStatus.present === swissifierDemoStatus.total);
   const swissifierCanDownload = Boolean(swissifierDemoStatus?.download_available && !swissifierReady);
   const workspaceContext = snapshot ? `${snapshot.nodes.length} nodes · ${snapshot.edges.length} links` : workspaceRootAssetId || 'Choose a lineage workspace';
-  const [actionsOpen, setActionsOpen] = useState(false);
-
   useEffect(() => {
-    setActionsOpen(false);
-  }, [closeSignal]);
+    onActionsOpenChange(false);
+  }, [closeSignal, onActionsOpenChange]);
 
   useEffect(() => {
     function closeOnEscape(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape') return;
-      setActionsOpen(false);
+      onActionsOpenChange(false);
     }
     document.addEventListener('keydown', closeOnEscape, true);
     return () => document.removeEventListener('keydown', closeOnEscape, true);
-  }, []);
+  }, [onActionsOpenChange]);
 
   function runAndClose(action: () => void) {
-    setActionsOpen(false);
+    onActionsOpenChange(false);
     action();
   }
 
   function closeMenusOnEscape(event: ReactKeyboardEvent) {
     if (event.key !== 'Escape') return;
     event.preventDefault();
-    setActionsOpen(false);
+    onActionsOpenChange(false);
   }
 
   return (
@@ -125,7 +127,7 @@ export function LineageToolbar({
         </button>
         <button className="primary-button" onClick={onNewLineage} type="button">New lineage</button>
       </div>
-      <details className="lineage-overflow" onToggle={event => setActionsOpen(event.currentTarget.open)} open={actionsOpen}>
+      <details className="lineage-overflow" onToggle={event => onActionsOpenChange(event.currentTarget.open)} open={actionsOpen}>
         <summary onKeyDown={closeMenusOnEscape} tabIndex={0}>Actions</summary>
         <div>
           {!activeWorkspace && (
