@@ -30,7 +30,7 @@ help:
 	@printf "  make init                   npm ci\n"
 	@printf "  make install-prod           install npm latest into the isolated stable root\n"
 	@printf "  make install-preview        install npm next into the isolated preview root\n"
-	@printf "  make install-dev            install checkout dependencies (dev is not published)\n"
+	@printf "  make install-dev            install dependencies and build runnable dev artifacts\n"
 	@printf "  make install-plugin-prod    $(PLUGIN_INSTALLER) install --channel $(PROD_TAG)\n"
 	@printf "  make install-plugin-preview $(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)\n"
 	@printf "  make repin-dev LINEAGE_DEV_PROFILE=<profile>  intentionally pin a stopped dev profile to this checkout\n"
@@ -65,6 +65,7 @@ install-preview:
 
 install-dev:
 	npm ci
+	npm run build
 
 install-plugin-prod:
 	$(PLUGIN_INSTALLER) install --channel $(PROD_TAG)

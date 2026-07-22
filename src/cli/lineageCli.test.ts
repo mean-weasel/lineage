@@ -974,4 +974,17 @@ describe('lineage CLI handoff commands', () => {
     expect(readme).toContain('Use `project_channel` only for rare work');
     expect(operator).toContain('Persistent writes require the profile writer lease');
   });
+
+  it('keeps the documented managed development setup build-complete', () => {
+    const makefile = readFileSync(join(repoRoot, 'Makefile'), 'utf8');
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const installDev = makefile.match(/^install-dev:\n((?:\t.*\n)+)/m)?.[1] || '';
+
+    expect(installDev).toContain('\tnpm ci\n');
+    expect(installDev).toContain('\tnpm run build\n');
+    expect(installDev.indexOf('npm ci')).toBeLessThan(installDev.indexOf('npm run build'));
+    expect(readme).toContain('make install-dev');
+    expect(readme).toContain('make start-dev LINEAGE_DEV_PROFILE=team-development');
+    expect(readme).toContain('no separate build command is needed');
+  });
 });

@@ -461,9 +461,27 @@ activation path.
 
 ## Local Development
 
+For source development with hot reload:
+
 ```bash
 npm ci
 npm run dev
+```
+
+For the profile-safe CLI and managed development service, prepare the checkout
+once, initialize a development profile, and start it:
+
+```bash
+make install-dev
+npm run lineage:dev -- profile init --profile team-development --confirm-write --json
+make start-dev LINEAGE_DEV_PROFILE=team-development
+```
+
+`make install-dev` installs the locked dependencies and builds the bundled
+server required by `lineage-dev start`; no separate build command is needed.
+Run the verification gates with:
+
+```bash
 npm run ci
 npm run runtime:oracle
 ```
