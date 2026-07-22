@@ -396,7 +396,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       await saveLineagePositions(project, snapshot.root_asset_id, positions);
       onToast('ok', `Tidied ${positions.length} lineage nodes`);
       fitGraph(80);
-      await refresh();
+      await refresh({ quiet: true });
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -414,7 +414,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       await saveLineagePositions(project, snapshot.root_asset_id, positions);
       onToast('ok', `Rotated lineage graph ${graphDirectionLabel(direction).toLowerCase()}`);
       fitGraph(80);
-      await refresh();
+      await refresh({ quiet: true });
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -593,10 +593,6 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       <div className="lineage-workbench" data-testid="lineage-workbench">
         <div
           className={`lineage-canvas ${activeNodeId ? 'focus-active' : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
-          onPointerDownCapture={event => {
-            const target = event.target;
-            if (target instanceof Element && target.classList.contains('react-flow__pane')) clearFocus();
-          }}
           style={replaySnapshot ? {
             '--lineage-replay-edge-duration': `${reduceReplayMotion ? 1 : 320 / replaySpeed}ms`,
             '--lineage-replay-node-duration': `${reduceReplayMotion ? 1 : 200 / replaySpeed}ms`,
