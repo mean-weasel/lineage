@@ -67,8 +67,12 @@ lineage-channel install preview
 
 By default the installer writes immutable version/integrity roots beneath
 `~/Library/Application Support/Lineage/runtimes`, plus channel-qualified
-launchers under `~/.local/bin`. Every launcher is pinned to an absolute
-package root and install receipt; it does not select code from `PATH` at runtime.
+launchers in npm's global executable directory (the directory already on
+`PATH` for the globally installed `lineage-channel`). Every launcher is pinned
+to an absolute package root and install receipt; it does not select code from
+`PATH` at runtime. Use `--shim-dir <path>` to choose another launcher directory,
+or `--root <path>` to keep both a custom runtime and its launchers under that
+root. Lineage never edits shell startup files.
 
 The three exact channel meanings are:
 

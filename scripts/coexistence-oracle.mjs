@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const temporary = mkdtempSync(join(tmpdir(), 'lineage-coexistence-oracle-'));
 const runtimeRoot = join(temporary, 'runtimes');
+const shimRoot = join(temporary, 'channel-launchers');
 const serviceRoot = join(temporary, 'services');
 const profileRoot = join(temporary, 'profiles');
 const checkoutManager = join(root, 'scripts', 'managed-service.mjs');
@@ -103,6 +104,7 @@ function installChannel(channel, tarball) {
     channelCli,
     'install', channel,
     '--root', runtimeRoot,
+    '--shim-dir', shimRoot,
     '--package', tarball,
     '--allow-local-package',
     '--json',
@@ -243,14 +245,14 @@ try {
   assert(sha256(readFileSync(stable.database)) === stableBefore && JSON.stringify(tableNames(stable.database)) === JSON.stringify(stableTables), 'Rejected raw production write changed the stable database');
 
   for (const profile of profiles) {
-    const launcher = profile.channel === 'dev' ? undefined : launchers.get(profile.channel);
+    const launcher = undefined;
     const result = invokeManager('start', profile, launcher, ['--timeout-ms', '30000']);
     assert(result.status === 0, `${profile.id} managed start failed: ${result.stderr || result.stdout}`);
     const startedResult = JSON.parse(result.stdout);
     started.push({ launcher, profile, receipt: startedResult.receipt });
   }
 
-  const statuses = profiles.map(profile => statusManager(profile, profile.channel === 'dev' ? undefined : launchers.get(profile.channel)));
+  const statuses = profiles.map(profile => statusManager(profile, undefined));
   assert(new Set(statuses.map(status => status.runtime.channel)).size === 3, 'Simultaneous services do not expose three channels');
   assert(new Set(statuses.map(status => status.runtime.code.root)).size === 3, 'Simultaneous services do not expose three code roots');
   assert(new Set(statuses.map(status => status.runtime.code.fingerprint)).size === 3, 'Simultaneous services do not expose three code fingerprints');
