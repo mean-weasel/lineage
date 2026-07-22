@@ -273,6 +273,7 @@ describe('profile database writer enforcement', () => {
 
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('Persistent writes require --profile');
+    expect(result.stderr).toContain('profile init --profile <id> --confirm-write');
     expect(existsSync(databasePath)).toBe(false);
   });
 
@@ -284,7 +285,10 @@ describe('profile database writer enforcement', () => {
 
     const response = await fetch(`http://127.0.0.1:${port}/api/anything`, { method: 'POST' });
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({ error: 'profile_required' });
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'profile_required',
+      message: expect.stringContaining('profile init --profile <id> --confirm-write'),
+    });
     expect(existsSync(databasePath)).toBe(false);
 
     service.kill('SIGTERM');

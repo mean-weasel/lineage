@@ -1,6 +1,7 @@
 import type { LineageRuntimeChannel } from './runtimeInfoTypes';
 
 export const lineageProfileSchemaVersion = 'lineage.profile.v1' as const;
+export const lineageProfileInitSchemaVersion = 'lineage.profile_init.v1' as const;
 export const lineageProfileDoctorSchemaVersion = 'lineage.profile_doctor.v1' as const;
 export const lineageProfileCloneReceiptSchemaVersion = 'lineage.profile_clone_receipt.v1' as const;
 export const lineageProfileAssetsCloneReceiptSchemaVersion = 'lineage.profile_assets_clone_receipt.v1' as const;
@@ -44,6 +45,23 @@ export interface LineageProfileBindResult {
   database_path: string;
   identity: LineageProfileIdentity;
   schema_version: 'lineage.profile_bind.v1';
+}
+
+export interface LineageProfileInitResult {
+  asset_root: string;
+  database_path: string;
+  environment: LineageProfileEnvironment;
+  identity: LineageProfileIdentity;
+  manifest_path: string;
+  profile_fingerprint: string;
+  profile_id: string;
+  runtime: {
+    channel: LineageRuntimeChannel;
+    code_fingerprint: string;
+    code_origin: 'checkout' | 'package';
+  };
+  schema_version: typeof lineageProfileInitSchemaVersion;
+  service_origin: string;
 }
 
 export interface LineageProfileCloneResult {

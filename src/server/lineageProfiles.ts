@@ -25,6 +25,7 @@ import {
   lineageProfileAssetsCloneReceiptSchemaVersion,
   lineageProfileCloneReceiptSchemaVersion,
   lineageProfileDoctorSchemaVersion,
+  lineageProfileInitSchemaVersion,
   lineageProfileRuntimeRepinReceiptSchemaVersion,
   lineageProfileSchemaVersion,
   type LineageProfileBindResult,
@@ -34,6 +35,7 @@ import {
   type LineageProfileDoctorResult,
   type LineageProfileEnvironment,
   type LineageProfileIdentity,
+  type LineageProfileInitResult,
   type LineageProfileManifest,
   type LineageProfileRuntimeRepinResult,
   type ResolvedLineageProfile,
@@ -205,6 +207,121 @@ type ProfileRuntime = {
   gitSha?: string;
   version: string;
 };
+
+type ProfileInitializationLease = (
+  profile: ResolvedLineageProfile,
+  initialize: () => LineageProfileIdentity,
+) => LineageProfileIdentity;
+
+export function initializeLineageProfile(
+  profileId: string,
+  serviceOrigin: string,
+  runtime: ProfileRuntime,
+  confirmWrite: boolean,
+  withWriterLease: ProfileInitializationLease,
+): LineageProfileInitResult {
+  if (!confirmWrite) throw new Error('Profile init requires --confirm-write');
+  if (!profileIdPattern.test(profileId)) throw new Error(`Invalid profile ID: ${profileId}`);
+  if (!runtime.code?.verified) throw new Error('Profile init requires a verified runtime code identity');
+  if (runtime.code.origin !== 'checkout' && runtime.code.origin !== 'package') {
+    throw new Error(`Profile init requires checkout or package code, not ${runtime.code.origin}`);
+  }
+  if (!runtime.code.fingerprint || !/^[a-f0-9]{64}$/i.test(runtime.code.fingerprint)) {
+    throw new Error('Profile init requires a valid executing code fingerprint');
+  }
+  const validatedServiceOrigin = validateServiceOrigin(serviceOrigin);
+
+  const root = lineageProfileRoot();
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  const profileDirectory = join(root, profileId);
+  try {
+    mkdirSync(profileDirectory, { mode: 0o700 });
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
+      throw new Error(`Profile already exists or requires manual inspection: ${profileDirectory}`, { cause: error });
+    }
+    throw error;
+  }
+
+  const manifestPath = join(profileDirectory, 'profile.json');
+  const databasePath = join(profileDirectory, 'lineage.sqlite');
+  const assetRoot = join(profileDirectory, 'media');
+  const environment = channelEnvironment(runtime.channel);
+  const manifest: LineageProfileManifest = {
+    asset_root: assetRoot,
+    database_path: databasePath,
+    environment,
+    expected_runtime: {
+      channel: runtime.channel,
+      code_fingerprint: runtime.code.fingerprint.toLowerCase(),
+      code_origin: runtime.code.origin,
+    },
+    profile_id: profileId,
+    schema_version: lineageProfileSchemaVersion,
+    service_origin: validatedServiceOrigin,
+  };
+  const profile: ResolvedLineageProfile = {
+    ...manifest,
+    manifest_path: manifestPath,
+    profile_fingerprint: lineageProfileFingerprint(manifest),
+  };
+
+  try {
+    assertProfileChannel(profile, runtime.channel);
+    assertProfileRuntimePin(profile, runtime);
+    const identity = withWriterLease(profile, () => {
+      mkdirSync(assetRoot, { mode: 0o700 });
+      const databaseFd = openSync(databasePath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_RDWR, 0o600);
+      closeSync(databaseFd);
+      const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+      const database = new DatabaseSync(databasePath);
+      let boundIdentity: LineageProfileIdentity;
+      try {
+        boundIdentity = bindOpenDatabase(database, profile, false);
+      } finally {
+        database.close();
+      }
+      const manifestPayload = {
+        asset_root: './media',
+        database_path: './lineage.sqlite',
+        environment: profile.environment,
+        expected_runtime: profile.expected_runtime,
+        profile_id: profile.profile_id,
+        schema_version: profile.schema_version,
+        service_origin: profile.service_origin,
+      };
+      writeFileSync(manifestPath, `${JSON.stringify(manifestPayload, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+      const manifestFd = openSync(manifestPath, 'r');
+      try { fsyncSync(manifestFd); } finally { closeSync(manifestFd); }
+      const directoryFd = openSync(profileDirectory, 'r');
+      try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+      const published = resolveLineageProfile(profileId);
+      if (published.profile_fingerprint !== profile.profile_fingerprint) {
+        throw new Error('Initialized profile fingerprint does not match its published manifest');
+      }
+      return boundIdentity;
+    });
+    return {
+      asset_root: profile.asset_root,
+      database_path: profile.database_path,
+      environment: profile.environment,
+      identity,
+      manifest_path: profile.manifest_path,
+      profile_fingerprint: profile.profile_fingerprint,
+      profile_id: profile.profile_id,
+      runtime: {
+        channel: runtime.channel,
+        code_fingerprint: runtime.code.fingerprint,
+        code_origin: runtime.code.origin,
+      },
+      schema_version: lineageProfileInitSchemaVersion,
+      service_origin: profile.service_origin,
+    };
+  } catch (error) {
+    rmSync(profileDirectory, { force: true, recursive: true });
+    throw error;
+  }
+}
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');

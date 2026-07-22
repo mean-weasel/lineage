@@ -89,6 +89,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
+    expect(help).toContain('lineage profile init --profile <new-profile-id> [--service-origin <http-origin>] --confirm-write [--json]');
     expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
     expect(help).toContain('--asset-root <path>');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
