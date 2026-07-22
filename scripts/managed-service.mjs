@@ -93,14 +93,29 @@ function serviceRoot() {
 
 function defaultLauncher(channel) {
   if (channel === 'dev') return [process.execPath, '--import', 'tsx', join(root, 'src', 'cli', 'lineage-dev.ts')];
+  const envName = channel === 'stable' ? 'LINEAGE_STABLE_BIN' : 'LINEAGE_PREVIEW_BIN';
+  const explicit = process.env[envName] || process.env.LINEAGE_CHANNEL_LAUNCHER;
+  if (explicit) return [explicit];
+  const receiptPath = process.env.LINEAGE_RUNTIME_RECEIPT;
+  if (receiptPath) {
+    if (!existsSync(receiptPath)) throw new Error(`${channel} service manager runtime receipt does not exist: ${receiptPath}`);
+    const resolvedReceipt = realpathSync(receiptPath);
+    const runtimeRoot = dirname(dirname(dirname(dirname(resolvedReceipt))));
+    const pointerPath = join(runtimeRoot, 'channels', `${channel}.json`);
+    if (!existsSync(pointerPath)) throw new Error(`${channel} service manager could not find its receipt-bound channel pointer: ${pointerPath}`);
+    const pointer = JSON.parse(readFileSync(pointerPath, 'utf8'));
+    if (pointer.channel !== channel) throw new Error(`${channel} service manager channel pointer reports ${pointer.channel || '(missing)'}`);
+    if (!pointer.receipt_path || !existsSync(pointer.receipt_path) || realpathSync(pointer.receipt_path) !== resolvedReceipt) {
+      throw new Error(`${channel} service manager channel pointer is not bound to its runtime receipt`);
+    }
+    if (!pointer.shim || !existsSync(pointer.shim)) throw new Error(`${channel} service manager channel pointer launcher is missing: ${pointer.shim || '(missing)'}`);
+    return [realpathSync(pointer.shim)];
+  }
   const runtimeRoot = process.env.LINEAGE_RUNTIME_ROOT
     || (platform() === 'darwin'
       ? join(homedir(), 'Library', 'Application Support', 'Lineage', 'runtimes')
       : join(homedir(), '.local', 'share', 'lineage', 'runtimes'));
-  const envName = channel === 'stable' ? 'LINEAGE_STABLE_BIN' : 'LINEAGE_PREVIEW_BIN';
-  return [process.env[envName]
-    || process.env.LINEAGE_CHANNEL_LAUNCHER
-    || join(runtimeRoot, 'bin', channel === 'stable' ? 'lineage-stable' : 'lineage-preview')];
+  return [join(runtimeRoot, 'bin', channel === 'stable' ? 'lineage-stable' : 'lineage-preview')];
 }
 
 function launcherFor(channel, args) {
@@ -116,6 +131,13 @@ function invoke(launcher, args, options = {}) {
   });
 }
 
+function invocationFailure(result) {
+  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : '';
+  const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : '';
+  const spawnError = result.error instanceof Error ? result.error.message : result.error ? String(result.error) : '';
+  return stderr || stdout || spawnError || `process exited with status ${result.status ?? 'unknown'}`;
+}
+
 function shellDisplay(parts) {
   return parts.map(part => /^[A-Za-z0-9_./:@=-]+$/.test(part) ? part : JSON.stringify(part)).join(' ');
 }
@@ -126,12 +148,12 @@ function profileDoctor(launcher, selector) {
   try {
     doctor = JSON.parse(result.stdout || '{}');
   } catch {
-    throw new Error(`Profile doctor did not return JSON: ${(result.stderr || result.stdout).trim()}`);
+    throw new Error(`Profile doctor did not return JSON: ${invocationFailure(result)}`);
   }
   if (!doctor.profile) {
     const detail = doctor.error
       || (doctor.checks || []).filter(check => check.status === 'fail').map(check => check.message).join('; ')
-      || result.stderr.trim()
+      || invocationFailure(result)
       || 'profile manifest was not found or could not be read';
     const doctorCommand = shellDisplay([...launcher, 'profile', 'doctor', '--profile', selector, '--json']);
     const initCommand = shellDisplay([...launcher, 'profile', 'init', '--profile', selector, '--confirm-write', '--json']);
@@ -146,9 +168,9 @@ function runtimeDoctor(launcher) {
   try {
     runtime = JSON.parse(result.stdout || '{}');
   } catch {
-    throw new Error(`Runtime doctor did not return JSON: ${(result.stderr || result.stdout).trim()}`);
+    throw new Error(`Runtime doctor did not return JSON: ${invocationFailure(result)}`);
   }
-  if (result.status !== 0 || !runtime.verified) throw new Error(`Runtime doctor failed: ${(result.stderr || JSON.stringify(runtime)).trim()}`);
+  if (result.status !== 0 || !runtime.verified) throw new Error(`Runtime doctor failed: ${invocationFailure(result) || JSON.stringify(runtime)}`);
   return runtime;
 }
 

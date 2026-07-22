@@ -35,6 +35,7 @@ const environment = {
 let installed;
 let profileInitialized = false;
 let managedReceipt;
+let legacyManagerEnvironment;
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -194,6 +195,14 @@ try {
   ]);
   const launcher = installed.shim;
   const manager = installed.service_shim;
+  const legacyManager = join(installed.package_root, 'dist', 'cli', 'managed-service.js');
+  legacyManagerEnvironment = {
+    ...environment,
+    LINEAGE_RELEASE_CHANNEL: 'stable',
+    LINEAGE_RUNTIME_RECEIPT: installed.receipt_path,
+  };
+  delete legacyManagerEnvironment.LINEAGE_CHANNEL_LAUNCHER;
+  delete legacyManagerEnvironment.LINEAGE_RUNTIME_ROOT;
   const runtime = runJson(launcher, ['runtime', 'doctor', '--json']);
   assert.equal(runtime.verified, true);
   assert.equal(runtime.channel, 'stable');
@@ -217,7 +226,16 @@ try {
   assert.equal(database.profile.id, profileId);
   assert.equal(database.schema.profile_fingerprint, initialized.profile_fingerprint);
 
-  const started = runJson(manager, ['start', '--channel', 'stable', '--profile', profileId, '--json']);
+  const missingLauncher = run(process.execPath, [legacyManager, 'status', '--channel', 'stable', '--profile', profileId, '--launcher', join(temporary, 'missing-launcher'), '--json'], {
+    env: legacyManagerEnvironment,
+  });
+  assert.notEqual(missingLauncher.status, 0);
+  assert.match(missingLauncher.stderr, /spawnSync .* ENOENT/);
+  assert.doesNotMatch(missingLauncher.stderr, /Cannot read properties of undefined/);
+
+  const started = runJson(process.execPath, [legacyManager, 'start', '--channel', 'stable', '--profile', profileId, '--json'], {
+    env: legacyManagerEnvironment,
+  });
   managedReceipt = started.receipt;
   assert.equal(started.healthy, true);
   assert.equal(started.runtime.code.fingerprint, runtime.fingerprint);
@@ -283,7 +301,9 @@ try {
   ]);
   assert.equal(pluginDoctor.ok, true);
 
-  const stopped = runJson(manager, ['stop', '--channel', 'stable', '--profile', profileId, '--json']);
+  const stopped = runJson(process.execPath, [legacyManager, 'stop', '--channel', 'stable', '--profile', profileId, '--json'], {
+    env: legacyManagerEnvironment,
+  });
   profileInitialized = false;
   assert.equal(stopped.stopped, true);
   console.log(JSON.stringify({
@@ -294,6 +314,7 @@ try {
     plugin: { activated: plugin.activated, doctor: pluginDoctor.ok, driver: codexDriver, version: plugin.pluginVersion },
     rich_seed: { png: rich.snapshot.png_preview_urls, total: rich.swissifier_media.total },
     runtime: { channel: runtime.channel, fingerprint: runtime.fingerprint, origin: runtime.origin },
+    service: { legacy_bootstrap_launcher_discovery: true, spawn_error_unmasked: true },
   }, null, 2));
 } finally {
   if (profileInitialized && installed?.service_shim) {
