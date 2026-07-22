@@ -72,6 +72,12 @@ try {
   const startedResult = JSON.parse(start.stdout);
   assert(startedResult.healthy && startedResult.runtime.service.instance_id === startedResult.receipt.instance_id, 'Managed start did not prove service instance identity');
 
+  const repeatedStart = runManager(['start', '--channel', 'dev', '--profile', manifestPath, '--json']);
+  assert(repeatedStart.status === 0, `Repeated healthy managed start failed: ${repeatedStart.stderr}`);
+  const repeatedResult = JSON.parse(repeatedStart.stdout);
+  assert(repeatedResult.already_running === true, 'Repeated healthy start was not identified as already running');
+  assert(repeatedResult.receipt.instance_id === startedResult.receipt.instance_id, 'Repeated start replaced the verified healthy service instance');
+
   const status = runManager(['status', '--channel', 'dev', '--profile', manifestPath, '--json']);
   assert(status.status === 0 && JSON.parse(status.stdout).healthy, `Managed status failed: ${status.stderr}`);
 
@@ -80,7 +86,16 @@ try {
   writeFileSync(receiptPath, `${JSON.stringify({ ...receipt, code_fingerprint: '0'.repeat(64) }, null, 2)}\n`);
   const mismatch = runManager(['status', '--channel', 'dev', '--profile', manifestPath, '--json']);
   assert(mismatch.status !== 0 && mismatch.stderr.includes('code fingerprint'), 'Managed status accepted a mismatched receipt');
+  const mismatchStart = runManager(['start', '--channel', 'dev', '--profile', manifestPath, '--json']);
+  assert(mismatchStart.status !== 0 && mismatchStart.stderr.includes('code fingerprint'), 'Managed start accepted a mismatched healthy receipt');
   writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+
+  const typo = runManager(['status', '--channel', 'dev', '--profile', 'managed-service-smok']);
+  assert(typo.status !== 0 && typo.stderr.includes('could not be resolved') && typo.stderr.includes('profile doctor') && typo.stderr.includes('profile init'), 'Missing-profile status did not provide concise recovery commands');
+  assert(!typo.stderr.includes('{"ok"'), 'Human missing-profile status leaked raw JSON');
+  const typoJson = runManager(['status', '--channel', 'dev', '--profile', 'managed-service-smok', '--json']);
+  const typoPayload = JSON.parse(typoJson.stderr);
+  assert(typoJson.status !== 0 && typoPayload.ok === false && typoPayload.error.includes('profile doctor'), 'JSON missing-profile status was not machine-readable');
 
   process.kill(-receipt.pid, 'SIGTERM');
   await new Promise(resolveDelay => setTimeout(resolveDelay, 750));

@@ -89,6 +89,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
+    expect(help).toContain('lineage start --profile <id-or-manifest> [--open] [--json]');
     expect(help).toContain('lineage profile init --profile <new-profile-id> [--service-origin <http-origin>] --confirm-write [--json]');
     expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
     expect(help).toContain('--asset-root <path>');
@@ -108,34 +109,25 @@ describe('lineage CLI start options', () => {
     )).toThrow('Checkout code may run only as dev, not stable');
   });
 
-  it('uses stable channel defaults with an isolated runtime home', () => {
+  it('rejects a stable start without a named profile before resolving default storage', () => {
     process.env.LINEAGE_HOME = '/tmp/lineage-home';
     delete process.env.PORT;
     delete process.env.HOST;
     delete process.env.LINEAGE_DB;
 
-    const options = resolveStartOptions({ binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' }, []);
-
-    expect(options).toMatchObject({
-      dbPath: join('/tmp/lineage-home', 'lineage.sqlite'),
-      host: 'lineage.localhost',
-      json: false,
-      open: false,
-      port: 5197,
-    });
+    expect(() => resolveStartOptions(
+      { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
+      [],
+    )).toThrow('Start requires --profile or LINEAGE_PROFILE');
   });
 
-  it('keeps the development channel on a separate default port and database', () => {
+  it('rejects a development start without a named profile', () => {
     process.env.LINEAGE_HOME = '/tmp/lineage-dev-home';
 
-    const options = resolveStartOptions({ binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' }, ['--json']);
-
-    expect(options).toMatchObject({
-      dbPath: join('/tmp/lineage-dev-home', 'lineage-dev.sqlite'),
-      host: 'lineage-dev.localhost',
-      json: true,
-      port: 5198,
-    });
+    expect(() => resolveStartOptions(
+      { binName: 'lineage-dev', channel: 'dev', defaultHost: 'lineage-dev.localhost', defaultPort: 5198, displayName: 'Lineage Dev' },
+      ['--json'],
+    )).toThrow('Start requires --profile or LINEAGE_PROFILE');
   });
 
   it('reports database runtime info without requiring a server', () => {
@@ -164,24 +156,18 @@ describe('lineage CLI start options', () => {
     ) as { database: { path: string } };
 
     expect(info.database.path).toBe(join('/tmp/lineage-runtime-info', 'lineage-dev.sqlite'));
+    expect((info as unknown as LineageRuntimeInfo).process).toMatchObject({ pid: process.pid, role: 'command' });
+    expect((info as unknown as LineageRuntimeInfo).service).toBeUndefined();
   });
 
-  it('accepts explicit host, port, database, and open flags', () => {
-    const options = resolveStartOptions(
+  it('rejects direct host, port, database, and asset overrides without a profile', () => {
+    expect(() => resolveStartOptions(
       { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
       ['--host', '0.0.0.0', '--port=6123', '--db', '/tmp/custom.sqlite', '--asset-root', '/tmp/growth-ops', '--open']
-    );
-
-    expect(options).toMatchObject({
-      assetRoot: '/tmp/growth-ops',
-      dbPath: '/tmp/custom.sqlite',
-      host: '0.0.0.0',
-      open: true,
-      port: 6123,
-    });
+    )).toThrow('Start requires --profile or LINEAGE_PROFILE');
   });
 
-  it('rejects invalid ports before spawning a server', () => {
+  it('requires a profile before validating requested ports', () => {
     process.env.LINEAGE_HOME = join(cliScratchDir, 'invalid-port-home');
     delete process.env.LINEAGE_DB;
 
@@ -190,14 +176,14 @@ describe('lineage CLI start options', () => {
         { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
         ['--port', 'not-a-port']
       )
-    ).toThrow('Invalid port: not-a-port');
+    ).toThrow('Start requires --profile or LINEAGE_PROFILE');
 
     expect(() =>
       resolveStartOptions(
         { binName: 'lineage', channel: 'stable', defaultHost: 'lineage.localhost', defaultPort: 5197, displayName: 'Lineage' },
         ['--port', '70000']
       )
-    ).toThrow('Invalid port: 70000');
+    ).toThrow('Start requires --profile or LINEAGE_PROFILE');
   });
 
   it('requires code, profile, database, and service-instance identity before readiness', () => {
@@ -207,7 +193,8 @@ describe('lineage CLI start options', () => {
       database: { path: '/tmp/dev.sqlite' },
       profile: { bound: true, environment: 'development', fingerprint: 'b'.repeat(64), id: 'dev-main' },
       schema: { migration_keys: [], profile_fingerprint: 'b'.repeat(64), profile_id: 'dev-main' },
-      service: { instance_id: 'instance-a', launcher_pid: 123, pid: 124, started_at: '2026-07-16T00:00:00.000Z' },
+      process: { pid: 124, role: 'service', started_at: '2026-07-16T00:00:00.000Z' },
+      service: { instance_id: 'instance-a', launcher_pid: 123, mode: 'managed', pid: 124, started_at: '2026-07-16T00:00:00.000Z' },
     } as unknown as LineageRuntimeInfo;
     const profile = {
       database_path: '/tmp/dev.sqlite',

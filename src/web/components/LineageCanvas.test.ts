@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LineageNode, LineageTask, LineageTaskStatus, LineageTaskType } from '../../shared/types';
+import { lineageCanvasEmptyState } from './LineageCanvas';
 import { quickActionState } from './lineageQuickActions';
 
 describe('lineage inspector quick-action safety', () => {
@@ -56,6 +57,25 @@ describe('lineage inspector quick-action safety', () => {
       rerollSelected: true,
       rerollTitle: 'Remove from the re-roll queue (R)',
     });
+  });
+});
+
+describe('lineage canvas empty-state truthfulness', () => {
+  it('never offers a second index while automatic rich-demo indexing is active', () => {
+    const state = lineageCanvasEmptyState('rich-root', 'indexing');
+
+    expect(state).toEqual({
+      action: 'none',
+      description: 'Loading the automatic 14-node index. No manual action is needed.',
+      title: 'Indexing rich demo images',
+    });
+    expect(state.title).not.toContain('No lineage index yet');
+  });
+
+  it('separates genuine empty and failed automatic index recovery', () => {
+    expect(lineageCanvasEmptyState('real-empty-root', null)).toMatchObject({ action: 'index', title: 'No lineage index yet' });
+    expect(lineageCanvasEmptyState('rich-root', 'error')).toMatchObject({ action: 'retry-index', title: 'Rich demo setup failed' });
+    expect(lineageCanvasEmptyState('', 'error')).toMatchObject({ action: 'seed', title: 'Rich demo setup failed' });
   });
 });
 

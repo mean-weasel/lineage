@@ -11,6 +11,12 @@ The installer verifies the plugin manifest before writing anything:
 - plugin `lineage.version` equals the resolved Lineage package version
 - optional artifact checksums match before install
 
+## Prerequisites
+
+Use Node.js 22.22.0 or newer and npm. Installing or doctoring an activated
+plugin also requires a real Codex CLI. Point verification at a temporary
+`--codex-home`; do not use your real Codex profile for installer tests.
+
 ## Publishing
 
 The package is published manually from GitHub Actions with npm provenance.
@@ -58,6 +64,12 @@ explicit Codex home:
 lineage-plugin-installer --help
 lineage-plugin-installer doctor --channel latest --codex-home /tmp/lineage-codex-home --json
 ```
+
+On failure, doctor reports stable diagnosis codes for a missing/mismatched
+marketplace, missing/disabled plugin, version mismatch, and invalid manifest.
+It also returns `remediation.argv` and a shell-safe `remediation.command` that
+installs the exact diagnosed Lineage version. Human output prints the same
+copyable command. Doctor remains read-only.
 
 Local plugin directory, useful while developing the plugin. This dry-run plans
 registration in the selected temporary Codex home without mutating it. Set

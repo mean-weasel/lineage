@@ -116,6 +116,10 @@ function invoke(launcher, args, options = {}) {
   });
 }
 
+function shellDisplay(parts) {
+  return parts.map(part => /^[A-Za-z0-9_./:@=-]+$/.test(part) ? part : JSON.stringify(part)).join(' ');
+}
+
 function profileDoctor(launcher, selector) {
   const result = invoke(launcher, ['profile', 'doctor', '--profile', selector, '--json']);
   let doctor;
@@ -124,7 +128,15 @@ function profileDoctor(launcher, selector) {
   } catch {
     throw new Error(`Profile doctor did not return JSON: ${(result.stderr || result.stdout).trim()}`);
   }
-  if (!doctor.profile) throw new Error(`Profile doctor could not resolve ${selector}: ${(result.stderr || JSON.stringify(doctor)).trim()}`);
+  if (!doctor.profile) {
+    const detail = doctor.error
+      || (doctor.checks || []).filter(check => check.status === 'fail').map(check => check.message).join('; ')
+      || result.stderr.trim()
+      || 'profile manifest was not found or could not be read';
+    const doctorCommand = shellDisplay([...launcher, 'profile', 'doctor', '--profile', selector, '--json']);
+    const initCommand = shellDisplay([...launcher, 'profile', 'init', '--profile', selector, '--confirm-write', '--json']);
+    throw new Error(`Profile ${selector} could not be resolved: ${detail}. Next: run \`${doctorCommand}\`. If this is a new profile, run \`${initCommand}\` instead.`);
+  }
   return { doctor, status: result.status ?? 1 };
 }
 
@@ -229,6 +241,7 @@ export function managedServiceIdentityErrors(runtime, receipt) {
   if (resolve(runtime.database?.path || '') !== resolve(receipt.database_path)) errors.push(`database ${runtime.database?.path || 'missing'} != ${receipt.database_path}`);
   if (runtime.service?.instance_id !== receipt.instance_id) errors.push(`instance ${runtime.service?.instance_id || 'missing'} != ${receipt.instance_id}`);
   if (runtime.service?.launcher_pid !== receipt.pid) errors.push(`launcher pid ${runtime.service?.launcher_pid || 'missing'} != ${receipt.pid}`);
+  if (runtime.service?.mode !== 'managed') errors.push(`service mode ${runtime.service?.mode || 'missing'} != managed`);
   return errors;
 }
 
@@ -317,7 +330,10 @@ async function startManaged(channel, selector, launcher, args) {
     if (existing) {
       const health = await inspectHealth(existing);
       const desiredErrors = desiredReceiptErrors(channel, doctor, existing);
-      if (health.healthy && desiredErrors.length === 0) throw new Error(`Managed service is already healthy at ${existing.service_origin}`);
+      if (health.healthy && desiredErrors.length === 0) {
+        if (args.includes('--open')) openBrowser(existing.service_origin);
+        return { already_running: true, healthy: true, receipt: existing, runtime: health.runtime, state_path: paths.receipt };
+      }
       if (processAlive(existing.pid)) throw new Error(`Managed service pid ${existing.pid} exists but is stale or unhealthy: ${[...desiredErrors, ...health.errors].join('; ')}`);
       rmSync(paths.receipt, { force: true });
     }
@@ -328,7 +344,7 @@ async function startManaged(channel, selector, launcher, args) {
     const child = spawn(launcher[0], [...launcher.slice(1), ...startArgs], {
       cwd: root,
       detached: true,
-      env: { ...process.env, LINEAGE_SERVICE_INSTANCE_ID: instanceId },
+      env: { ...process.env, LINEAGE_SERVICE_INSTANCE_ID: instanceId, LINEAGE_SERVICE_MODE: 'managed' },
       stdio: ['ignore', logFd, logFd],
     });
     closeSync(logFd);
@@ -459,7 +475,9 @@ if (process.argv[1] && (
   || ['lineage-service', 'lineage-stable-service', 'lineage-preview-service', 'managed-service.js', 'managed-service.mjs'].includes(invokedAs)
 )) {
   main().catch(error => {
-    console.error(`managed-service: ${error instanceof Error ? error.message : String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    if (process.argv.includes('--json')) console.error(JSON.stringify({ error: message, ok: false }, null, 2));
+    else console.error(`managed-service: ${message}`);
     process.exitCode = 1;
   });
 }

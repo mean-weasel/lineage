@@ -72,6 +72,8 @@ try {
       console.log(`Lineage plugin doctor: ${result.ok ? "ok" : "failed"}`);
       console.log(`Codex home: ${result.codexHome}`);
       for (const check of result.checks) console.log(`${check.status.toUpperCase()} ${check.id}: ${check.message}`);
+      if (result.diagnoses.length > 0) console.log(`Diagnosis: ${result.diagnoses.join(", ")}`);
+      if (result.remediation) console.log(`Remediation: ${result.remediation.command}`);
     }
     process.exit(result.ok ? 0 : 1);
   }

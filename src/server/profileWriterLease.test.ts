@@ -457,6 +457,7 @@ function spawnUnprofiledService(databasePath: string, port: number): ChildProces
     ...originalEnv,
     HOST: '127.0.0.1',
     LINEAGE_CHANNEL: 'dev',
+    LINEAGE_ALLOW_UNBOUND_DIAGNOSTIC: '1',
     LINEAGE_DB: databasePath,
     NODE_ENV: 'production',
     PORT: String(port),

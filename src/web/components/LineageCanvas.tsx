@@ -18,6 +18,18 @@ type PreviewState = {
 
 const emptyPreviewState: PreviewState = { activeSource: null, focus: null, hover: null };
 
+export type LineageWorkspaceProgress = 'downloading' | 'downloaded' | 'seeding' | 'indexing' | 'ready' | 'error' | null;
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure state contract shared with regression tests
+export function lineageCanvasEmptyState(workspaceRootAssetId: string, progress: LineageWorkspaceProgress) {
+  if (progress === 'downloading') return { action: 'none' as const, description: 'Fetching and verifying the 14 rich demo images.', title: 'Downloading rich demo media' };
+  if (progress === 'seeding') return { action: 'none' as const, description: 'Creating the rich demo workspace without starting a second index.', title: 'Creating rich demo workspace' };
+  if (progress === 'indexing') return { action: 'none' as const, description: 'Loading the automatic 14-node index. No manual action is needed.', title: 'Indexing rich demo images' };
+  if (progress === 'error') return { action: workspaceRootAssetId ? 'retry-index' as const : 'seed' as const, description: 'The automatic setup stopped. Review the error message, then retry.', title: 'Rich demo setup failed' };
+  if (workspaceRootAssetId) return { action: 'index' as const, description: 'Index local/catalog assets to inspect this tree.', title: 'No lineage index yet' };
+  return { action: 'new' as const, description: 'Search local and catalog assets, choose a root, and name the iteration tree.', title: 'Start a lineage' };
+}
+
 export function LineageCanvas({
   flowEdges,
   flowNodes,
@@ -43,6 +55,7 @@ export function LineageCanvas({
   onViewportInteraction,
   replayInteractive,
   selectionFull,
+  workspaceProgress,
   workspaceRootAssetId,
 }: {
   flowEdges: Edge[];
@@ -69,6 +82,7 @@ export function LineageCanvas({
   onViewportInteraction: () => void;
   replayInteractive: boolean;
   selectionFull: boolean;
+  workspaceProgress: LineageWorkspaceProgress;
   workspaceRootAssetId: string;
 }) {
   const [previews, setPreviews] = useState<PreviewState>(emptyPreviewState);
@@ -160,18 +174,21 @@ export function LineageCanvas({
   })), [changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory, runQuickAction, selectionFull]);
 
   if (!flowNodes.length) {
+    const emptyState = lineageCanvasEmptyState(workspaceRootAssetId, workspaceProgress);
     return (
-      <div className="lineage-empty-state">
-        <strong>{workspaceRootAssetId ? 'No lineage index yet' : 'Start a lineage'}</strong>
-        <p>{workspaceRootAssetId ? 'Index local/catalog assets to inspect this tree.' : 'Search local and catalog assets, choose a root, and name the iteration tree.'}</p>
-        {workspaceRootAssetId ? (
-          <button className="primary-button" disabled={loading} onClick={onIndexNow}>Index now</button>
-        ) : (
+      <div className="lineage-empty-state" data-lineage-state={workspaceProgress || (workspaceRootAssetId ? 'empty' : 'new')}>
+        <strong>{emptyState.title}</strong>
+        <p>{emptyState.description}</p>
+        {(emptyState.action === 'index' || emptyState.action === 'retry-index') && (
+          <button className="primary-button" disabled={loading} onClick={onIndexNow}>{emptyState.action === 'retry-index' ? 'Retry index' : 'Index now'}</button>
+        )}
+        {emptyState.action === 'new' && (
           <div className="lineage-empty-actions">
             <button className="primary-button" onClick={onNewLineage}>New lineage</button>
             <button className="secondary-button" disabled={loading} onClick={onSeedDemo}>Load demo lineage</button>
           </div>
         )}
+        {emptyState.action === 'seed' && <button className="primary-button" disabled={loading} onClick={onSeedDemo}>Load demo lineage</button>}
       </div>
     );
   }

@@ -171,6 +171,9 @@ function parentFilesOption(value: string | undefined): Record<string, string[]> 
 }
 
 export function resolveStartOptions(config: LineageCliConfig, args: string[]): StartOptions {
+  if (!profileSelector(args)) {
+    throw new Error('Start requires --profile or LINEAGE_PROFILE. Create one with `profile init --profile <id> --confirm-write`, then start again with that profile');
+  }
   const profile = prepareCliProfile(config, args);
   const serviceUrl = profile ? new URL(profile.service_origin) : undefined;
   const rawPort = readOption(args, '--port') || process.env.PORT || serviceUrl?.port || String(config.defaultPort);
@@ -258,7 +261,7 @@ export function formatLineageHelp(config: LineageCliConfig): string {
   return `${config.binName} ${packageVersion()}
 
 Usage:
-  ${config.binName} start [--profile <id-or-manifest>] [--port <port>] [--host <host>] [--db <path>] [--asset-root <path>] [--open] [--json]
+  ${config.binName} start --profile <id-or-manifest> [--open] [--json]
   ${config.binName} profile init --profile <new-profile-id> [--service-origin <http-origin>] --confirm-write [--json]
   ${config.binName} profile doctor --profile <id-or-manifest> [--json]
   ${config.binName} profile bind --profile <id-or-manifest> --confirm-write [--json]
@@ -1103,7 +1106,6 @@ function start(config: LineageCliConfig, args: string[]): void {
   } else {
     console.log(`${config.displayName} starting at ${url}`);
     if (options.profile) console.log(`Profile: ${options.profile.profile_id} (${options.profile.environment})`);
-    else console.warn('Warning: legacy-unbound runtime; database and asset paths are not protected by a named profile.');
     console.log(`SQLite: ${options.dbPath}`);
     console.log(`Assets: ${options.assetRoot}`);
   }
@@ -1117,7 +1119,7 @@ function start(config: LineageCliConfig, args: string[]): void {
       LINEAGE_ASSET_ROOT: options.assetRoot,
       LINEAGE_CHANNEL: config.channel,
       LINEAGE_DB: options.dbPath,
-      LINEAGE_PROFILE: options.profile ? process.env.LINEAGE_PROFILE : undefined,
+      LINEAGE_PROFILE: process.env.LINEAGE_PROFILE,
       LINEAGE_PROFILE_ENVIRONMENT: options.profile?.environment,
       LINEAGE_PROFILE_FINGERPRINT: options.profile?.profile_fingerprint,
       LINEAGE_PROFILE_ID: options.profile?.profile_id,
@@ -1125,7 +1127,7 @@ function start(config: LineageCliConfig, args: string[]): void {
       LINEAGE_PROFILE_SERVICE_ORIGIN: options.profile?.service_origin,
       LINEAGE_LAUNCHER_PID: String(process.pid),
       LINEAGE_SERVICE_INSTANCE_ID: serviceInstanceId,
-      LINEAGE_DB_ACCESS: options.profile ? undefined : 'read-only',
+      LINEAGE_DB_ACCESS: undefined,
       NODE_ENV: 'production',
       PORT: String(options.port),
     },

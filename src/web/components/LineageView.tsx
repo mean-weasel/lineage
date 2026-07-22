@@ -7,7 +7,7 @@ import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAs
 import { api, ApiError } from '../api';
 import { readHoverPreviewsEnabled } from '../lineagePreferences';
 import type { AssetFlowNode } from './LineageAssetNode';
-import { LineageCanvas } from './LineageCanvas';
+import { LineageCanvas, type LineageWorkspaceProgress } from './LineageCanvas';
 import { LineageContextMenu } from './LineageContextMenu';
 import { activeNodeIdAfterRefresh } from './lineageRefreshState';
 import { LineageAttemptHistoryModal } from './LineageAttemptHistoryModal';
@@ -49,6 +49,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const [flowEdges, setFlowEdges] = useEdgesState<Edge>([]);
   const [flowApi, setFlowApi] = useState<ReactFlowInstance<AssetFlowNode, Edge> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [workspaceProgress, setWorkspaceProgress] = useState<LineageWorkspaceProgress>(null);
   const [menuCloseSignal, setMenuCloseSignal] = useState(0);
   const [replaySnapshot, setReplaySnapshot] = useState<LineageSnapshot | null>(null);
   const [replayStageIndex, setReplayStageIndex] = useState(-1);
@@ -116,7 +117,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   useEffect(() => { void refreshDemoSeedStatus(); }, [refreshDemoSeedStatus]);
   const refresh = useCallback(async (options: { quiet?: boolean; rootAssetId?: string } = {}) => {
     const requestedRoot = options.rootAssetId || workspaceRootAssetId;
-    if (!requestedRoot) return;
+    if (!requestedRoot) return false;
     if (!options.quiet) setLoading(true);
     try {
       const params = new URLSearchParams({ project });
@@ -124,17 +125,19 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         api<LineageSnapshot>(`/api/lineage/${requestedRoot}?${params.toString()}`),
         api<AgentClaimsResponse>(`/api/agent-claims?${params.toString()}`),
       ]);
-      if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return;
+      if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return false;
       setSnapshot(next);
       setClaims(nextClaims.claims);
       if (!options.quiet) setBrief(null);
       setActiveNodeId(current => activeNodeIdAfterRefresh(current, next.nodes, next.active_asset_id, Boolean(options.quiet)));
+      return true;
     } catch (error) {
-      if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return;
+      if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return false;
       if (!options.quiet && currentProjectRef.current === project) {
         setSnapshot(null);
         onToast('error', error instanceof Error ? error.message : String(error));
       }
+      return false;
     } finally {
       if (!options.quiet && currentProjectRef.current === project) setLoading(false);
     }
@@ -181,6 +184,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
     setReplayStageIndex(Math.max(0, Math.min(stageIndex, replayLastStage)));
   }, [replayLastStage]);
   async function indexAndRefresh() {
+    setWorkspaceProgress(null);
     setLoading(true);
     try {
       const result = await api<{ summary: LineageIndexSummary }>('/api/index/local', {
@@ -199,17 +203,38 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   }
   async function seedDemoAndRefreshAssets() {
     closeTransientMenus();
+    setWorkspaceProgress(null);
     const seeded = await seedDemoWorkspace();
-    await onAssetsChanged?.();
-    const refreshed = await seedDemoWorkspace({ quiet: true });
-    await refresh({ rootAssetId: refreshed?.workspace?.root_asset_id || refreshed?.root_asset_id || seeded?.workspace?.root_asset_id || seeded?.root_asset_id });
+    if (!seeded) return;
+    try {
+      await onAssetsChanged?.();
+      await refresh({ rootAssetId: seeded.workspace?.root_asset_id || seeded.root_asset_id });
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
   }
   async function seedSwissifierAndRefreshAssets() {
     closeTransientMenus();
+    setWorkspaceProgress('seeding');
     const seeded = await seedSwissifierDemoWorkspace();
-    await onAssetsChanged?.();
-    const refreshed = await seedSwissifierDemoWorkspace({ quiet: true });
-    await refresh({ rootAssetId: refreshed?.workspace?.root_asset_id || refreshed?.root_asset_id || seeded?.workspace?.root_asset_id || seeded?.root_asset_id });
+    if (!seeded) {
+      setWorkspaceProgress('error');
+      return;
+    }
+    try {
+      setWorkspaceProgress('indexing');
+      await onAssetsChanged?.();
+      const ready = await refresh({ rootAssetId: seeded.workspace?.root_asset_id || seeded.root_asset_id });
+      if (!ready) setWorkspaceProgress('error');
+    } catch (error) {
+      setWorkspaceProgress('error');
+      onToast('error', error instanceof Error ? error.message : String(error));
+    }
+  }
+  async function downloadSwissifierAndTrack() {
+    setWorkspaceProgress('downloading');
+    const downloaded = await downloadSwissifierDemoMedia();
+    setWorkspaceProgress(downloaded ? 'downloaded' : 'error');
   }
   async function mutateLineage(path: string, body: Record<string, unknown>, message: string) {
     try {
@@ -547,12 +572,19 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
     setFlowEdges(graph.edges);
   }, [graph.edges, graph.nodes, graphKey, setFlowEdges, setFlowNodes]);
 
+  useEffect(() => {
+    if (workspaceProgress !== 'indexing' || !snapshot?.nodes.length) return;
+    if (renderedGraphKey.current !== graphKey || flowNodes.length !== snapshot.nodes.length) return;
+    setWorkspaceProgress('ready');
+  }, [flowNodes.length, graphKey, snapshot, workspaceProgress]);
+
   useEscapeClear(Boolean(activeNodeId), clearFocus);
 
   useEffect(() => () => { if (collapseTimer.current) window.clearTimeout(collapseTimer.current); }, []);
 
   useEffect(() => {
     resetLineage();
+    setWorkspaceProgress(null);
   }, [project, resetLineage]);
   return (
     <section className="lineage-view" onKeyDownCapture={closeOnEscape}>
@@ -564,22 +596,22 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         loading={loading}
         graphDirection={graphDirection}
         demoSeedStatus={demoSeedStatus}
-        onArchiveWorkspace={() => void archiveWorkspace()}
+        onArchiveWorkspace={() => { setWorkspaceProgress(null); void archiveWorkspace(); }}
         onActionsOpenChange={onActionsOpenChange}
         onFitGraph={() => fitGraph()}
         onIndexLocal={() => void indexAndRefresh()}
         onGraphDirection={direction => void orientGraph(direction)}
-        onNewLineage={() => setNewLineageOpen(true)}
+        onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
         onRefreshLineage={() => void refresh()}
         onRefreshWorkspaces={() => void refreshWorkspaces()}
         onReplayGrowth={startReplay}
         onRestoreDemoMedia={() => void restoreDemoSeedMedia()}
         onRestoreSwissifierMedia={() => void restoreSwissifierDemoMedia()}
-        onDownloadSwissifierMedia={() => void downloadSwissifierDemoMedia()}
+        onDownloadSwissifierMedia={() => void downloadSwissifierAndTrack()}
         onEdgeSummariesVisible={() => setEdgeSummariesVisible(visible => !visible)}
         onSeedDemo={() => void seedDemoAndRefreshAssets()}
         onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
-        onSelectWorkspace={workspaceId => void activateWorkspace(workspaceId)}
+        onSelectWorkspace={workspaceId => { setWorkspaceProgress(null); void activateWorkspace(workspaceId); }}
         onTidyGraph={() => void tidyGraph()}
         onToggleNextPanel={toggleSidePanel}
         replayActive={Boolean(replaySnapshot)}
@@ -587,6 +619,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         snapshot={snapshot}
         swissifierDemoStatus={swissifierDemoStatus}
         workspaceLoading={workspaceLoading}
+        workspaceProgress={workspaceProgress}
         workspaceRootAssetId={workspaceRootAssetId}
         workspaces={visibleWorkspaces}
       />
@@ -622,7 +655,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             onEdgeEdit={(edgeId, returnFocus) => setEdgeEditor({ edgeId, returnFocus })}
             onClearFocus={clearFocus}
             onIndexNow={() => void indexAndRefresh()}
-            onNewLineage={() => setNewLineageOpen(true)}
+            onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
             onSeedDemo={() => void seedDemoAndRefreshAssets()}
             onNodeActionMenu={(assetId, x, y) => setNodeMenu(assetId ? { assetId, x, y } : null)}
             onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}
@@ -637,6 +670,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             onViewportInteraction={markViewportInteraction}
             replayInteractive={!replaySnapshot || replayAtEnd}
             selectionFull={selectionFull}
+            workspaceProgress={workspaceProgress}
             workspaceRootAssetId={workspaceRootAssetId}
           />
         </div>
@@ -656,7 +690,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             onToast={onToast}
             project={project}
             refreshBrief={refreshBrief}
-            refreshLineage={() => refresh({ quiet: true })}
+            refreshLineage={async () => { await refresh({ quiet: true }); }}
             saveRationale={saveRationale}
             replaceNextVariation={replaceNextVariation}
             selectNextBase={selectNextBase}

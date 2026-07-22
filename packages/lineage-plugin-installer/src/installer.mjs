@@ -6,6 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 export const LINEAGE_PACKAGE = "@mean-weasel/lineage";
+export const PLUGIN_INSTALLER_PACKAGE = "@mean-weasel/lineage-plugin-installer";
 export const DEFAULT_GITHUB_REPO = "mean-weasel/lineage";
 export const PLUGIN_ARTIFACT_NAME = "lineage-codex-plugin";
 export const PLUGIN_MANIFEST_PATH = ".codex-plugin/plugin.json";
@@ -116,6 +117,37 @@ export function defaultCodexHome(env = process.env) {
 
 export function defaultMarketplaceRoot(codexHome = defaultCodexHome()) {
   return path.join(path.resolve(codexHome), "marketplaces", CODEX_MARKETPLACE_NAME);
+}
+
+function shellQuote(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(text)) return text;
+  return `'${text.replaceAll("'", `'\\''`)}'`;
+}
+
+export function pluginDoctorRemediation({ expectedVersion, codexHome, diagnoses }) {
+  const argv = [
+    "npx",
+    "--yes",
+    `${PLUGIN_INSTALLER_PACKAGE}@latest`,
+    "install",
+    "--version",
+    expectedVersion,
+    "--codex-home",
+    path.resolve(codexHome),
+  ];
+  const reinstall = diagnoses.some((diagnosis) => [
+    "marketplace_mismatch",
+    "plugin_disabled",
+    "plugin_version_mismatch",
+  ].includes(diagnosis))
+    || (diagnoses.includes("manifest_missing_or_invalid") && !diagnoses.includes("plugin_missing"));
+  return {
+    action: reinstall ? "reinstall" : "install",
+    argv,
+    command: argv.map(shellQuote).join(" "),
+    expectedLineageVersion: expectedVersion,
+  };
 }
 
 export function createMarketplaceManifest(pluginName = PLUGIN_ARTIFACT_NAME) {
@@ -402,15 +434,18 @@ export async function doctorPluginInstallation({
   const marketplaceRoot = defaultMarketplaceRoot(resolvedCodexHome);
   const manifestPath = path.join(marketplaceRoot, "plugins", PLUGIN_ARTIFACT_NAME, PLUGIN_MANIFEST_PATH);
   const checks = [];
+  const diagnoses = [];
   let state;
   if (!await pathExists(resolvedCodexHome)) {
     checks.push({ id: "codex_cli", status: "fail", message: `Codex home does not exist: ${resolvedCodexHome}` });
+    diagnoses.push("codex_home_missing");
   } else {
     try {
       state = readCodexPluginState({ codexHome: resolvedCodexHome, runCodex });
       checks.push({ id: "codex_cli", status: "pass", message: `Codex inspected ${resolvedCodexHome}` });
     } catch (error) {
       checks.push({ id: "codex_cli", status: "fail", message: error.message });
+      diagnoses.push("codex_cli_unavailable");
     }
   }
 
@@ -418,6 +453,9 @@ export async function doctorPluginInstallation({
   checks.push(actualMarketplaceRoot === canonicalPath(marketplaceRoot)
     ? { id: "marketplace", status: "pass", message: `Lineage marketplace is registered at ${marketplaceRoot}` }
     : { id: "marketplace", status: "fail", message: `Lineage marketplace root is ${actualMarketplaceRoot || "<missing>"}; expected ${canonicalPath(marketplaceRoot)}` });
+  if (actualMarketplaceRoot !== canonicalPath(marketplaceRoot)) {
+    diagnoses.push(actualMarketplaceRoot ? "marketplace_mismatch" : "marketplace_missing");
+  }
 
   const plugin = state?.plugin;
   const pluginMatches = plugin?.pluginId === CODEX_PLUGIN_ID
@@ -431,21 +469,31 @@ export async function doctorPluginInstallation({
         status: "fail",
         message: `${CODEX_PLUGIN_ID} is installed=${plugin?.installed === true}, enabled=${plugin?.enabled === true}, version=${plugin?.version || "<missing>"}; expected ${expectedVersion}`,
       });
+  if (plugin?.installed !== true) diagnoses.push("plugin_missing");
+  else {
+    if (plugin.enabled !== true) diagnoses.push("plugin_disabled");
+    if (plugin.version !== expectedVersion) diagnoses.push("plugin_version_mismatch");
+  }
 
   try {
     assertPluginManifest(JSON.parse(await readFile(manifestPath, "utf8")), expectedVersion);
     checks.push({ id: "manifest", status: "pass", message: `Verified ${manifestPath}` });
   } catch (error) {
     checks.push({ id: "manifest", status: "fail", message: `Plugin manifest check failed at ${manifestPath}: ${error.message}` });
+    diagnoses.push("manifest_missing_or_invalid");
   }
+
+  const ok = checks.every((check) => check.status === "pass");
 
   return {
     checks,
     codexHome: resolvedCodexHome,
+    diagnoses,
     expectedLineageVersion: expectedVersion,
     marketplaceRoot,
-    ok: checks.every((check) => check.status === "pass"),
+    ok,
     pluginId: CODEX_PLUGIN_ID,
+    remediation: ok ? null : pluginDoctorRemediation({ expectedVersion, codexHome: resolvedCodexHome, diagnoses }),
     schemaVersion: "lineage.plugin_doctor.v1",
   };
 }
