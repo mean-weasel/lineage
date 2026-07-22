@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.17
+
+- Add atomic `profile init` for fresh installs, including exact runtime pinning, owner-only manifests, bound SQLite identity, no-clobber rollback, and actionable guidance when an unbound runtime attempts a write.
+- Make stable and preview launcher installation, managed services, and `make install-dev` agree with the documented first-run paths while preserving strict runtime/profile/database identity checks.
+- Add a version-qualified Codex plugin installer with read-only diagnostics, explicit temporary Codex-home support, exact app/plugin version locking, and rollback-safe activation.
+- Prevent the app's topbar and lineage action menus from overlapping, update the vulnerable `body-parser` dependency, and continuously prove install, profile, service, seed, CLI, and plugin onboarding in an isolated end-to-end smoke test.
+
 ## 0.1.16
 
 - Add editable one- or two-word lineage edge summaries with agent/human provenance, optimistic concurrency protection, accessible keyboard editing, and consistent labels across every graph orientation.
