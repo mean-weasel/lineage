@@ -2,11 +2,13 @@ import { CheckSquare, RefreshCcw, Trash2 } from 'lucide-react';
 import type { AssetSelectionItem, AssetSelectionSnapshot, GrowthAsset } from '../../shared/types';
 import { formatDate } from '../../shared/format';
 import { assetStorageState } from '../assetUi';
+import { lineageCliCommand, type LineageCliIdentity } from '../lineageRuntimeCommand';
 import './SelectionLedgerPanel.css';
 
 export function SelectionLedgerPanel({
   assets,
   candidateAssets = [],
+  cli = null,
   inspectedReviewSetId,
   error,
   loading,
@@ -27,6 +29,7 @@ export function SelectionLedgerPanel({
 }: {
   assets: GrowthAsset[];
   candidateAssets?: GrowthAsset[];
+  cli?: LineageCliIdentity | null;
   inspectedReviewSetId?: string | null;
   error: string | null;
   loading: boolean;
@@ -134,8 +137,8 @@ export function SelectionLedgerPanel({
               <span>{activeReviewSet.items.length} candidates · {activeReviewSelectedCount} selected · SQLite-backed</span>
             </summary>
             <div className="review-set-work-packet-body">
-              <code>npx lineage selections review-set packet --project {project} --json</code>
-              <code>npx lineage agent "keep working on my selections" --project {project} --json</code>
+              <code>{lineageCliCommand(cli, `selections review-set packet --project '${project}'`)}</code>
+              <code>{lineageCliCommand(cli, `agent "keep working on my selections" --project '${project}'`)}</code>
               <button
                 disabled={activeReviewSet.items.length === 0 || !onContinueFromNextContext}
                 onClick={onContinueFromNextContext}
@@ -184,9 +187,9 @@ export function SelectionLedgerPanel({
               return <span className={isSelected(item) ? 'selected' : ''} key={item.id}>{label}: {asset?.title || item.asset_id}</span>;
             })}
           </div>
-          <code>npx lineage selections review-set inspect --project {project} --set-id {inspectedSet.id} --json</code>
-          <code>npx lineage selections review-set set-next --project {project} --set-id {inspectedSet.id} --json</code>
-          <code>After choosing labels: npx lineage agent "keep working on my selections" --project {project} --json</code>
+          <code>{lineageCliCommand(cli, `selections review-set inspect --project '${project}' --set-id '${inspectedSet.id}'`)}</code>
+          <code>{lineageCliCommand(cli, `selections review-set set-next --project '${project}' --set-id '${inspectedSet.id}'`)}</code>
+          <code>After choosing labels: {lineageCliCommand(cli, `agent "keep working on my selections" --project '${project}'`)}</code>
         </details>
       )}
     </section>

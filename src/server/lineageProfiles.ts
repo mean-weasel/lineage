@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import {
   chmodSync,
   closeSync,
@@ -42,8 +41,8 @@ import {
 } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeChannel, LineageRuntimeCodeIdentity, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import type { DatabaseSync } from './assetLineageDb';
+import { loadNodeSqlite } from './nodeSqlite';
 
-const require = createRequire(import.meta.url);
 const profileIdPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 function lineageDataRoot(): string {
@@ -278,7 +277,7 @@ export function initializeLineageProfile(
       mkdirSync(assetRoot, { mode: 0o700 });
       const databaseFd = openSync(databasePath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_RDWR, 0o600);
       closeSync(databaseFd);
-      const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+      const { DatabaseSync } = loadNodeSqlite();
       const database = new DatabaseSync(databasePath);
       let boundIdentity: LineageProfileIdentity;
       try {
@@ -509,7 +508,7 @@ function inspectDatabase(profile: ResolvedLineageProfile): NonNullable<LineagePr
   };
   if (!result.exists) return result;
   try {
-    const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+    const { DatabaseSync } = loadNodeSqlite();
     const database = new DatabaseSync(profile.database_path, { readOnly: true });
     try {
       if (tableExists(database, 'lineage_profile_identity')) {
@@ -800,7 +799,7 @@ export function bindLineageProfileDatabase(
   assertProfileChannel(profile, runtime.channel);
   assertProfileRuntimePin(profile, runtime);
   if (!existsSync(profile.database_path)) throw new Error(`Profile database does not exist: ${profile.database_path}`);
-  const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+  const { DatabaseSync } = loadNodeSqlite();
   const database = new DatabaseSync(profile.database_path);
   try {
     const before = inspectDatabase(profile).identity;
@@ -836,7 +835,7 @@ export async function cloneLineageProfileDatabase(
   const temporaryPath = `${targetPath}.clone-${randomUUID()}.tmp`;
   const receiptDirectory = join(dirname(profile.manifest_path), 'clone-receipts');
   let targetCreated = false;
-  const { DatabaseSync, backup } = require('node:sqlite') as typeof import('node:sqlite');
+  const { DatabaseSync, backup } = loadNodeSqlite();
   const source = new DatabaseSync(sourcePath, { readOnly: true });
   try {
     const pagesCopied = await backup(source, temporaryPath);
@@ -945,7 +944,7 @@ export function cloneLineageProfileAssets(
     throw new Error(`Profile database is already bound to ${databaseIdentity.profile_id}/${databaseIdentity.environment}`);
   }
 
-  const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+  const { DatabaseSync } = loadNodeSqlite();
   const database = new DatabaseSync(profile.database_path, { readOnly: true });
   let references: ProfileAssetReference[];
   try {

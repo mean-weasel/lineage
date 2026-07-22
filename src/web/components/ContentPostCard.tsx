@@ -1,12 +1,14 @@
 import { CalendarClock, Clipboard, Eye, Flag, Link2, Send } from 'lucide-react';
 import type { ContentPost, ContentPostPhase, GrowthAsset } from '../../shared/types';
 import { assetStorageLabel } from './contentAssetLabels';
+import { lineageCliCommand, type LineageCliIdentity } from '../lineageRuntimeCommand';
 
 interface PostCardProps {
   attachAsset: () => Promise<void>;
   attachForm: { assetId: string; postId: string; role: string };
   assetLookup: Record<string, GrowthAsset>;
   checked: boolean;
+  cli?: LineageCliIdentity | null;
   isTarget: boolean;
   onCopy: (text: string, label: string) => Promise<void>;
   onOpenAsset: (assetId: string) => void;
@@ -22,7 +24,7 @@ interface PostCardProps {
 }
 
 export function ContentPostCard(props: PostCardProps) {
-  const fallbackCommand = `npx lineage content post phase --project ${props.post.project} --post-id ${props.post.id} --phase scheduled --scheduled-at <iso> --confirm-write --json`;
+  const fallbackCommand = lineageCliCommand(props.cli || null, `content post phase --project '${props.post.project}' --post-id '${props.post.id}' --phase scheduled --scheduled-at <iso> --confirm-write`);
   const handoffText = postHandoffText(props.post) || fallbackCommand;
   const hasAssets = props.post.assets.length > 0;
   return (

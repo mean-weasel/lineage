@@ -3,6 +3,7 @@ import { getAssetReviewMap } from './assetReviews';
 import { nowIso } from './assetLineageDb';
 import { listContentPosts } from './contentBatches';
 import { getContentTarget, readinessForPost } from './contentTargets';
+import { lineageCliCommand, shellQuote } from './lineageRuntimeCommand';
 import type { AssetReviewState, ContentOpsQueueAssetStorage, ContentOpsQueueBackupCue, ContentOpsQueueItem, ContentOpsQueueLane, ContentOpsQueueLaneId, ContentOpsQueueLaneSummary, ContentOpsQueueSnapshot, ContentPost } from '../shared/types';
 
 const lanes = [
@@ -97,10 +98,10 @@ function backupCueForPost(project: string, post: ContentPost, sources: Map<strin
     approved_local: approvedLocal,
     label,
     local_and_s3: localAndS3,
-    local_backup_command: firstLocalOnly ? `npx lineage local backup --project ${project} --asset-id ${firstLocalOnly} --dry-run --json` : undefined,
+    local_backup_command: firstLocalOnly ? lineageCliCommand(`local backup --project ${shellQuote(project)} --asset-id ${shellQuote(firstLocalOnly)} --dry-run`) : undefined,
     local_only: localOnly,
-    local_queue_command: firstLocalOnly ? `npx lineage local queue --project ${project} --json` : undefined,
-    local_review_command: firstLocalOnly ? `npx lineage local review --project ${project} --asset-id ${firstLocalOnly} --state approved --dry-run --json` : undefined,
+    local_queue_command: firstLocalOnly ? lineageCliCommand(`local queue --project ${shellQuote(project)}`) : undefined,
+    local_review_command: firstLocalOnly ? lineageCliCommand(`local review --project ${shellQuote(project)} --asset-id ${shellQuote(firstLocalOnly)} --state approved --dry-run`) : undefined,
     needs_review: needsReview,
     s3_backed: s3Backed,
     unresolved,
@@ -127,10 +128,6 @@ function laneFor(id: ContentOpsQueueLaneId, items: ContentOpsQueueItem[]): Conte
 
 function laneSummary(lane: ContentOpsQueueLane): ContentOpsQueueLaneSummary {
   return { id: lane.id, label: lane.label, total: lane.total };
-}
-
-function prefix(): string {
-  return `npx lineage content queue`;
 }
 
 function compactItem(item: ContentOpsQueueItem | undefined) {
@@ -169,8 +166,8 @@ function firstLaneItem(queueLanes: ContentOpsQueueLane[], laneOrder: ContentOpsQ
 function compactHandoff(project: string, queue: ContentOpsQueueSnapshot) {
   return {
     ...queue.handoff,
-    inspectSummaryCommand: `${prefix()} inspect --project ${project} --summary --json`,
-    nextQueueCommand: `${prefix()} next --project ${project} --json`,
+    inspectSummaryCommand: lineageCliCommand(`content queue inspect --project ${shellQuote(project)} --summary`),
+    nextQueueCommand: lineageCliCommand(`content queue next --project ${shellQuote(project)}`),
   };
 }
 
@@ -189,13 +186,13 @@ export function getContentOpsQueue(project: string): ContentOpsQueueSnapshot {
   const nextAction = firstLaneItem(queueLanes, actionableLaneOrder);
   const storage = items.reduce((total, item) => addStorage(total, item.asset_storage), emptyStorage());
   const laneTotals = Object.fromEntries(queueLanes.map(lane => [lane.id, lane.total])) as Record<ContentOpsQueueLaneId, number>;
-  const contentPrefix = `npx lineage content`;
+  const quotedProject = shellQuote(project);
   return {
     fetchedAt: nowIso(),
     handoff: {
-      inspectQueueCommand: `${contentPrefix} queue inspect --project ${project} --json`,
-      inspectTargetCommand: `${contentPrefix} target inspect --project ${project} --json`,
-      listPostsCommand: `${contentPrefix} post list --project ${project} --json`,
+      inspectQueueCommand: lineageCliCommand(`content queue inspect --project ${quotedProject}`),
+      inspectTargetCommand: lineageCliCommand(`content target inspect --project ${quotedProject}`),
+      listPostsCommand: lineageCliCommand(`content post list --project ${quotedProject}`),
     },
     lanes: queueLanes,
     next_action: nextAction?.item || null,

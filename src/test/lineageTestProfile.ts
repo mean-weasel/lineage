@@ -11,6 +11,7 @@ import type { LineageProfileManifest, ResolvedLineageProfile } from '../shared/l
 const managedEnvKeys = [
   'LINEAGE_DB',
   'LINEAGE_DB_ACCESS',
+  'LINEAGE_CHANNEL',
   'LINEAGE_PROFILE',
   'LINEAGE_PROFILE_ENVIRONMENT',
   'LINEAGE_PROFILE_FINGERPRINT',
@@ -69,6 +70,7 @@ export function useLineageTestProfile(databasePath: string): ResolvedLineageProf
   }
 
   process.env.LINEAGE_DB = resolvedDatabasePath;
+  process.env.LINEAGE_CHANNEL = 'dev';
   delete process.env.LINEAGE_DB_ACCESS;
   process.env.LINEAGE_PROFILE = profile.manifest_path;
   process.env.LINEAGE_PROFILE_ENVIRONMENT = profile.environment;

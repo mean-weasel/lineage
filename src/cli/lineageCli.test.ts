@@ -48,6 +48,7 @@ function seedCliDb() {
     .run(profile.profile_id, profile.environment, profile.profile_fingerprint, '2026-07-16T00:00:00.000Z');
   database.close();
   process.env.LINEAGE_DB = cliDbFile;
+  process.env.LINEAGE_CHANNEL = 'dev';
   process.env.LINEAGE_PROFILE = profile.manifest_path;
   process.env.LINEAGE_PROFILE_ENVIRONMENT = profile.environment;
   process.env.LINEAGE_PROFILE_FINGERPRINT = profile.profile_fingerprint;

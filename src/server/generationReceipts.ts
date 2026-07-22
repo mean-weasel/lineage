@@ -7,7 +7,7 @@ import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 import { cancelLineageIterateTasksForAssets, listLineageTasks, resolveLineageTask } from './assetLineageTasks';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
-import { lineagePublicPackageCommand, lineageRuntimeSelector } from './lineageRuntimeCommand';
+import { lineageCliCommand } from './lineageRuntimeCommand';
 import { createGenerationOutputManifestDraft, parseGenerationOutputManifest, type GenerationOutputManifest } from '../shared/generationOutputManifest';
 import type {
   GenerationHandoffPacket,
@@ -91,7 +91,7 @@ function buildHandoff(
   if (!parent) throw new GenerationReceiptError('Missing lineage next base');
   const parents = parentMappings(next, perBaseCount);
   const outputManifest = createGenerationOutputManifestDraft({ id, expected_output_count: count, inputs });
-  const importCommand = `${lineagePublicPackageCommand()} generate image import --project ${quote(project)} --job-id ${quote(id)} --manifest ${quote('.asset-scratch/generation-output-manifest.json')} --confirm-write ${lineageRuntimeSelector()} --json`;
+  const importCommand = lineageCliCommand(`generate image import --project ${quote(project)} --job-id ${quote(id)} --manifest ${quote('.asset-scratch/generation-output-manifest.json')} --confirm-write`);
   return {
     schema_version: 'lineage.generation_handoff.v2', provider, project, job_id: id, prompt, expected_output_count: count,
     per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,
@@ -117,7 +117,7 @@ function buildHandoff(
 }
 
 function buildRerollHandoff(project: string, id: string, prompt: string, rootAssetId: string, target: { asset_id: string; title: string; local_path?: string; s3_key?: string }, request: LineageRerollRequest): GenerationHandoffPacket {
-  const importCommand = `${lineagePublicPackageCommand()} reroll import --project ${quote(project)} --job-id ${quote(id)} --file <.asset-scratch-file> --confirm-write ${lineageRuntimeSelector()} --json`;
+  const importCommand = lineageCliCommand(`reroll import --project ${quote(project)} --job-id ${quote(id)} --file <.asset-scratch-file> --confirm-write`);
   return {
     schema_version: 'lineage.generation_handoff.v1',
     provider,

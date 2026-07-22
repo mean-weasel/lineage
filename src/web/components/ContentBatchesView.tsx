@@ -5,6 +5,7 @@ import { formatDate } from '../../shared/format';
 import { api } from '../api';
 import { ContentAssetCandidates } from './ContentAssetCandidates';
 import { ContentPostCard } from './ContentPostCard';
+import { lineageCliCommand, useLineageCli } from '../lineageRuntimeCommand';
 import { ContentPostFilters, type AssetFilter } from './ContentPostFilters';
 import { ContentPostPreview } from './ContentPostPreview';
 import { ContentOpsQueuePanel } from './ContentOpsQueuePanel';
@@ -28,6 +29,7 @@ export function ContentBatchesView({
   project: string;
   selectedAsset?: GrowthAsset;
 }) {
+  const cli = useLineageCli();
   const [snapshot, setSnapshot] = useState<ContentBatchSnapshot | null>(null);
   const [detail, setDetail] = useState<ContentBatchDetail | null>(null);
   const [selectedBatchId, setSelectedBatchId] = useState('');
@@ -269,8 +271,8 @@ export function ContentBatchesView({
           {detail ? (
             <>
               <BatchHeader detail={detail} onCopy={onCopy} />
-              <ContentTargetPanel agentClaims={agentClaims} onClear={clearTarget} onCopy={onCopy} pending={Boolean(pending)} target={targetSnapshot} />
-              <ContentOpsQueuePanel onCopy={onCopy} onFocusPost={focusQueuePost} queue={queueSnapshot} />
+              <ContentTargetPanel agentClaims={agentClaims} cli={cli} onClear={clearTarget} onCopy={onCopy} pending={Boolean(pending)} target={targetSnapshot} />
+              <ContentOpsQueuePanel cli={cli} onCopy={onCopy} onFocusPost={focusQueuePost} queue={queueSnapshot} />
               <CreatePostForm form={postForm} pending={Boolean(pending)} setForm={setPostForm} submit={createPost} />
               <ContentPostFilters
                 channels={channels}
@@ -295,6 +297,7 @@ export function ContentBatchesView({
                     attachForm={attachForm}
                     assetLookup={assetLookup}
                     checked={selectedPostIds.includes(post.id)}
+                    cli={cli}
                     key={post.id}
                     isTarget={targetSnapshot?.target?.post.id === post.id}
                     onCopy={onCopy}
@@ -318,7 +321,7 @@ export function ContentBatchesView({
             <div className="content-empty-state">
               <h3>No batch selected</h3>
               <p>Create a batch or seed one with the CLI, then it will appear here.</p>
-              <code>npx lineage content batch create --project {project} --batch-id &lt;id&gt; --title &lt;title&gt; --confirm-write --json</code>
+              <code>{lineageCliCommand(cli, `content batch create --project '${project}' --batch-id <id> --title <title> --confirm-write`)}</code>
             </div>
           )}
         </div>

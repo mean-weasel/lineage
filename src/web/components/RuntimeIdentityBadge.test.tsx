@@ -8,6 +8,7 @@ describe('RuntimeIdentityBadge', () => {
     const runtime: LineageRuntimeInfo = {
       asset_root: '/test/media',
       channel: 'dev',
+      cli: { launcher: 'npm run lineage:dev --', runtime_selector: "--profile '/tmp/dev/profile.json'" },
       database: { exists: true, path: '/test/lineage.sqlite' },
       fetchedAt: '2026-07-14T00:00:00.000Z',
       package_name: '@mean-weasel/lineage',
@@ -37,6 +38,7 @@ describe('RuntimeIdentityBadge', () => {
     const legacy: LineageRuntimeInfo = {
       asset_root: '/test/media',
       channel: 'stable',
+      cli: { launcher: 'lineage-stable', runtime_selector: "--db '/test/lineage.sqlite'" },
       database: { exists: false, path: '/test/lineage.sqlite' },
       fetchedAt: '2026-07-14T00:00:00.000Z',
       package_name: '@mean-weasel/lineage',

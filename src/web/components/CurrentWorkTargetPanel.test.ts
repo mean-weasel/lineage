@@ -3,6 +3,8 @@ import type { ReactElement, ReactNode } from 'react';
 import type { AgentClaimSummary, AssetSelectionSnapshot, ContentOpsQueueSnapshot, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
 import { CurrentWorkTargetPanel } from './CurrentWorkTargetPanel';
 
+const cli = { launcher: 'lineage-stable', runtime_selector: "--profile '/tmp/stable/profile.json'" } as const;
+
 function flattenText(node: ReactNode): string {
   if (!node || typeof node === 'boolean') return '';
   if (typeof node === 'string' || typeof node === 'number') return String(node);
@@ -247,6 +249,7 @@ describe('CurrentWorkTargetPanel', () => {
   it('copies only the existing content CLI commands and raw asset id', () => {
     const copied: string[] = [];
     const panel = CurrentWorkTargetPanel({
+      cli,
       loading: false,
       onCopy: async text => { copied.push(text); },
       onRefresh: () => undefined,
@@ -262,17 +265,18 @@ describe('CurrentWorkTargetPanel', () => {
     clickButton(panel, 'Copy next');
     clickButton(panel, 'Copy asset ID');
 
-    expect(copied).toContain('npx lineage agent selected --project demo-project');
+    expect(copied).toContain("lineage-stable agent selected --project 'demo-project' --profile '/tmp/stable/profile.json' --json");
     expect(copied).toContain(
-      'npx lineage agent work on the selected target for demo-project --project demo-project'
+      "lineage-stable agent \"work on the selected target for demo-project\" --project 'demo-project' --profile '/tmp/stable/profile.json' --json"
     );
-    expect(copied).toContain('npx lineage agent next --project demo-project');
+    expect(copied).toContain("lineage-stable agent next --project 'demo-project' --profile '/tmp/stable/profile.json' --json");
     expect(copied).toContain('asset-1');
   });
 
   it('renders current asset selections from the SQLite ledger handoff state', () => {
     const copied: string[] = [];
     const panel = CurrentWorkTargetPanel({
+      cli,
       loading: false,
       onCopy: async text => { copied.push(text); },
       onRefresh: () => undefined,
@@ -289,7 +293,7 @@ describe('CurrentWorkTargetPanel', () => {
     expect(text).toContain('B:asset-1');
     expect(text).toContain('D:asset-2');
     clickButton(panel, 'Copy selections');
-    expect(copied).toContain('npx lineage agent selections --project demo-project');
+    expect(copied).toContain("lineage-stable agent selections --project 'demo-project' --profile '/tmp/stable/profile.json' --json");
   });
 
   it('shows compact claim occupancy for content target, queue, and selection scopes without tokens', () => {

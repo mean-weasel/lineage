@@ -1,6 +1,7 @@
 import type { LineageBriefResponse, LineageNode } from '../../shared/types';
 import { api } from '../api';
 import { copyToClipboard } from '../clipboard';
+import { lineageCliCommand, type LineageCliIdentity } from '../lineageRuntimeCommand';
 
 interface AgentClaimCreateResponse {
   claim: {
@@ -13,6 +14,7 @@ interface AgentClaimCreateResponse {
 
 export function LineageHandoffPanel({
   brief,
+  cli = null,
   nextBase,
   onRefreshBrief,
   onToast,
@@ -21,6 +23,7 @@ export function LineageHandoffPanel({
   rootAssetId,
 }: {
   brief: LineageBriefResponse | null;
+  cli?: LineageCliIdentity | null;
   nextBase?: LineageNode;
   onRefreshBrief: () => void;
   onToast: (type: 'ok' | 'error', message: string) => void;
@@ -28,8 +31,10 @@ export function LineageHandoffPanel({
   rerollTargets?: LineageNode[];
   rootAssetId: string;
 }) {
-  const nextCommand = brief?.handoff?.next_command || `npx @mean-weasel/lineage next --project ${project} --root ${rootAssetId} --json`;
-  const rerollCommand = `npx @mean-weasel/lineage reroll list --project ${project} --root ${rootAssetId} --json`;
+  const nextCommand = brief?.handoff?.next_command || lineageCliCommand(cli, `next --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)}`);
+  const rerollCommand = brief?.handoff?.next_command
+    ? `${cliLauncherFromCommand(brief.handoff.next_command)} reroll list --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)}${runtimeFlagFromCommand(brief.handoff.next_command)} --json`
+    : lineageCliCommand(cli, `reroll list --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)}`);
   const nextBaseLabel = nextBase ? `${nextBase.title} (${nextBase.asset_id})` : 'No asset chosen; CLI will report candidates or fallback.';
   const baseItems = [
     { label: 'next command', text: nextCommand },
@@ -162,7 +167,8 @@ function runtimeFlagFromCommand(command: string): string {
 
 function cliLauncherFromCommand(command: string): string {
   const marker = /\s(?:next|inspect|link-child)\s/.exec(command);
-  return marker ? command.slice(0, marker.index) : 'npx @mean-weasel/lineage';
+  if (!marker) throw new Error('Verified Lineage launcher missing from handoff command');
+  return command.slice(0, marker.index);
 }
 
 function withClaimToken(command: string): string {

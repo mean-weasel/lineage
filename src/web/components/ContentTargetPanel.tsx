@@ -1,31 +1,33 @@
 import { Clipboard, Flag, ShieldCheck, X } from 'lucide-react';
 import type { AgentClaimSummary, ContentTargetSnapshot } from '../../shared/types';
 import { api } from '../api';
+import { lineageCliCommand, type LineageCliIdentity } from '../lineageRuntimeCommand';
 
 type ClaimControlAction = 'release-stale' | 'revoke' | 'transfer';
 
-function agentSelectedCommand(project: string): string {
-  return `npx lineage agent selected --project ${project}`;
+function agentSelectedCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent selected --project '${project}'`);
 }
 
-function agentSelectedPromptCommand(project: string): string {
-  return `npx lineage agent work on the selected target for ${project} --project ${project}`;
+function agentSelectedPromptCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent "work on the selected target for ${project}" --project '${project}'`);
 }
 
 interface ContentTargetPanelProps {
   agentClaims?: AgentClaimSummary[];
+  cli?: LineageCliIdentity | null;
   onClear: () => Promise<void>;
   onCopy: (text: string, label: string) => Promise<void>;
   pending: boolean;
   target: ContentTargetSnapshot | null;
 }
 
-export function ContentTargetPanel({ agentClaims = [], onClear, onCopy, pending, target }: ContentTargetPanelProps) {
+export function ContentTargetPanel({ agentClaims = [], cli = null, onClear, onCopy, pending, target }: ContentTargetPanelProps) {
   const selected = target?.target;
   const handoff = selected?.handoff || target?.handoff;
   const project = target?.project || selected?.post.project || '';
-  const selectedAgentCommand = project ? agentSelectedCommand(project) : '';
-  const selectedPromptCommand = project ? agentSelectedPromptCommand(project) : '';
+  const selectedAgentCommand = project ? agentSelectedCommand(cli, project) : '';
+  const selectedPromptCommand = project ? agentSelectedPromptCommand(cli, project) : '';
   const selectedClaims = selected ? claimsForContentPost(agentClaims, selected.post.project, selected.post.id, selected.post.channel) : [];
   return (
     <section className={`target-panel ${selected ? 'has-target' : 'empty-target'}`}>
@@ -76,7 +78,7 @@ export function ContentTargetPanel({ agentClaims = [], onClear, onCopy, pending,
       ) : (
         <div className="target-empty">
           <p>Choose Set next on a post so agents can inspect the same SQLite target from the CLI.</p>
-          {project && <code className="agent-command">{agentSelectedCommand(project)}</code>}
+          {project && <code className="agent-command">{agentSelectedCommand(cli, project)}</code>}
         </div>
       )}
     </section>

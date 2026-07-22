@@ -115,7 +115,7 @@ describe('content batch ledger', () => {
     expect(detail.posts[0]).toMatchObject({
       assets: [{ asset_id: 'demo-tiktok-upload-demo-export-vertical', role: 'primary' }],
       handoff: {
-        attachAssetTemplate: expect.stringContaining('--post-id tiktok-upload-clean'),
+        attachAssetTemplate: expect.stringContaining("--post-id 'tiktok-upload-clean'"),
         setTargetTemplate: expect.stringContaining('content target set'),
       },
       phase: 'draft',
@@ -245,7 +245,7 @@ describe('content batch ledger', () => {
       post: { id: 'tiktok-upload-clean' },
       readiness: 'draft_ready',
     });
-    expect(inspected.target?.handoff.attachAssetTemplate).toContain('--post-id tiktok-upload-clean');
+    expect(inspected.target?.handoff.attachAssetTemplate).toContain("--post-id 'tiktok-upload-clean'");
     expect(inspected.target?.handoff.moveToReviewCommand).toContain('--phase review');
     expect(inspected.target?.handoff.agentPrompt).toContain('Upload, demo, export');
   });

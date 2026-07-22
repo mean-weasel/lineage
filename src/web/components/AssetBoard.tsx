@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AssetLibrarySnapshot, AssetLookupSnapshot, AssetSelectionSnapshot, GrowthAsset } from '../../shared/types';
 import { formatDate } from '../../shared/format';
 import { api } from '../api';
+import { lineageCliCommand, useLineageCli } from '../lineageRuntimeCommand';
 import { AssetRow } from './AssetRow';
 import { SelectionLedgerPanel } from './SelectionLedgerPanel';
 import { assetBoardContext } from './assetBoardContext';
@@ -25,6 +26,7 @@ export function AssetBoard(props: {
   source: 'local' | 'catalog' | 'all';
   totals: { orphan: number };
 }) {
+  const cli = useLineageCli();
   const { snapshot } = props;
   const [selection, setSelection] = useState<AssetSelectionSnapshot | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -143,7 +145,7 @@ export function AssetBoard(props: {
   }
 
   function continueFromNextContext() {
-    void props.onCopy?.(`npx lineage agent "keep working on my selections" --project ${props.project} --json`, 'next context command');
+    void props.onCopy?.(lineageCliCommand(cli, `agent "keep working on my selections" --project '${props.project}'`), 'next context command');
   }
 
   useEffect(() => {
@@ -199,6 +201,7 @@ export function AssetBoard(props: {
       <SelectionLedgerPanel
         assets={props.assets}
         candidateAssets={candidateAssets}
+        cli={cli}
         inspectedReviewSetId={inspectedReviewSetId}
         error={selectionError}
         loading={selectionLoading}

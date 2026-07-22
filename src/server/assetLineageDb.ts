@@ -1,11 +1,10 @@
-import { createRequire } from 'node:module';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { packageRoot } from './assetCore';
 import { assertProfileWriterLeaseHeld, assertSelectedProfileDatabaseIdentity } from './profileWriterLease';
+import { loadNodeSqlite } from './nodeSqlite';
 
-const require = createRequire(import.meta.url);
 export type DatabaseSync = DatabaseSyncType;
 
 export function nowIso(): string {
@@ -23,7 +22,7 @@ export function lineageDb(): DatabaseSync {
     throw new Error(`Refusing writable open of missing profile database ${lineageDbPath()}; bind an existing database or create a non-production clone first`);
   }
   if (!readOnly) mkdirSync(join(lineageDbPath(), '..'), { recursive: true });
-  const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+  const { DatabaseSync } = loadNodeSqlite();
   const database = readOnly ? new DatabaseSync(lineageDbPath(), { readOnly: true }) : new DatabaseSync(lineageDbPath());
   if (process.env.LINEAGE_PROFILE) assertSelectedProfileDatabaseIdentity(database);
   database.exec('PRAGMA foreign_keys = ON');

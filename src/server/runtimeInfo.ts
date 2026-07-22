@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
 import { repoRoot } from './assetCore';
 import { runtimeProfileIdentity } from './lineageProfiles';
+import { loadNodeSqlite } from './nodeSqlite';
+import { lineageCliLauncher, lineageRuntimeSelector } from './lineageRuntimeCommand';
 import {
   lineageRuntimeBuildSchemaVersion,
   lineageRuntimeInstallSchemaVersion,
@@ -17,7 +18,6 @@ import {
   type LineageRuntimeInstallReceipt,
 } from '../shared/runtimeInfoTypes';
 
-const require = createRequire(import.meta.url);
 const processStartedAt = new Date().toISOString();
 
 function isLineagePackageRoot(root: string): boolean {
@@ -313,7 +313,7 @@ export function getLineageRuntimeInfo(options: { channel?: string; code?: Lineag
       const stat = statSync(dbPath);
       databaseInfo.modified_at = stat.mtime.toISOString();
       databaseInfo.size_bytes = stat.size;
-      const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+      const { DatabaseSync } = loadNodeSqlite();
       const database = new DatabaseSync(dbPath, { readOnly: true });
       try {
         databaseInfo.projects = tableCount(database, 'projects');
@@ -344,6 +344,10 @@ export function getLineageRuntimeInfo(options: { channel?: string; code?: Lineag
   return {
     asset_root: repoRoot,
     channel,
+    cli: {
+      launcher: lineageCliLauncher(channel),
+      runtime_selector: lineageRuntimeSelector(dbPath),
+    },
     code,
     database: databaseInfo,
     fetchedAt: nowIso(),

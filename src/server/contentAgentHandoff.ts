@@ -4,6 +4,7 @@ import { getAssetSelectionSnapshot } from './assetSelections';
 import { getAssetSelectionWorkPacket } from './assetSelectionWorkPacket';
 import { getLineageNextAsset } from './assetLineage';
 import { listLineageWorkspaces } from './assetLineageWorkspaces';
+import { lineageCliCommand, shellQuote } from './lineageRuntimeCommand';
 import type { ContentAgentHandoff, ContentAgentHandoffNextAction, ContentAgentHandoffTarget, ContentOpsQueueItem, ContentOpsQueueLaneId, ContentPost, ContentPostReadiness, ContentTargetSnapshot } from '../shared/types';
 
 const schemaVersion = 'lineage.agent_handoff.v1' as const;
@@ -12,10 +13,6 @@ const defaultDoNotModify = [
   'unrelated projects',
   'posted or archived content unless explicitly requested',
 ];
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
 
 function targetFor(post: ContentPost, readiness: ContentPostReadiness, isSelectedTarget: boolean): ContentAgentHandoffTarget {
   return {
@@ -194,11 +191,11 @@ export function getAssetSelectionAgentHandoff(project: string): ContentAgentHand
         tool: 'lineage_cli',
       },
       commands: {
-        currentSelectionCommand: `npx lineage selections current --project ${quotedProject} --json`,
+        currentSelectionCommand: lineageCliCommand(`selections current --project ${quotedProject}`),
         ...(activeReviewSet ? {
-          reviewSetInspectCommand: `npx lineage selections review-set inspect --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)} --json`,
-          reviewSetSetNextCommand: `npx lineage selections review-set set-next --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)} --json`,
-          workPacketCommand: `npx lineage selections review-set packet --project ${quotedProject} --json`,
+          reviewSetInspectCommand: lineageCliCommand(`selections review-set inspect --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)}`),
+          reviewSetSetNextCommand: lineageCliCommand(`selections review-set set-next --project ${quotedProject} --set-id ${shellQuote(activeReviewSet.id)}`),
+          workPacketCommand: lineageCliCommand(`selections review-set packet --project ${quotedProject}`),
         } : {}),
       },
       instructions: selectedAssets.length > 0
@@ -278,12 +275,12 @@ export function getLineageWorkspaceAgentHandoff(project: string): ContentAgentHa
         tool: 'lineage_cli',
       },
       commands: {
-        workspaceListCommand: `npx @mean-weasel/lineage workspace list --project ${quotedProject} --json`,
-        workspaceInspectCommand: `npx @mean-weasel/lineage workspace inspect --project ${quotedProject} --workspace ${quotedWorkspace} --json`,
-        workspaceActivateCommand: `npx @mean-weasel/lineage workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write --json`,
-        lineageNextCommand: `npx @mean-weasel/lineage next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        lineageBriefCommand: `npx @mean-weasel/lineage brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --json`,
-        linkChildCommand: nextAssets.length > 0 ? `npx @mean-weasel/lineage link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --summary "<one-or-two-words>" --confirm-write --json` : '',
+        workspaceListCommand: lineageCliCommand(`workspace list --project ${quotedProject}`),
+        workspaceInspectCommand: lineageCliCommand(`workspace inspect --project ${quotedProject} --workspace ${quotedWorkspace}`),
+        workspaceActivateCommand: lineageCliCommand(`workspace activate --project ${quotedProject} --workspace ${quotedWorkspace} --confirm-write`),
+        lineageNextCommand: lineageCliCommand(`next --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)}`),
+        lineageBriefCommand: lineageCliCommand(`brief --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)}`),
+        linkChildCommand: nextAssets.length > 0 ? lineageCliCommand(`link-child --project ${quotedProject} --root ${shellQuote(workspace.root_asset_id)} --child <asset-id> --summary "<one-or-two-words>" --confirm-write`) : '',
       },
       instructions: safeToStart
         ? 'Continue this lineage workspace from the selected next variation base or bases. Generate local variations, index them, and link chosen children back to the workspace root with a one- or two-word edge summary before any S3 backup or external posting.'

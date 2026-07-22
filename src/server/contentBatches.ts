@@ -14,6 +14,7 @@ import type {
   ContentPostPhase,
   ContentPostUpdateFields,
 } from '../shared/types';
+import { lineageCliCommand, shellQuote } from './lineageRuntimeCommand';
 
 const phases = new Set<ContentPostPhase>(['draft', 'review', 'scheduled', 'posted', 'skipped', 'archived']);
 
@@ -121,12 +122,13 @@ function phaseCounts(posts: ContentPost[]): Record<ContentPostPhase, number> {
 }
 
 function handoff(project: string, batchId: string): ContentBatchDetail['handoff'] {
-  const prefix = `npx lineage content`;
+  const quotedProject = shellQuote(project);
+  const quotedBatch = shellQuote(batchId);
   return {
-    inspectCommand: `${prefix} batch inspect --project ${project} --batch-id ${batchId} --json`,
-    createPostTemplate: `${prefix} post create --project ${project} --batch-id ${batchId} --post-id <post-id> --channel <channel> --title <title> --confirm-write --json`,
-    attachAssetTemplate: `${prefix} post attach-asset --project ${project} --post-id <post-id> --asset-id <asset-id> --role primary --confirm-write --json`,
-    phaseTemplate: `${prefix} post phase --project ${project} --post-id <post-id> --phase scheduled --scheduled-at <iso> --confirm-write --json`,
+    inspectCommand: lineageCliCommand(`content batch inspect --project ${quotedProject} --batch-id ${quotedBatch}`),
+    createPostTemplate: lineageCliCommand(`content post create --project ${quotedProject} --batch-id ${quotedBatch} --post-id <post-id> --channel <channel> --title <title> --confirm-write`),
+    attachAssetTemplate: lineageCliCommand(`content post attach-asset --project ${quotedProject} --post-id <post-id> --asset-id <asset-id> --role primary --confirm-write`),
+    phaseTemplate: lineageCliCommand(`content post phase --project ${quotedProject} --post-id <post-id> --phase scheduled --scheduled-at <iso> --confirm-write`),
   };
 }
 
