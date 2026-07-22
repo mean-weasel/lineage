@@ -23,6 +23,7 @@ import { UploadDrawer } from './components/UploadDrawer';
 import { canPreview, defaultProject, selectedOrFirst, type PlacementFilter, type SourceFilter, type StudioView, type StatusFilter, type Toast } from './assetUi';
 import { copyToClipboard } from './clipboard';
 import { shouldRevealCopiedText } from './copyFallback';
+import { LineageCliProvider } from './lineageRuntimeCommand';
 
 function initialProjectFromUrl(): string {
   if (typeof window === 'undefined') return defaultProject;
@@ -306,6 +307,7 @@ export function App() {
   }, [selectedAssetId]);
 
   return (
+    <LineageCliProvider runtime={runtime}>
     <div className={`app-shell ${view === 'lineage' ? 'lineage-mode' : ''}`}>
       <Sidebar channel={channel} channels={channels} liveSync={liveSync} placementStatus={placementStatus} project={project} projects={projects} setChannel={setChannel} setPlacementStatus={setPlacementStatus} setProject={setProject} setSource={setSource} setStatus={setStatus} setView={setView} showBackupQueue={showBackupQueue} source={source} snapshot={projectSnapshot} status={status} totals={totals} />
       <main className="workspace">
@@ -371,6 +373,7 @@ export function App() {
         ) : view === 'backup' ? (
           <LocalBackupQueue
             assets={assets}
+            cli={runtime?.cli}
             onCopy={copyText}
             onLocalReview={async (asset, reviewState) => {
               await mutate(() => postMutation(`/api/local-review/${asset.asset_id}`, project, { reviewState, confirmWrite: true }));
@@ -468,5 +471,6 @@ export function App() {
         }} />
       )}
     </div>
+    </LineageCliProvider>
   );
 }

@@ -1,19 +1,21 @@
 import { Clipboard, Crosshair, Database, HardDrive, Search } from 'lucide-react';
 import type { ContentOpsQueueItem, ContentOpsQueueLane, ContentOpsQueueSnapshot, ContentPost } from '../../shared/types';
+import { lineageCliCommand, type LineageCliIdentity } from '../lineageRuntimeCommand';
 
-function agentNextCommand(project: string): string {
-  return `npx lineage agent next --project ${project}`;
+function agentNextCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent next --project '${project}'`);
 }
 
 interface ContentOpsQueuePanelProps {
+  cli?: LineageCliIdentity | null;
   onCopy: (text: string, label: string) => Promise<void>;
   onFocusPost: (post: ContentPost) => Promise<void>;
   queue: ContentOpsQueueSnapshot | null;
 }
 
-export function ContentOpsQueuePanel({ onCopy, onFocusPost, queue }: ContentOpsQueuePanelProps) {
+export function ContentOpsQueuePanel({ cli = null, onCopy, onFocusPost, queue }: ContentOpsQueuePanelProps) {
   if (!queue) return null;
-  const nextAgentCommand = agentNextCommand(queue.project);
+  const nextAgentCommand = agentNextCommand(cli, queue.project);
   return (
     <section className="content-queue">
       <header>
@@ -43,7 +45,7 @@ export function ContentOpsQueuePanel({ onCopy, onFocusPost, queue }: ContentOpsQ
           </div>
           <div className="queue-item-actions">
             <button aria-label={`Focus next action ${queue.next_action.post.id}`} onClick={() => void onFocusPost(queue.next_action!.post)} type="button"><Search size={14} />Focus</button>
-            <button aria-label={`Copy next action ${queue.next_action.post.id} handoff`} onClick={() => void onCopy(handoffText(queue.next_action!), 'content queue next action handoff')} type="button"><Clipboard size={14} />Copy</button>
+            <button aria-label={`Copy next action ${queue.next_action.post.id} handoff`} onClick={() => void onCopy(handoffText(queue.next_action!, cli), 'content queue next action handoff')} type="button"><Clipboard size={14} />Copy</button>
           </div>
         </div>
       )}
@@ -55,13 +57,13 @@ export function ContentOpsQueuePanel({ onCopy, onFocusPost, queue }: ContentOpsQ
               {lane.items.length > 0 && (
                 <div className="queue-lane-actions">
                   <button aria-label={`Focus ${lane.label} lane`} onClick={() => void onFocusPost(lane.items[0].post)} type="button"><Search size={13} />Focus first</button>
-                  <button aria-label={`Copy ${lane.label} lane handoff`} onClick={() => void onCopy(laneHandoffText(lane, queue.handoff.inspectQueueCommand), 'content queue lane handoff')} type="button"><Clipboard size={13} />Copy lane</button>
+                  <button aria-label={`Copy ${lane.label} lane handoff`} onClick={() => void onCopy(laneHandoffText(lane, queue.handoff.inspectQueueCommand, cli), 'content queue lane handoff')} type="button"><Clipboard size={13} />Copy lane</button>
                 </div>
               )}
             </header>
             <div className="queue-items">
               {lane.items.map(item => (
-                <QueueItemCard item={item} key={`${lane.id}-${item.post.id}`} onCopy={onCopy} onFocusPost={onFocusPost} />
+                <QueueItemCard cli={cli} item={item} key={`${lane.id}-${item.post.id}`} onCopy={onCopy} onFocusPost={onFocusPost} />
               ))}
               {lane.items.length === 0 && <p className="queue-empty">Empty</p>}
             </div>
@@ -72,12 +74,13 @@ export function ContentOpsQueuePanel({ onCopy, onFocusPost, queue }: ContentOpsQ
   );
 }
 
-function QueueItemCard({ item, onCopy, onFocusPost }: {
+function QueueItemCard({ cli, item, onCopy, onFocusPost }: {
+  cli: LineageCliIdentity | null;
   item: ContentOpsQueueItem;
   onCopy: ContentOpsQueuePanelProps['onCopy'];
   onFocusPost: ContentOpsQueuePanelProps['onFocusPost'];
 }) {
-  const handoff = handoffText(item);
+  const handoff = handoffText(item, cli);
   return (
     <div className={item.is_target ? 'queue-item is-target' : 'queue-item'} data-post-id={item.post.id}>
       <div>
@@ -107,7 +110,7 @@ function storageLabel(item: ContentOpsQueueItem): string {
   ].filter(Boolean).join(' · ');
 }
 
-function handoffText(item: ContentOpsQueueItem): string {
+function handoffText(item: ContentOpsQueueItem, cli: LineageCliIdentity | null): string {
   if (!item.handoff) return '';
   return [
     `Content queue item: ${item.post.title}`,
@@ -117,7 +120,7 @@ function handoffText(item: ContentOpsQueueItem): string {
     item.backup_cue ? `Backup cue: ${item.backup_cue.label}` : '',
     '',
     item.handoff.agentPrompt,
-    agentNextCommand(item.post.project),
+    agentNextCommand(cli, item.post.project),
     item.handoff.inspectBatchCommand,
     item.backup_cue?.local_queue_command,
     item.backup_cue?.local_review_command,
@@ -130,7 +133,7 @@ function handoffText(item: ContentOpsQueueItem): string {
   ].filter(Boolean).join('\n');
 }
 
-function laneHandoffText(lane: ContentOpsQueueLane, inspectQueueCommand: string): string {
+function laneHandoffText(lane: ContentOpsQueueLane, inspectQueueCommand: string, cli: LineageCliIdentity | null): string {
   const first = lane.items[0];
   return [
     `Content queue lane: ${lane.label}`,
@@ -141,7 +144,7 @@ function laneHandoffText(lane: ContentOpsQueueLane, inspectQueueCommand: string)
     lane.total > 6 ? `- ${lane.total - 6} more item${lane.total - 6 === 1 ? '' : 's'}` : '',
     '',
     first?.handoff?.agentPrompt,
-    first ? agentNextCommand(first.post.project) : '',
+    first ? agentNextCommand(cli, first.post.project) : '',
     inspectQueueCommand,
     first?.handoff?.inspectBatchCommand,
     first?.backup_cue?.local_queue_command,

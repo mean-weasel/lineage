@@ -3,6 +3,8 @@ import type { ReactElement, ReactNode } from 'react';
 import type { AssetSelectionSnapshot, GrowthAsset } from '../../shared/types';
 import { SelectionLedgerPanel } from './SelectionLedgerPanel';
 
+const cli = { launcher: 'lineage-stable', runtime_selector: "--profile '/tmp/stable/profile.json'" } as const;
+
 function flattenText(node: ReactNode): string {
   if (!node || typeof node === 'boolean') return '';
   if (typeof node === 'string' || typeof node === 'number') return String(node);
@@ -148,6 +150,7 @@ function reviewItem(label: string, assetId: string, position: number, selected =
 describe('SelectionLedgerPanel', () => {
   it('renders active review set candidates and selected labels', () => {
     const panel = SelectionLedgerPanel({
+      cli,
       assets,
       candidateAssets,
       error: null,

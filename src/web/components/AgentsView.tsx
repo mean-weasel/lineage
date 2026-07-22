@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AgentClaimsResponse, AgentClaimSummary } from '../../shared/types';
 import type { StudioView } from '../assetUi';
 import { api } from '../api';
+import { lineageCliCommand, useLineageCli, type LineageCliIdentity } from '../lineageRuntimeCommand';
 import './AgentsView.css';
 
 type StatusFilter = 'open' | 'attention' | 'closed' | 'all';
@@ -18,6 +19,7 @@ export function AgentsView({
   onOpenWork: (target: AgentWorkTarget) => void;
   project: string;
 }) {
+  const cli = useLineageCli();
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +80,7 @@ export function AgentsView({
             </select>
           </div>
           <ClaimGroup
+            cli={cli}
             claims={filteredClaims}
             empty="No claims match these filters."
             onCopy={onCopy}
@@ -91,12 +94,14 @@ export function AgentsView({
 }
 
 function ClaimGroup({
+  cli,
   claims,
   empty,
   onCopy,
   onOpenWork,
   title,
 }: {
+  cli: LineageCliIdentity | null;
   claims: AgentClaimSummary[];
   empty: string;
   onCopy: (text: string, label: string) => Promise<void>;
@@ -110,6 +115,7 @@ function ClaimGroup({
         <div className="agents-list">
           {claims.map(claim => (
             <ClaimRow
+              cli={cli}
               claim={claim}
               key={claim.id}
               onCopy={onCopy}
@@ -123,10 +129,12 @@ function ClaimGroup({
 }
 
 function ClaimRow({
+  cli,
   claim,
   onCopy,
   onOpenWork,
 }: {
+  cli: LineageCliIdentity | null;
   claim: AgentClaimSummary;
   onCopy: (text: string, label: string) => Promise<void>;
   onOpenWork: (target: AgentWorkTarget) => void;
@@ -180,7 +188,7 @@ function ClaimRow({
           className="secondary-button agent-row-copy-briefing"
           onClick={event => {
             event.stopPropagation();
-            void onCopy(agentBriefingText(claim), 'agent briefing');
+            void onCopy(agentBriefingText(claim, cli), 'agent briefing');
           }}
           type="button"
         >
@@ -203,7 +211,7 @@ function lineageRootFromTarget(targetId: string): string | undefined {
   return index >= 0 ? targetId.slice(index + marker.length) : undefined;
 }
 
-function agentBriefingText(claim: AgentClaimSummary): string {
+function agentBriefingText(claim: AgentClaimSummary, cli: LineageCliIdentity | null): string {
   const rootAssetId = lineageRootFromTarget(claim.target_id);
   return [
     `Agent briefing: ${claim.agent_name}`,
@@ -214,8 +222,8 @@ function agentBriefingText(claim: AgentClaimSummary): string {
     `Channel: ${claim.channel || 'all'}`,
     `Status: ${claim.status} / ${claim.derived_state}`,
     rootAssetId ? `Lineage root: ${rootAssetId}` : undefined,
-    rootAssetId ? `Inspect graph: npx @mean-weasel/lineage next --project ${claim.project} --root ${rootAssetId} --json` : undefined,
-    rootAssetId ? `Brief graph: npx @mean-weasel/lineage brief --project ${claim.project} --root ${rootAssetId} --json` : undefined,
+    rootAssetId ? `Inspect graph: ${lineageCliCommand(cli, `next --project '${claim.project}' --root '${rootAssetId}'`)}` : undefined,
+    rootAssetId ? `Brief graph: ${lineageCliCommand(cli, `brief --project '${claim.project}' --root '${rootAssetId}'`)}` : undefined,
   ].filter((line): line is string => Boolean(line)).join('\n');
 }
 

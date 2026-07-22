@@ -101,7 +101,7 @@ describe('content agent handoff', () => {
     });
     expect(handoff.context.selected_target).toMatchObject({ id: 'selected-ready-post', is_selected_target: true });
     expect(handoff.messages[0]).toMatchObject({ level: 'info' });
-    expect(handoff.next_action?.commands.attachAssetTemplate).toContain('--post-id needs-asset-post');
+    expect(handoff.next_action?.commands.attachAssetTemplate).toContain("--post-id 'needs-asset-post'");
   });
 
   it('wraps selected target without using queue-next semantics', () => {
@@ -239,10 +239,14 @@ describe('content agent handoff', () => {
       args: { project: defaultProject, 'set-id': setId },
       command: 'selections review-set inspect',
     });
-    expect(commands.currentSelectionCommand).toBe(`npx lineage selections current --project ${shellQuote(defaultProject)} --json`);
-    expect(commands.reviewSetInspectCommand).toBe(`npx lineage selections review-set inspect --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)} --json`);
-    expect(commands.reviewSetSetNextCommand).toBe(`npx lineage selections review-set set-next --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)} --json`);
-    expect(commands.workPacketCommand).toBe(`npx lineage selections review-set packet --project ${shellQuote(defaultProject)} --json`);
+    expect(commands.currentSelectionCommand).toContain(`selections current --project ${shellQuote(defaultProject)}`);
+    expect(commands.reviewSetInspectCommand).toContain(`selections review-set inspect --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)}`);
+    expect(commands.reviewSetSetNextCommand).toContain(`selections review-set set-next --project ${shellQuote(defaultProject)} --set-id ${shellQuote(setId)}`);
+    expect(commands.workPacketCommand).toContain(`selections review-set packet --project ${shellQuote(defaultProject)}`);
+    for (const command of Object.values(commands)) {
+      expect(command).toContain(`--profile ${shellQuote(process.env.LINEAGE_PROFILE_MANIFEST!)}`);
+      expect(command).not.toContain('npx lineage');
+    }
   });
 
   it('wraps the active lineage workspace for agent continuation', () => {
@@ -275,7 +279,7 @@ describe('content agent handoff', () => {
       },
     });
     const commands = handoff.next_action?.commands as Record<string, string>;
-    expect(commands.workspaceInspectCommand).toContain('lineage workspace inspect');
+    expect(commands.workspaceInspectCommand).toContain('workspace inspect');
     expect(commands.lineageBriefCommand).toContain(`--root ${shellQuote(rootId)}`);
     expect(commands.linkChildCommand).toContain('--summary "<one-or-two-words>"');
     expect(handoff.next_action?.instructions).toContain('one- or two-word edge summary');

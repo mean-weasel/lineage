@@ -55,9 +55,9 @@ const brief = {
   },
   fetchedAt: '2026-06-27T00:00:00.000Z',
   handoff: {
-    inspect_command: 'npx @mean-weasel/lineage inspect --project demo-project --asset-id local-selected-base --db /tmp/lineage.sqlite --json',
-    link_child_command: 'npx @mean-weasel/lineage link-child --project demo-project --root local-root --child <asset-id> --confirm-write --db /tmp/lineage.sqlite --json',
-    next_command: 'npx @mean-weasel/lineage next --project demo-project --root local-root --db /tmp/lineage.sqlite --json',
+    inspect_command: "lineage-stable inspect --project demo-project --asset-id local-selected-base --profile '/tmp/stable/profile.json' --json",
+    link_child_command: "lineage-stable link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile '/tmp/stable/profile.json' --json",
+    next_command: "lineage-stable next --project demo-project --root local-root --profile '/tmp/stable/profile.json' --json",
   },
   latest: ['local-selected-base'],
   next_asset: nextBase,
@@ -102,7 +102,7 @@ describe('LineageHandoffPanel', () => {
 
     expect(text).toContain('Agent will evolve');
     expect(text).toContain('Chosen asset (local-selected-base)');
-    expect(text).toContain('npx @mean-weasel/lineage next --project demo-project --root local-root --db /tmp/lineage.sqlite --json');
+    expect(text).toContain("lineage-stable next --project demo-project --root local-root --profile '/tmp/stable/profile.json' --json");
     expect(text).toContain('Generated brief');
     expect(text).toContain('Keep working from Chosen asset.');
   });
@@ -110,6 +110,7 @@ describe('LineageHandoffPanel', () => {
   it('warns when the chosen asset branches from an older lineage node', () => {
     const panel = LineageHandoffPanel({
       brief: null,
+      cli: { launcher: 'lineage-stable', runtime_selector: "--profile '/tmp/stable/profile.json'" },
       nextBase: branchBase,
       onRefreshBrief: () => undefined,
       onToast: () => undefined,
@@ -139,6 +140,7 @@ describe('LineageHandoffPanel', () => {
     } satisfies LineageNode;
     const panel = LineageHandoffPanel({
       brief: null,
+      cli: { launcher: 'lineage-stable', runtime_selector: "--profile '/tmp/stable/profile.json'" },
       nextBase,
       onRefreshBrief: () => undefined,
       onToast: () => undefined,
@@ -149,7 +151,7 @@ describe('LineageHandoffPanel', () => {
 
     const text = flattenText(panel);
     expect(text).toContain('Re-roll queue');
-    expect(text).toContain('npx @mean-weasel/lineage reroll list --project demo-project --root local-root --json');
+    expect(text).toContain("lineage-stable reroll list --project 'demo-project' --root 'local-root' --profile '/tmp/stable/profile.json' --json");
     expect(text).toContain('do not link them as lineage children');
     await clickButton(panel, 'Copy queue');
     expect(copied[0]).toContain('Do not use link-child for re-roll outputs.');
@@ -176,9 +178,9 @@ describe('LineageHandoffPanel', () => {
     const profileBrief = {
       ...brief,
       handoff: {
-        inspect_command: "npx --package @mean-weasel/lineage lineage-dev inspect --project demo-project --asset-id local-selected-base --profile '/tmp/dev profile/profile.json' --json",
-        link_child_command: "npx --package @mean-weasel/lineage lineage-dev link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile '/tmp/dev profile/profile.json' --json",
-        next_command: "npx --package @mean-weasel/lineage lineage-dev next --project demo-project --root local-root --profile '/tmp/dev profile/profile.json' --json",
+        inspect_command: "lineage-preview inspect --project demo-project --asset-id local-selected-base --profile '/tmp/dev profile/profile.json' --json",
+        link_child_command: "lineage-preview link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile '/tmp/dev profile/profile.json' --json",
+        next_command: "lineage-preview next --project demo-project --root local-root --profile '/tmp/dev profile/profile.json' --json",
       },
     } satisfies LineageBriefResponse;
     const panel = LineageHandoffPanel({
@@ -207,8 +209,8 @@ describe('LineageHandoffPanel', () => {
     }));
     expect(copied).toHaveLength(1);
     expect(copied[0]).toContain("export LINEAGE_CLAIM_TOKEN='claim_test.secret_123'");
-    expect(copied[0]).toContain('npx --package @mean-weasel/lineage lineage-dev agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --profile \'/tmp/dev profile/profile.json\' --json');
-    expect(copied[0]).toContain('npx --package @mean-weasel/lineage lineage-dev link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile \'/tmp/dev profile/profile.json\' --claim-token "$LINEAGE_CLAIM_TOKEN" --json');
+    expect(copied[0]).toContain('lineage-preview agent heartbeat --claim-token "$LINEAGE_CLAIM_TOKEN" --profile \'/tmp/dev profile/profile.json\' --json');
+    expect(copied[0]).toContain('lineage-preview link-child --project demo-project --root local-root --child <asset-id> --confirm-write --profile \'/tmp/dev profile/profile.json\' --claim-token "$LINEAGE_CLAIM_TOKEN" --json');
     expect(toasts).toContain('Copied claim-aware handoff for claim_test');
   });
 });

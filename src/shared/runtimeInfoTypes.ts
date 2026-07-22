@@ -74,6 +74,10 @@ export interface LineageRuntimeCodeIdentity {
 export interface LineageRuntimeInfo {
   asset_root: string;
   channel: LineageRuntimeChannel;
+  cli: {
+    launcher: string;
+    runtime_selector: string;
+  };
   code?: LineageRuntimeCodeIdentity;
   database: LineageRuntimeDatabaseInfo;
   fetchedAt: string;

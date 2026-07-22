@@ -4,14 +4,14 @@ import { AgentClaimError, validateAgentClaimForWrite } from './agentClaims';
 import { getLineageNextAsset, getLineageWriteClaimContext, LineageError, linkLineageAssets, listLineageRerollRequests } from './assetLineage';
 import { nowIso } from './assetLineageDb';
 import { lineageWorkspaceId } from './assetLineageWorkspaces';
-import { lineagePublicPackageCommand, lineageRuntimeSelector, shellQuote } from './lineageRuntimeCommand';
+import { lineageCliCommand, shellQuote } from './lineageRuntimeCommand';
 
 function lineageCommand(command: string, project: string, rootAssetId: string): string {
-  return `${lineagePublicPackageCommand()} ${command} --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} ${lineageRuntimeSelector()} --json`;
+  return lineageCliCommand(`${command} --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)}`);
 }
 
 function linkChildCommand(project: string, rootAssetId: string): string {
-  return `${lineagePublicPackageCommand()} link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --summary "<one-or-two-words>" --confirm-write ${lineageRuntimeSelector()} --json`;
+  return lineageCliCommand(`link-child --project ${shellQuote(project)} --root ${shellQuote(rootAssetId)} --child <asset-id> --summary "<one-or-two-words>" --confirm-write`);
 }
 
 function rerollImportGuidance(rootAssetId: string, targetAssetId: string): string {
@@ -59,7 +59,7 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
     },
     handoff: {
       next_command: lineageCommand('next', project, next.root_asset_id),
-      inspect_command: asset ? `${lineagePublicPackageCommand()} inspect --project ${shellQuote(project)} --asset-id ${shellQuote(asset.asset_id)} ${lineageRuntimeSelector()} --json` : undefined,
+      inspect_command: asset ? lineageCliCommand(`inspect --project ${shellQuote(project)} --asset-id ${shellQuote(asset.asset_id)}`) : undefined,
       link_child_command: asset ? linkChildCommand(project, next.root_asset_id) : undefined,
     },
     fetchedAt: nowIso(),

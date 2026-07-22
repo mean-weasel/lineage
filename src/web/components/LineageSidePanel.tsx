@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetSt
 import type { AssetReviewState, LineageBriefResponse, LineageNode, LineageSnapshot, LineageTask, LineageTaskMutationResponse } from '../../shared/types';
 import { api } from '../api';
 import { storageStateFor } from '../assetUi';
+import { useLineageCli } from '../lineageRuntimeCommand';
 import { CandidateMeta } from './LineageCandidateMeta';
 import { LineageHandoffPanel } from './LineageHandoffPanel';
 
@@ -38,6 +39,7 @@ interface LineageSidePanelProps {
 }
 
 export function LineageSidePanel(props: LineageSidePanelProps) {
+  const cli = useLineageCli();
   const {
     activeNode, brief, childAssetId, clearNextVariation, closePanel, latestNodes, linkChild, markReview, noteDirty, onSelectedAsset,
     nextVariationLimit, onToast, project, refreshBrief, saveRationale, selectNextBase, selectedNode, selectedNodes, selectionFull,
@@ -140,7 +142,7 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
           );
         }) : <p className="muted-copy">No latest leaves yet.</p>}
       </section>
-      <LineageHandoffPanel brief={brief} nextBase={selectedNode} onRefreshBrief={() => void refreshBrief()} onToast={onToast} project={project} rerollTargets={pendingRerollNodes} rootAssetId={snapshot.root_asset_id} />
+      <LineageHandoffPanel brief={brief} cli={cli} nextBase={selectedNode} onRefreshBrief={() => void refreshBrief()} onToast={onToast} project={project} rerollTargets={pendingRerollNodes} rootAssetId={snapshot.root_asset_id} />
       <h3>Inspecting</h3>
       {activeNode ? (
         <>

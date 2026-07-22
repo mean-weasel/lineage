@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { AssetReviewState, GrowthAsset, ReviewQueueSnapshot, ReviewableAsset } from '../../shared/types';
 import { formatDate } from '../../shared/format';
 import { api } from '../api';
+import { lineageCliCommand, useLineageCli } from '../lineageRuntimeCommand';
 import { assetStorageState, placementSummary } from '../assetUi';
 import { defaultOpenReviewLane } from './reviewQueueModel';
 import './ReviewQueue.css';
@@ -212,12 +213,13 @@ function QueueCard(props: {
   selected: boolean;
   selectedForReview: boolean;
 }) {
+  const cli = useLineageCli();
   const storage = assetStorageState(props.asset);
   const localReviewState = props.asset.local ? reviewState(props.asset) : null;
   const isApprovedLocal = localReviewState === 'approved';
   const inspectCommand = props.asset.source === 'local'
-    ? `npx lineage local inspect --asset-id ${props.asset.asset_id} --json`
-    : `npx lineage inspect --asset-id ${props.asset.asset_id} --json`;
+    ? lineageCliCommand(cli, `local inspect --asset-id '${props.asset.asset_id}'`)
+    : lineageCliCommand(cli, `inspect --asset-id '${props.asset.asset_id}'`);
   return (
     <article
       className={`queue-card ${props.selected ? 'selected' : ''}`}

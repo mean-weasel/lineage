@@ -4,6 +4,8 @@ import type { AgentClaimSummary, ContentOpsQueueSnapshot, ContentTargetSnapshot 
 import { ContentOpsQueuePanel } from './ContentOpsQueuePanel';
 import { ContentTargetPanel } from './ContentTargetPanel';
 
+const cli = { launcher: 'lineage-stable', runtime_selector: "--profile '/tmp/stable/profile.json'" } as const;
+
 function collectButtons(node: ReactNode): ReactElement[] {
   if (!node || typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') return [];
   if (Array.isArray(node)) return node.flatMap(collectButtons);
@@ -137,6 +139,7 @@ describe('content agent commands', () => {
   it('copies the selected target command and free-form prompt from the target panel', () => {
     const copied: string[] = [];
     const panel = ContentTargetPanel({
+      cli,
       onClear: async () => undefined,
       onCopy: async text => { copied.push(text); },
       pending: false,
@@ -146,15 +149,16 @@ describe('content agent commands', () => {
     clickButton(panel, 'Copy selected');
     clickButton(panel, 'Copy prompt');
 
-    expect(copied).toContain('npx lineage agent selected --project demo-project');
+    expect(copied).toContain("lineage-stable agent selected --project 'demo-project' --profile '/tmp/stable/profile.json' --json");
     expect(copied).toContain(
-      'npx lineage agent work on the selected target for demo-project --project demo-project'
+      "lineage-stable agent \"work on the selected target for demo-project\" --project 'demo-project' --profile '/tmp/stable/profile.json' --json"
     );
   });
 
   it('copies the next action command from the queue panel', () => {
     const copied: string[] = [];
     const panel = ContentOpsQueuePanel({
+      cli,
       onCopy: async text => { copied.push(text); },
       onFocusPost: async () => undefined,
       queue: queueSnapshot,
@@ -162,11 +166,12 @@ describe('content agent commands', () => {
 
     clickButton(panel, 'Copy agent next');
 
-    expect(copied).toContain('npx lineage agent next --project demo-project');
+    expect(copied).toContain("lineage-stable agent next --project 'demo-project' --profile '/tmp/stable/profile.json' --json");
   });
 
   it('shows selected content post occupancy without raw claim tokens', () => {
     const panel = ContentTargetPanel({
+      cli,
       agentClaims: targetClaims,
       onClear: async () => undefined,
       onCopy: async () => undefined,
@@ -186,6 +191,7 @@ describe('content agent commands', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('window', { confirm, prompt });
     const panel = ContentTargetPanel({
+      cli,
       agentClaims: staleTargetClaims,
       onClear: async () => undefined,
       onCopy: async () => undefined,

@@ -2,6 +2,7 @@ import { CheckCircle2, Clipboard, UploadCloud } from 'lucide-react';
 import type { AssetLibrarySnapshot, AssetReviewState, GrowthAsset, ReviewableAsset } from '../../shared/types';
 import { formatBytes, formatDate } from '../../shared/format';
 import { assetStorageState } from '../assetUi';
+import { lineageCliCommand, type LineageCliIdentity } from '../lineageRuntimeCommand';
 import './LocalBackupQueue.css';
 
 type LaneKey = 'unreviewed' | 'approved' | 'needs_revision' | 'rejected';
@@ -15,6 +16,7 @@ const lanes: Array<[LaneKey, string]> = [
 
 export function LocalBackupQueue(props: {
   assets: GrowthAsset[];
+  cli?: LineageCliIdentity | null;
   onCopy: (text: string, label: string) => Promise<void>;
   onLocalReview: (asset: ReviewableAsset, reviewState: AssetReviewState) => Promise<void>;
   onOpenBackup: () => void;
@@ -32,7 +34,7 @@ export function LocalBackupQueue(props: {
   const localAssets = props.assets.filter(asset => asset.local?.relative_path && !asset.s3?.key);
   const approved = localAssets.filter(asset => reviewState(asset) === 'approved');
   const selectedCount = props.selectedBackupIds.length;
-  const queueCommand = `npx lineage local queue --project ${props.project} --json`;
+  const queueCommand = lineageCliCommand(props.cli || null, `local queue --project '${props.project}'`);
 
   function selectApproved() {
     for (const asset of approved) props.onQueueBackup(asset);

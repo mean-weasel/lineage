@@ -1,6 +1,7 @@
 import { defaultProject, listAssets } from './assetCore';
 import { getAssetReviewMap } from './assetReviews';
 import type { GrowthAsset, ListAssetsOptions, ReviewQueueLane, ReviewQueueSnapshot, ReviewableAsset } from '../shared/types';
+import { lineageCliCommand, shellQuote } from './lineageRuntimeCommand';
 
 interface QueueOptions {
   channel?: string;
@@ -77,13 +78,13 @@ function laneFor(channel: string, localAssets: ReviewableAsset[], catalogAssets:
 }
 
 function handoff(project: string) {
-  const prefix = `npx @mean-weasel/lineage`;
+  const quotedProject = shellQuote(project);
   return {
-    backupTemplate: `${prefix} local backup --project ${project} --asset-id <local-id> --dry-run --json`,
-    lineageNextTemplate: `${prefix} lineage next --project ${project} --root <root-id> --json`,
-    localListCommand: `${prefix} local list --project ${project} --json`,
-    queueCommand: `${prefix} review queue --project ${project} --json`,
-    scheduleTemplate: `${prefix} placement mark-scheduled --project ${project} --asset-id <asset-id> --channel <channel> --scheduled-at <iso> --dry-run --json`,
+    backupTemplate: lineageCliCommand(`local backup --project ${quotedProject} --asset-id <local-id> --dry-run`),
+    lineageNextTemplate: lineageCliCommand(`lineage next --project ${quotedProject} --root <root-id>`),
+    localListCommand: lineageCliCommand(`local list --project ${quotedProject}`),
+    queueCommand: lineageCliCommand(`review queue --project ${quotedProject}`),
+    scheduleTemplate: lineageCliCommand(`placement mark-scheduled --project ${quotedProject} --asset-id <asset-id> --channel <channel> --scheduled-at <iso> --dry-run`),
   };
 }
 

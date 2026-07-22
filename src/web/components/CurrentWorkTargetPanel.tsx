@@ -3,24 +3,25 @@ import { Bot, ChevronDown, Clipboard, Crosshair, FileSearch, Flag, ListChecks, R
 import type { AgentClaimSummary, AgentClaimsResponse, AssetSelectionSnapshot, ContentOpsQueueSnapshot, ContentTargetSnapshot, GrowthAsset } from '../../shared/types';
 import { api } from '../api';
 import { assetStorageState, type StudioView } from '../assetUi';
+import { lineageCliCommand, useLineageCli, type LineageCliIdentity } from '../lineageRuntimeCommand';
 import './CurrentWorkTargetPanel.css';
 
 type ClaimControlAction = 'release-stale' | 'revoke' | 'transfer';
 
-function agentSelectedCommand(project: string): string {
-  return `npx lineage agent selected --project ${project}`;
+function agentSelectedCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent selected --project '${project}'`);
 }
 
-function agentSelectedPromptCommand(project: string): string {
-  return `npx lineage agent work on the selected target for ${project} --project ${project}`;
+function agentSelectedPromptCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent "work on the selected target for ${project}" --project '${project}'`);
 }
 
-function agentNextCommand(project: string): string {
-  return `npx lineage agent next --project ${project}`;
+function agentNextCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent next --project '${project}'`);
 }
 
-function agentSelectionsCommand(project: string): string {
-  return `npx lineage agent selections --project ${project}`;
+function agentSelectionsCommand(cli: LineageCliIdentity | null, project: string): string {
+  return lineageCliCommand(cli, `agent selections --project '${project}'`);
 }
 
 export function CurrentWorkTarget({
@@ -36,6 +37,7 @@ export function CurrentWorkTarget({
   selectedAsset?: GrowthAsset;
   view: StudioView;
 }) {
+  const cli = useLineageCli();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<AssetSelectionSnapshot | null>(null);
@@ -87,12 +89,13 @@ export function CurrentWorkTarget({
     await refresh();
   }
 
-  return <CurrentWorkTargetPanel claims={claims} drawerOpen={drawerOpen} error={error} loading={loading} onClaimControl={(action, claim) => { void controlClaim(action, claim); }} onCopy={onCopy} onRefresh={() => void refresh()} onToggleDrawer={() => setDrawerOpen(current => !current)} project={project} queue={queue} selectedAsset={selectedAsset} selection={selection} target={target} view={view} />;
+  return <CurrentWorkTargetPanel claims={claims} cli={cli} drawerOpen={drawerOpen} error={error} loading={loading} onClaimControl={(action, claim) => { void controlClaim(action, claim); }} onCopy={onCopy} onRefresh={() => void refresh()} onToggleDrawer={() => setDrawerOpen(current => !current)} project={project} queue={queue} selectedAsset={selectedAsset} selection={selection} target={target} view={view} />;
 }
 
 export function CurrentWorkTargetPanel({
   drawerOpen = false,
   claims = [],
+  cli = null,
   error,
   loading,
   onClaimControl,
@@ -108,6 +111,7 @@ export function CurrentWorkTargetPanel({
 }: {
   drawerOpen?: boolean;
   claims?: AgentClaimSummary[];
+  cli?: LineageCliIdentity | null;
   error?: string | null;
   loading: boolean;
   onClaimControl?: (action: ClaimControlAction, claim: AgentClaimSummary) => void;
@@ -193,17 +197,17 @@ export function CurrentWorkTargetPanel({
               <code>{selectedTarget.post.id}</code>
               <p>{selectedTarget.post.channel} · {selectedTarget.readiness} · {selectedTarget.post.assets.length} asset{selectedTarget.post.assets.length === 1 ? '' : 's'}</p>
               {claimOccupancy(selectedTargetClaims, onClaimControl)}
-              <code className="command-line">{agentSelectedCommand(project)}</code>
+              <code className="command-line">{agentSelectedCommand(cli, project)}</code>
               <div className="work-target-actions">
-                <button onClick={() => void onCopy(agentSelectedCommand(project), 'agent selected command')} type="button"><Clipboard size={14} />Copy selected</button>
-                <button onClick={() => void onCopy(agentSelectedPromptCommand(project), 'agent selected prompt')} type="button"><Clipboard size={14} />Copy prompt</button>
+                <button onClick={() => void onCopy(agentSelectedCommand(cli, project), 'agent selected command')} type="button"><Clipboard size={14} />Copy selected</button>
+                <button onClick={() => void onCopy(agentSelectedPromptCommand(cli, project), 'agent selected prompt')} type="button"><Clipboard size={14} />Copy prompt</button>
               </div>
             </>
           ) : (
             <>
               <strong>No selected content target</strong>
               <p>Say: work on the selected target for Demo.</p>
-              <code className="command-line">{agentSelectedCommand(project)}</code>
+              <code className="command-line">{agentSelectedCommand(cli, project)}</code>
             </>
           )}
         </article>
@@ -221,16 +225,16 @@ export function CurrentWorkTargetPanel({
               <code>{nextItem.post.id}</code>
               <p>{nextItem.post.channel} · {nextItem.readiness} · {storageSummary(nextItem.asset_storage)}</p>
               {claimOccupancy(queueLaneClaims, onClaimControl)}
-              <code className="command-line">{agentNextCommand(project)}</code>
+              <code className="command-line">{agentNextCommand(cli, project)}</code>
               <div className="work-target-actions">
-                <button onClick={() => void onCopy(agentNextCommand(project), 'agent next command')} type="button"><Clipboard size={14} />Copy next</button>
+                <button onClick={() => void onCopy(agentNextCommand(cli, project), 'agent next command')} type="button"><Clipboard size={14} />Copy next</button>
               </div>
             </>
           ) : (
             <>
               <strong>No actionable queue item</strong>
               <p>{queue?.warning || 'Say: what should I work on next for Demo.'}</p>
-              <code className="command-line">{agentNextCommand(project)}</code>
+              <code className="command-line">{agentNextCommand(cli, project)}</code>
             </>
           )}
         </article>
@@ -271,16 +275,16 @@ export function CurrentWorkTargetPanel({
               <strong>{selectedAssets.length} selected asset{selectedAssets.length === 1 ? '' : 's'}</strong>
               <code>{selectedAssets.map(item => item.variation_label ? `${item.variation_label}:${item.asset_id}` : item.asset_id).join(', ')}</code>
               {claimOccupancy(selectionClaims, onClaimControl)}
-              <code className="command-line">{agentSelectionsCommand(project)}</code>
+              <code className="command-line">{agentSelectionsCommand(cli, project)}</code>
               <div className="work-target-actions">
-                <button onClick={() => void onCopy(agentSelectionsCommand(project), 'agent selections command')} type="button"><Clipboard size={14} />Copy selections</button>
+                <button onClick={() => void onCopy(agentSelectionsCommand(cli, project), 'agent selections command')} type="button"><Clipboard size={14} />Copy selections</button>
               </div>
             </>
           ) : (
             <>
               <strong>No selected assets</strong>
               <p>Say: keep working on my selections.</p>
-              <code className="command-line">{agentSelectionsCommand(project)}</code>
+              <code className="command-line">{agentSelectionsCommand(cli, project)}</code>
             </>
           )}
         </article>
