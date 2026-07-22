@@ -9,6 +9,7 @@ const filesToScan = [
   'AGENTS.md',
   'CHANGELOG.md',
   'LICENSE',
+  'Makefile',
   'README.md',
   'eslint.config.js',
   'knip.json',
@@ -83,6 +84,12 @@ for (const file of files) {
 }
 
 const packageInfo = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+for (const relativePath of ['README.md', 'Makefile', 'packages/lineage-plugin-installer/README.md']) {
+  const text = readFileSync(join(root, relativePath), 'utf8');
+  if (/npx(?:\s+--yes)?\s+@mean-weasel\/lineage-plugin-installer(?=\s|$)/.test(text)) {
+    hits.push(`${relativePath} uses an unversioned npx Lineage plugin installer command`);
+  }
+}
 const pluginPackage = JSON.parse(readFileSync(join(root, 'plugins', 'lineage-codex-plugin', 'package.json'), 'utf8'));
 const pluginManifest = JSON.parse(readFileSync(join(root, 'plugins', 'lineage-codex-plugin', '.codex-plugin', 'plugin.json'), 'utf8'));
 const pluginMarketplace = JSON.parse(readFileSync(join(root, '.agents', 'plugins', 'marketplace.json'), 'utf8'));

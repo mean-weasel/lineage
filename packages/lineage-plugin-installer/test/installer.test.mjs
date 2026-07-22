@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -37,6 +37,60 @@ test("CLI prints installer package version", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), installerVersion);
   assert.equal(result.stderr, "");
+});
+
+test("CLI help is non-mutating and documents install isolation and doctor", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-help-"));
+  const isolatedHome = path.join(temp, "home");
+  try {
+    const result = spawnSync(process.execPath, [cliPath, "--help"], {
+      encoding: "utf8",
+      env: { ...process.env, HOME: isolatedHome, CODEX_HOME: path.join(temp, "codex-home") },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /lineage-plugin-installer doctor/);
+    assert.match(result.stdout, /--target-dir is a files-only mode/);
+    await assert.rejects(stat(isolatedHome), /ENOENT/);
+    await assert.rejects(stat(path.join(temp, "codex-home")), /ENOENT/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("installFromOptions rejects ambiguous target and Codex home isolation before resolving a version", async () => {
+  await assert.rejects(
+    installFromOptions({
+      targetRoot: "/tmp/lineage-files-only",
+      codexHome: "/tmp/lineage-codex-home",
+      runCommand: async () => { throw new Error("version lookup should not run"); },
+    }),
+    /files-only and cannot be combined with --codex-home/,
+  );
+});
+
+test("CLI doctor fails read-only with structured guidance for a missing Codex home", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-plugin-doctor-cli-"));
+  const codexHome = path.join(temp, "missing-codex-home");
+  try {
+    const result = spawnSync(process.execPath, [
+      cliPath,
+      "doctor",
+      "--version",
+      releaseFixtureVersion,
+      "--codex-home",
+      codexHome,
+      "--json",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, "");
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.ok, false);
+    assert.equal(output.codexHome, codexHome);
+    assert.match(output.checks.find((check) => check.id === "codex_cli")?.message || "", /does not exist/);
+    await assert.rejects(stat(codexHome), /ENOENT/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
 });
 
 test("CLI preserves install --version as the Lineage compatibility selector", () => {
