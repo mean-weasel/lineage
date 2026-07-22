@@ -87,6 +87,17 @@ describe('LineageToolbar', () => {
     expect(container!.textContent).not.toContain('Next variation');
   });
 
+  it('shows automatic rich-demo indexing progress and disables duplicate index or seed actions', () => {
+    renderToolbar({ workspaceProgress: 'indexing' });
+
+    expect(container!.querySelector('.lineage-toolbar-context')?.textContent).toBe('Indexing 14 rich demo images');
+    const index = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Index local');
+    const richSeed = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Load rich image demo');
+    expect(index?.disabled).toBe(true);
+    expect(richSeed?.disabled).toBe(true);
+    expect(container!.textContent).not.toContain('No lineage index yet');
+  });
+
   it('exposes a visible-by-default canvas-wide edge-label toggle without persisting it', () => {
     const onEdgeSummariesVisible = vi.fn();
     renderToolbar({ onEdgeSummariesVisible });
@@ -134,6 +145,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
     snapshot,
     swissifierDemoStatus: demoMediaStatus({ download_available: true, present: 7, total: 14 }),
     workspaceLoading: false,
+    workspaceProgress: null,
     workspaceRootAssetId: workspace.root_asset_id,
     workspaces: [workspace],
     ...overrides,

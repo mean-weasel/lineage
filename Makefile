@@ -26,6 +26,10 @@ START_DEV_CMD = npm run --silent lineage:dev -- start --profile "$(LINEAGE_DEV_P
 help:
 	@printf "Lineage shortcuts\n"
 	@printf "\n"
+	@printf "Prerequisites:\n"
+	@printf "  Node.js >=22.22.0 and npm; Make for these shortcuts\n"
+	@printf "  Codex is optional for the app and required for plugin activation\n"
+	@printf "\n"
 	@printf "Setup and installs:\n"
 	@printf "  make init                   npm ci\n"
 	@printf "  make install-prod           install npm latest into the isolated stable root\n"
@@ -39,6 +43,7 @@ help:
 	@printf "  make start-prod LINEAGE_PROD_PROFILE=<profile>\n"
 	@printf "  make start-preview LINEAGE_PREVIEW_PROFILE=<profile>\n"
 	@printf "  make start-dev LINEAGE_DEV_PROFILE=<profile>\n"
+	@printf "  make dev LINEAGE_DEV_PROFILE=<profile>  source server with hot reload\n"
 	@printf "\n"
 	@printf "Managed services (profile-scoped receipt, log, health, and stop):\n"
 	@printf "  make start-prod-bg/status-prod/stop-prod/logs-prod LINEAGE_PROD_PROFILE=<profile>\n"
@@ -141,7 +146,8 @@ logs-dev:
 	$(LINEAGE_DEV_SERVICE_MANAGER) logs --channel dev --profile "$(LINEAGE_DEV_PROFILE)"
 
 dev:
-	npm run dev
+	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }
+	npm run dev -- --profile "$(LINEAGE_DEV_PROFILE)"
 
 check:
 	npm run check

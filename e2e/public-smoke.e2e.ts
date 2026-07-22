@@ -16,12 +16,13 @@ async function loadDemoLineage(page: Page, button: Locator) {
       if (response.ok()) completedSeedRequests += 1;
       return false;
     }
-    return completedSeedRequests >= 2
+    return completedSeedRequests === 1
       && request.method() === 'GET'
       && /^\/api\/lineage\/[^/]+$/.test(path);
   });
   await button.click();
   expect((await finalLineageResponse).ok()).toBe(true);
+  expect(completedSeedRequests).toBe(1);
 }
 
 test.beforeEach(async ({ request }) => {

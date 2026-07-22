@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -116,6 +116,8 @@ test("doctor verifies one explicit Codex home without mutating its plugin state"
     assert.equal(result.ok, true);
     assert.equal(result.codexHome, codexHome);
     assert.equal(result.expectedLineageVersion, expectedVersion);
+    assert.deepEqual(result.diagnoses, []);
+    assert.equal(result.remediation, null);
     assert.equal(result.schemaVersion, "lineage.plugin_doctor.v1");
     assert.deepEqual(result.checks.map((check) => [check.id, check.status]), [
       ["codex_cli", "pass"],
@@ -148,9 +150,52 @@ test("doctor returns actionable failures for the wrong or missing Codex home", a
     assert.equal(result.ok, false);
     assert.equal(result.checks.find((check) => check.id === "marketplace")?.status, "fail");
     assert.equal(result.checks.find((check) => check.id === "plugin_state")?.status, "fail");
+    assert.deepEqual(result.diagnoses, ["codex_home_missing", "marketplace_missing", "plugin_missing", "manifest_missing_or_invalid"]);
+    assert.equal(result.remediation.expectedLineageVersion, expectedVersion);
+    assert.equal(result.remediation.argv.at(-1), codexHome);
     assert.match(result.checks.find((check) => check.id === "manifest")?.message || "", /Plugin manifest check failed/);
     assert.equal(fake.calls.length, 0);
     await assert.rejects(stat(codexHome), /ENOENT/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("doctor distinguishes marketplace, missing, disabled, and version-mismatched plugin recovery", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "lineage-codex-doctor-diagnoses-"));
+  const codexHome = path.join(temp, "codex home with spaces");
+  const marketplaceRoot = defaultMarketplaceRoot(codexHome);
+  await mkdir(codexHome, { recursive: true });
+
+  try {
+    const missing = await doctorPluginInstallation({ version: expectedVersion, codexHome, runCodex: createFakeCodex().run });
+    assert(missing.diagnoses.includes("marketplace_missing"));
+    assert(missing.diagnoses.includes("plugin_missing"));
+
+    const wrongMarketplace = await doctorPluginInstallation({
+      version: expectedVersion,
+      codexHome,
+      runCodex: createFakeCodex({ marketplaceRoot: path.join(temp, "wrong"), installed: true, enabled: true }).run,
+    });
+    assert(wrongMarketplace.diagnoses.includes("marketplace_mismatch"));
+
+    const disabled = await doctorPluginInstallation({
+      version: expectedVersion,
+      codexHome,
+      runCodex: createFakeCodex({ marketplaceRoot, installed: true, enabled: false }).run,
+    });
+    assert(disabled.diagnoses.includes("plugin_disabled"));
+    assert.equal(disabled.remediation.action, "reinstall");
+
+    const mismatched = await doctorPluginInstallation({
+      version: expectedVersion,
+      codexHome,
+      runCodex: createFakeCodex({ marketplaceRoot, installed: true, enabled: true, listVersionOverride: "0.0.0" }).run,
+    });
+    assert(mismatched.diagnoses.includes("plugin_version_mismatch"));
+    assert.match(mismatched.remediation.command, new RegExp(`--version ${expectedVersion.replaceAll(".", "\\.")}`));
+    assert.match(mismatched.remediation.command, /--codex-home '\/.*codex home with spaces'/);
+    assert.equal(mismatched.remediation.argv.at(-1), codexHome);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

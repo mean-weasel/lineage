@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { repoRoot } from '../server/assetCore';
@@ -85,8 +85,19 @@ describe('profile-aware CLI options', () => {
     const before = readFileSync(join(scratchRoot, 'development-main', 'profile.json'), 'utf8');
     expect(() => runLineageProfileCommand(config, 'init', [
       '--profile', 'development-main', '--confirm-write',
-    ])).toThrow('already exists or requires manual inspection');
+    ])).toThrow('already exists and passes doctor');
     expect(readFileSync(join(scratchRoot, 'development-main', 'profile.json'), 'utf8')).toBe(before);
+  });
+
+  it('gives command-oriented recovery without modifying an unhealthy existing profile directory', () => {
+    const profileDirectory = join(scratchRoot, 'development-unhealthy');
+    mkdirSync(profileDirectory, { mode: 0o700 });
+    const before = readdirSync(profileDirectory);
+
+    expect(() => runLineageProfileCommand(config, 'init', [
+      '--profile', 'development-unhealthy', '--confirm-write',
+    ])).toThrow('profile doctor --profile development-unhealthy --json');
+    expect(readdirSync(profileDirectory)).toEqual(before);
   });
 
   it('validates profile init inputs before creating a profile directory', () => {
@@ -186,6 +197,15 @@ describe('profile-aware CLI options', () => {
       .toThrow('cannot be combined with --asset-root');
   });
 
+  it('rejects invalid ports and host overrides against the selected profile', () => {
+    expect(() => resolveStartOptions(config, ['--profile', 'development-main', '--port', 'not-a-port']))
+      .toThrow('Invalid port: not-a-port');
+    expect(() => resolveStartOptions(config, ['--profile', 'development-main', '--port', '70000']))
+      .toThrow('Invalid port: 70000');
+    expect(() => resolveStartOptions(config, ['--profile', 'development-main', '--host', '127.0.0.1']))
+      .toThrow('conflicts with requested host/port');
+  });
+
   it('returns a machine-readable doctor contract and rejects missing profile selection', () => {
     const result = runLineageProfileCommand(config, 'doctor', ['--profile', 'development-main', '--json']);
 
@@ -221,7 +241,7 @@ describe('profile-aware CLI options', () => {
   it('rejects direct legacy access to a profile-bound database', () => {
     process.env.LINEAGE_DB = join(scratchRoot, 'development-main', 'lineage.sqlite');
 
-    expect(() => resolveStartOptions(config, [])).toThrow('is bound to Lineage profile development-main/development');
+    expect(() => resolveStartOptions(config, [])).toThrow('Start requires --profile or LINEAGE_PROFILE');
   });
 
   it('requires confirmation for profile bind and returns its machine-readable receipt', () => {

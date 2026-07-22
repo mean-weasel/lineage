@@ -196,11 +196,14 @@ export function useLineageWorkspaces({
       await refreshDemoSeedStatus();
       if (!result.result.download_available) {
         onToast('error', 'Swissifier media download is not configured');
+        return false;
       } else {
         onToast('ok', `Downloaded ${result.result.restored || 0} Swissifier media file${result.result.restored === 1 ? '' : 's'}`);
+        return true;
       }
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
+      return false;
     } finally {
       setWorkspaceLoading(false);
     }

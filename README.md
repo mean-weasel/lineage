@@ -9,7 +9,7 @@ visual enough for humans to review and direct, and precise enough for agents to
 retrieve through the CLI and continue accurately.
 
 [See the landing page](https://mean-weasel.github.io/lineage/) ·
-[Install Lineage](#package-channels) ·
+[Install Lineage](#first-run) ·
 [Use the Codex plugin](#codex-plugin) ·
 [Develop locally](#local-development)
 
@@ -49,6 +49,84 @@ Model-assisted work is held to the same proof standard as any other change. The
 repository's automated gates cover unit, integration, and browser behavior;
 runtime and database isolation; public-readiness checks; installability; plugin
 integrity; and dependency audits.
+
+## First Run
+
+### Prerequisites
+
+Before installing anything, verify the tools used by the path you choose:
+
+```bash
+node --version
+npm --version
+make --version
+```
+
+Lineage requires Node.js 22.22.0 or newer and npm. Make is required only for
+the documented `make` shortcuts. A real Codex installation is optional for the
+app, but required to install and activate the Codex plugin; verify that
+additional prerequisite with `codex --version` before following the plugin
+step.
+
+### Develop from a fresh clone
+
+This is the shortest source-development path with hot reload and isolated
+development data:
+
+```bash
+git clone https://github.com/mean-weasel/lineage.git
+cd lineage
+npm ci
+npm run lineage:dev -- profile init --profile team-development --confirm-write --json
+npm run dev -- --profile team-development
+```
+
+Open `http://lineage-dev.localhost:5198`, then choose **Load demo lineage** for
+a small graph or use the workspace menu's **Load rich image demo** for the full
+media-backed example. On later runs, reuse the same healthy profile and run
+only the final start command. If profile initialization reports an existing but
+unhealthy profile, run the exact `profile doctor` command it prints before
+changing anything.
+
+### Install the published channels
+
+Use the currently published npm dist-tags when you want installed rather than
+checkout code:
+
+```bash
+npm install -g @mean-weasel/lineage@latest
+lineage-channel install stable
+lineage-stable runtime doctor --json
+lineage-stable profile init --profile team-production --confirm-write --json
+lineage-stable start --profile team-production
+```
+
+Preview is independent and must use its own runtime root and profile:
+
+```bash
+lineage-channel install preview
+lineage-preview runtime doctor --json
+lineage-preview profile init --profile team-preview --confirm-write --json
+lineage-preview start --profile team-preview
+```
+
+The version in this checkout may be ahead of npm and is not necessarily
+published. The channel installer resolves `latest` or `next` at install time;
+do not substitute the checkout version or install both tags into one global npm
+prefix.
+
+To add the optional Codex plugin, first choose the exact Codex home you intend
+to modify, then install and doctor the matching published channel:
+
+```bash
+export CODEX_HOME="$HOME/.codex"
+npx --yes @mean-weasel/lineage-plugin-installer@latest install --channel latest --codex-home "$CODEX_HOME"
+npx --yes @mean-weasel/lineage-plugin-installer@latest doctor --channel latest --codex-home "$CODEX_HOME"
+```
+
+If doctor fails, it prints a version-pinned remediation command for that same
+Codex home. For verification, use a temporary `--codex-home`; do not test an
+installer against your real Codex profile.
 
 ## Package Channels
 
@@ -121,19 +199,20 @@ npm run lineage:dev -- start --profile team-development
 
 Stable defaults to `lineage.localhost:5197`, dev to
 `lineage-dev.localhost:5198`, and preview to
-`lineage-preview.localhost:5199`. Override those defaults with `--port`,
-`--host`, `--db`, or `LINEAGE_HOME`:
+`lineage-preview.localhost:5199`. A named profile owns its host, port, database,
+and asset root. To choose another service origin, set it when creating the
+profile:
 
 ```bash
-lineage-stable start --profile team-production --port 6123
+lineage-stable profile init --profile team-production-6123 \
+  --service-origin http://lineage.localhost:6123 --confirm-write --json
+lineage-stable start --profile team-production-6123
 ```
 
-`--db` selects the SQLite state file. `--asset-root` (or
-`LINEAGE_ASSET_ROOT`) independently selects the external repository root that
-contains `<project>/assets/catalog.json` and `.asset-scratch` media. Keep these
-arguments explicit when Lineage is installed as a dependency of another repo;
-the installed package directory remains responsible only for bundled code,
-web assets, and public demo fixtures.
+Starts with a named profile reject conflicting `--host`, `--port`, `--db`, or
+asset-root selections. Direct path selection is retained only for explicit
+diagnostic, read-only access. The installed package directory remains
+responsible only for bundled code, web assets, and public demo fixtures.
 
 ## Runtime Channels and SQLite
 
@@ -278,6 +357,13 @@ lineage-stable db info --profile team-production --json
 lineage-preview db info --profile team-preview --json
 npm run lineage:dev -- db info --profile team-development --json
 ```
+
+Offline `db info` reports the one-shot CLI under `process` with
+`role: "command"` and omits `service`; its PID is never service-health evidence.
+HTTP runtime responses from a launched app report `process.role: "service"` and
+a separate `service` identity. `service.mode: "managed"` records the launch
+context only—managed health still requires the profile-scoped receipt and an
+exact `/api/runtime` code/profile/database/instance match.
 
 Managed services are profile-scoped. Their receipts record the launcher PID
 and start token, unique service instance, code root/fingerprint, profile and
@@ -443,6 +529,9 @@ or cached CLI. Both commands honor `CODEX_HOME`; pass `--codex-home <path>` to
 make the target visible in the command and machine-readable result. `doctor` is
 read-only and fails unless the selected Codex home reports the matching plugin
 installed and enabled from the expected Lineage marketplace root.
+On failure it distinguishes a missing or mismatched marketplace, missing or
+disabled plugin, version mismatch, and invalid manifest, then prints an exact
+`--version`-pinned install/reinstall command for that Codex home.
 
 The installer verifies the plugin artifact checksum and rejects plugin manifests
 whose version or `lineage.version` does not exactly match the resolved Lineage
@@ -472,8 +561,14 @@ For source development with hot reload:
 
 ```bash
 npm ci
-npm run dev
+npm run lineage:dev -- profile init --profile team-development --confirm-write --json
+npm run dev -- --profile team-development
 ```
+
+Both source and bundled server starts require a named profile. The hot-reload
+launcher doctors the profile before it binds a port, then derives the database,
+asset root, host, and port exclusively from that profile. Reuse an existing
+development profile by omitting the `profile init` line.
 
 For the profile-safe CLI and managed development service, prepare the checkout
 once, initialize a development profile, and start it:
@@ -483,6 +578,13 @@ make install-dev
 npm run lineage:dev -- profile init --profile team-development --confirm-write --json
 make start-dev LINEAGE_DEV_PROFILE=team-development
 ```
+
+Managed starts are idempotent: rerunning the same `start-*-bg` command returns
+success only after the existing service again matches the exact code, profile,
+database, origin, and service-instance receipt. Identity conflicts and unhealthy
+services remain errors. If `profile init` reports that a profile already passes
+doctor, reuse it with `start --profile <id>`; if it fails doctor, run the printed
+`profile doctor` command and inspect the profile directory before retrying.
 
 `make install-dev` installs the locked dependencies and builds the bundled
 server required by `lineage-dev start`; no separate build command is needed.
@@ -494,7 +596,7 @@ npm run onboarding:smoke
 npm run runtime:oracle
 ```
 
-`npm run dev` starts the local development server from source. `npm run ci` runs the full local verification gate.
+`npm run dev -- --profile <development-profile>` starts the local development server from source with Vite hot reload. `npm run ci` runs the full local verification gate.
 `npm run onboarding:smoke` uses only temporary runtime, profile, service, npm,
 media, and Codex roots to prove the installed stable launcher, profile init and
 doctor, managed app, basic and rich seeds, CLI handoff, plugin activation, and

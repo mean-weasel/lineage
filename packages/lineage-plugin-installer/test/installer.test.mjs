@@ -86,6 +86,13 @@ test("CLI doctor fails read-only with structured guidance for a missing Codex ho
     const output = JSON.parse(result.stdout);
     assert.equal(output.ok, false);
     assert.equal(output.codexHome, codexHome);
+    assert.deepEqual(output.diagnoses, ["codex_home_missing", "marketplace_missing", "plugin_missing", "manifest_missing_or_invalid"]);
+    assert.equal(output.remediation.action, "install");
+    assert.deepEqual(output.remediation.argv.slice(0, 6), [
+      "npx", "--yes", "@mean-weasel/lineage-plugin-installer@latest", "install", "--version", releaseFixtureVersion,
+    ]);
+    assert.match(output.remediation.command, new RegExp(`--version ${releaseFixtureVersion}`));
+    assert.equal(output.remediation.expectedLineageVersion, releaseFixtureVersion);
     assert.match(output.checks.find((check) => check.id === "codex_cli")?.message || "", /does not exist/);
     await assert.rejects(stat(codexHome), /ENOENT/);
   } finally {

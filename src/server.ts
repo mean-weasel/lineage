@@ -53,7 +53,12 @@ const runtimeChannel = normalizeRuntimeChannel(process.env.LINEAGE_CHANNEL || pr
 const startupCode = assertLineageCodeOrigin(runtimeChannel);
 assertRuntimeProfileSafety(runtimeChannel);
 const startupRuntime = getLineageRuntimeInfo({ channel: runtimeChannel, code: startupCode });
-if (!process.env.LINEAGE_PROFILE) assertUnselectedDatabaseIsUnbound(startupRuntime);
+if (!process.env.LINEAGE_PROFILE) {
+  if (process.env.LINEAGE_ALLOW_UNBOUND_DIAGNOSTIC !== '1') {
+    throw new Error('Lineage server startup requires a named profile. Use a channel launcher with start --profile <id>, or use `npm run dev -- --profile <id>` for hot reload. Set LINEAGE_ALLOW_UNBOUND_DIAGNOSTIC=1 only for an explicit read-only diagnostic server.');
+  }
+  assertUnselectedDatabaseIsUnbound(startupRuntime);
+}
 let startupProfile: ResolvedLineageProfile | undefined;
 if (process.env.LINEAGE_PROFILE) {
   if (!process.env.LINEAGE_PROFILE_ID || !process.env.LINEAGE_PROFILE_ENVIRONMENT || !process.env.LINEAGE_PROFILE_MANIFEST) {

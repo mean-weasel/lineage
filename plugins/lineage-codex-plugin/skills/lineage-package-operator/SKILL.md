@@ -31,6 +31,11 @@ Require all three results to agree on verified code origin/fingerprint, channel,
 profile ID/environment/fingerprint, database path/identity, and service origin.
 Stop on any failed doctor, unbound profile, wrong database, or unexpected code
 root. Legacy-unbound access is diagnostic/read-only and never authorizes writes.
+In offline `db info`, require `process.role` to be `command` and expect no
+`service` object; that PID is only the one-shot CLI. A live managed status must
+instead match its profile-scoped receipt to `/api/runtime`, where
+`process.role` is `service` and `service.mode` is `managed`. Never treat either
+field alone as health proof.
 
 For preview, substitute `lineage-preview` and `$LINEAGE_PREVIEW_PROFILE`. For
 dev, substitute `npm run lineage:dev --` and `$LINEAGE_DEV_PROFILE`.

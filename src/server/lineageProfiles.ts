@@ -238,7 +238,12 @@ export function initializeLineageProfile(
     mkdirSync(profileDirectory, { mode: 0o700 });
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
-      throw new Error(`Profile already exists or requires manual inspection: ${profileDirectory}`, { cause: error });
+      const doctor = doctorLineageProfile(profileId, runtime);
+      if (doctor.ok) {
+        throw new Error(`Profile ${profileId} already exists and passes doctor. No files were changed. Reuse it with \`start --profile ${profileId}\`; verify it first with \`profile doctor --profile ${profileId} --json\`.`, { cause: error });
+      }
+      const failures = doctor.checks.filter(check => check.status === 'fail').map(check => `${check.id}: ${check.message}`).join('; ');
+      throw new Error(`Profile ${profileId} already exists but did not pass doctor. No files were changed. Run \`profile doctor --profile ${profileId} --json\`, then inspect ${profileDirectory} manually before retrying. ${failures}`, { cause: error });
     }
     throw error;
   }

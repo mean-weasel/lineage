@@ -43,6 +43,10 @@ describe('runtime info', () => {
         path: dbFile,
       },
       package_name: '@mean-weasel/lineage',
+      process: {
+        pid: process.pid,
+        role: 'command',
+      },
       profile: {
         bound: false,
         id: 'legacy-unbound',
@@ -50,6 +54,7 @@ describe('runtime info', () => {
       },
       schema: { migration_keys: [] },
     });
+    expect(missing.service).toBeUndefined();
 
     process.env.LINEAGE_DB = dbFile;
     createRuntimeFixtureDb();
@@ -84,6 +89,7 @@ describe('runtime info', () => {
     const startupCode = { ...getLineageCodeIdentity('dev'), fingerprint: 'a'.repeat(64) };
     process.env.LINEAGE_SERVICE_INSTANCE_ID = 'service-instance-a';
     process.env.LINEAGE_LAUNCHER_PID = '4242';
+    process.env.LINEAGE_SERVICE_MODE = 'managed';
 
     const runtime = getLineageRuntimeInfo({ channel: 'dev', code: startupCode, dbPath: dbFile });
 
@@ -91,8 +97,20 @@ describe('runtime info', () => {
     expect(runtime.service).toMatchObject({
       instance_id: 'service-instance-a',
       launcher_pid: 4242,
+      mode: 'managed',
       pid: process.pid,
     });
+    expect(runtime.process).toMatchObject({ pid: process.pid, role: 'service' });
+  });
+
+  it('does not publish service identity for incomplete launcher metadata', () => {
+    process.env.LINEAGE_SERVICE_INSTANCE_ID = 'orphan-instance';
+    delete process.env.LINEAGE_LAUNCHER_PID;
+
+    const runtime = getLineageRuntimeInfo({ channel: 'dev', dbPath: dbFile });
+
+    expect(runtime.process).toMatchObject({ pid: process.pid, role: 'command' });
+    expect(runtime.service).toBeUndefined();
   });
 
   it('verifies a clean packaged tree against its channel receipt and rejects tampering or a channel mismatch', () => {

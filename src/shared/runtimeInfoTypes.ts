@@ -80,10 +80,16 @@ export interface LineageRuntimeInfo {
   git_sha?: string;
   node_env?: string;
   package_name: string;
+  process?: {
+    pid: number;
+    role: 'command' | 'service';
+    started_at: string;
+  };
   profile: LineageRuntimeProfileInfo;
   schema: LineageRuntimeSchemaInfo;
   service?: {
     instance_id?: string;
+    mode: 'foreground' | 'managed';
     launcher_pid?: number;
     pid: number;
     started_at: string;

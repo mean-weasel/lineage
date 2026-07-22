@@ -304,6 +304,9 @@ export function getLineageRuntimeInfo(options: { channel?: string; code?: Lineag
   const code = options.code || getLineageCodeIdentity(channel);
   const databaseInfo: LineageRuntimeInfo['database'] = { exists: existsSync(dbPath), path: dbPath };
   const schema: LineageRuntimeInfo['schema'] = { migration_keys: [] };
+  const serviceInstanceId = process.env.LINEAGE_SERVICE_INSTANCE_ID;
+  const launcherPid = process.env.LINEAGE_LAUNCHER_PID ? Number(process.env.LINEAGE_LAUNCHER_PID) : undefined;
+  const isServiceProcess = Boolean(serviceInstanceId && Number.isInteger(launcherPid) && launcherPid! > 0);
 
   if (databaseInfo.exists) {
     try {
@@ -347,14 +350,22 @@ export function getLineageRuntimeInfo(options: { channel?: string; code?: Lineag
     git_sha: code.git_sha,
     node_env: process.env.NODE_ENV,
     package_name: info.name,
-    profile: runtimeProfileIdentity(channel),
-    schema,
-    service: {
-      instance_id: process.env.LINEAGE_SERVICE_INSTANCE_ID,
-      launcher_pid: process.env.LINEAGE_LAUNCHER_PID ? Number(process.env.LINEAGE_LAUNCHER_PID) : undefined,
+    process: {
       pid: process.pid,
+      role: isServiceProcess ? 'service' : 'command',
       started_at: processStartedAt,
     },
+    profile: runtimeProfileIdentity(channel),
+    schema,
+    ...(isServiceProcess ? {
+      service: {
+        instance_id: serviceInstanceId,
+        launcher_pid: launcherPid,
+        mode: process.env.LINEAGE_SERVICE_MODE === 'managed' ? 'managed' as const : 'foreground' as const,
+        pid: process.pid,
+        started_at: processStartedAt,
+      },
+    } : {}),
     version: info.version,
   };
 }
