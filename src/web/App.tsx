@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AssetLibrarySnapshot, GrowthAsset, MutationResponse, PresignResponse, ProjectSummary } from '../shared/types';
 import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import { api } from './api';
@@ -57,6 +57,16 @@ export function App() {
   const [workTargetRefreshKey, setWorkTargetRefreshKey] = useState(0);
   const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
   const [runtimeIdentityUnavailable, setRuntimeIdentityUnavailable] = useState(false);
+  const [openToolbarMenu, setOpenToolbarMenu] = useState<'lineage-actions' | 'topbar-more' | null>(null);
+  const setLineageActionsOpen = useCallback((open: boolean) => {
+    setOpenToolbarMenu(current => open ? 'lineage-actions' : current === 'lineage-actions' ? null : current);
+  }, []);
+  const setTopbarMoreOpen = useCallback((open: boolean) => {
+    setOpenToolbarMenu(current => open ? 'topbar-more' : current === 'topbar-more' ? null : current);
+  }, []);
+  const showToast = useCallback((type: Toast['type'], message: string) => {
+    setToast({ type, message });
+  }, []);
 
   const projectSnapshot = snapshot?.catalog.project === project ? snapshot : null;
   const assets = projectSnapshot?.assets || [];
@@ -287,6 +297,10 @@ export function App() {
   }, [view]);
 
   useEffect(() => {
+    setOpenToolbarMenu(null);
+  }, [view]);
+
+  useEffect(() => {
     if (selectedAssetId) return;
     setAssetDetailsOpen(false);
   }, [selectedAssetId]);
@@ -299,6 +313,8 @@ export function App() {
           assetDetailsOpen={assetDetailsOpen}
           canInspectAsset={Boolean(selected)}
           loading={loading}
+          moreOpen={openToolbarMenu === 'topbar-more'}
+          onMoreOpenChange={setTopbarMoreOpen}
           query={query}
           refresh={refresh}
           runtime={runtime}
@@ -345,7 +361,7 @@ export function App() {
           <ContentBatchesView
             onCopy={copyText}
             onOpenAsset={openAssetDetails}
-            onToast={(type, message) => setToast({ type, message })}
+            onToast={showToast}
             onWorkTargetsChanged={() => setWorkTargetRefreshKey(value => value + 1)}
             project={project}
             selectedAsset={selected}
@@ -385,12 +401,14 @@ export function App() {
             />
             <AssetBoard assets={assets} liveSync={liveSync} onCopy={copyText} onSelectionChanged={() => setWorkTargetRefreshKey(value => value + 1)} page={page} pageSize={pageSize} previewUrls={previewUrls} project={project} selected={selected} setLiveSync={setLiveSync} setPage={setPage} setPageSize={setPageSize} setSelectedId={setSelectedId} snapshot={projectSnapshot} source={source} totals={totals} />
           </>
-        ) : view === 'settings' ? <SettingsView onToast={(type, message) => setToast({ type, message })} project={project} /> : (
+        ) : view === 'settings' ? <SettingsView onToast={showToast} project={project} /> : (
           <LineageView
             asset={selected}
+            actionsOpen={openToolbarMenu === 'lineage-actions'}
             onAssetsChanged={refresh}
+            onActionsOpenChange={setLineageActionsOpen}
             onSelectedAsset={setSelectedId}
-            onToast={(type, message) => setToast({ type, message })}
+            onToast={showToast}
             project={project}
           />
         )}

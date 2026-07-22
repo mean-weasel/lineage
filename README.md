@@ -490,10 +490,19 @@ Run the verification gates with:
 
 ```bash
 npm run ci
+npm run onboarding:smoke
 npm run runtime:oracle
 ```
 
 `npm run dev` starts the local development server from source. `npm run ci` runs the full local verification gate.
+`npm run onboarding:smoke` uses only temporary runtime, profile, service, npm,
+media, and Codex roots to prove the installed stable launcher, profile init and
+doctor, managed app, basic and rich seeds, CLI handoff, plugin activation, and
+plugin doctor as one first-user journey. It uses the real `codex` executable
+when one is on `PATH`; otherwise it uses a deterministic protocol harness so
+the public CI gate remains portable. Run `npm run plugin:codex-smoke` on a
+machine with Codex installed for real-CLI activation, reinstallation, cleanup,
+and rollback proof.
 `npm run runtime:oracle` creates three temporary code roots, profiles,
 databases, ports, and managed services, proves their identities are distinct
 while all are live, attacks every cross-channel and stale-identity boundary,

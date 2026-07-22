@@ -1,5 +1,4 @@
 import { ChevronDown, FileSearch, Loader2, MoreHorizontal, RefreshCcw, Search, Upload } from 'lucide-react';
-import { useState } from 'react';
 import { appName } from '../../shared/appConstants';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import type { StudioView } from '../assetUi';
@@ -10,6 +9,8 @@ export function Topbar(props: {
   assetDetailsOpen: boolean;
   canInspectAsset: boolean;
   loading: boolean;
+  moreOpen: boolean;
+  onMoreOpenChange: (open: boolean) => void;
   query: string;
   refresh: () => Promise<void>;
   runtime: LineageRuntimeInfo | null;
@@ -20,17 +21,16 @@ export function Topbar(props: {
   setView: (view: StudioView) => void;
   view: StudioView;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
   const secondaryActive = secondaryViews.some(item => item.view === props.view);
 
   function openPrimary(view: StudioView) {
     props.setView(view);
-    setMoreOpen(false);
+    props.onMoreOpenChange(false);
   }
 
   function openSecondary(view: StudioView) {
     props.setView(view);
-    setMoreOpen(false);
+    props.onMoreOpenChange(false);
   }
 
   return (
@@ -49,16 +49,16 @@ export function Topbar(props: {
         ))}
         <div className="more-menu">
           <button
-            aria-expanded={moreOpen}
+            aria-expanded={props.moreOpen}
             aria-haspopup="menu"
             aria-pressed={secondaryActive}
             className={secondaryActive ? 'active' : ''}
-            onClick={() => setMoreOpen(value => !value)}
+            onClick={() => props.onMoreOpenChange(!props.moreOpen)}
             type="button"
           >
-            <MoreHorizontal size={16} /> More <ChevronDown className={moreOpen ? 'open' : ''} size={15} />
+            <MoreHorizontal size={16} /> More <ChevronDown className={props.moreOpen ? 'open' : ''} size={15} />
           </button>
-          {moreOpen && (
+          {props.moreOpen && (
             <div className="more-menu-popover" role="menu">
               {secondaryViews.map(item => (
                 <button
@@ -86,7 +86,7 @@ export function Topbar(props: {
           className="secondary-button"
           disabled={!props.canInspectAsset}
           onClick={() => {
-            setMoreOpen(false);
+            props.onMoreOpenChange(false);
             props.setAssetDetailsOpen(!props.assetDetailsOpen);
           }}
           type="button"

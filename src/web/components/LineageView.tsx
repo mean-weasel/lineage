@@ -25,8 +25,8 @@ import { buildLineageReplayTimeline, isLineageReplayable, projectLineageReplay, 
 import { useEscapeClear } from './useEscapeClear';
 import { useLineageWorkspaces } from './useLineageWorkspaces';
 import { useLineageViewportFit } from './useLineageViewportFit';
-export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, onToast }: {
-  asset?: GrowthAsset; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
+export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsChanged, project, onSelectedAsset, onToast }: {
+  actionsOpen: boolean; asset?: GrowthAsset; onActionsOpenChange: (open: boolean) => void; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
 }) {
   const [snapshot, setSnapshot] = useState<LineageSnapshot | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
@@ -396,7 +396,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       await saveLineagePositions(project, snapshot.root_asset_id, positions);
       onToast('ok', `Tidied ${positions.length} lineage nodes`);
       fitGraph(80);
-      await refresh();
+      await refresh({ quiet: true });
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -414,7 +414,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       await saveLineagePositions(project, snapshot.root_asset_id, positions);
       onToast('ok', `Rotated lineage graph ${graphDirectionLabel(direction).toLowerCase()}`);
       fitGraph(80);
-      await refresh();
+      await refresh({ quiet: true });
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -557,6 +557,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   return (
     <section className="lineage-view" onKeyDownCapture={closeOnEscape}>
       <LineageToolbar
+        actionsOpen={actionsOpen}
         activeWorkspace={activeWorkspace}
         closeSignal={menuCloseSignal}
         edgeSummariesVisible={edgeSummariesVisible}
@@ -564,6 +565,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         graphDirection={graphDirection}
         demoSeedStatus={demoSeedStatus}
         onArchiveWorkspace={() => void archiveWorkspace()}
+        onActionsOpenChange={onActionsOpenChange}
         onFitGraph={() => fitGraph()}
         onIndexLocal={() => void indexAndRefresh()}
         onGraphDirection={direction => void orientGraph(direction)}

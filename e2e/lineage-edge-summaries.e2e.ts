@@ -259,6 +259,8 @@ function edgeSummaryDatabase(): DatabaseSync {
 }
 
 async function selectDirection(page: Page, direction: string) {
+  await page.locator(`.react-flow__node[data-id="${rootId}"]`).click();
+  await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
   await openLineageActions(page);
   const directionSelect = page.getByLabel('Lineage graph direction');
   const layoutSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/lineage/layout');

@@ -105,12 +105,14 @@ describe('LineageToolbar', () => {
 function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> = {}) {
   const props: Parameters<typeof LineageToolbar>[0] = {
     activeWorkspace: workspace,
+    actionsOpen: false,
     closeSignal: 0,
     demoSeedStatus: demoMediaStatus({ present: 10, total: 10 }),
     edgeSummariesVisible: true,
     graphDirection: 'LR',
     loading: false,
     onArchiveWorkspace: vi.fn(),
+    onActionsOpenChange: vi.fn(),
     onDownloadSwissifierMedia: vi.fn(),
     onEdgeSummariesVisible: vi.fn(),
     onFitGraph: vi.fn(),
