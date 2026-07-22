@@ -195,6 +195,41 @@ button { cursor: pointer; }
   outline-offset: 5px;
 }
 
+.hero-carousel-media-viewport {
+  position: relative;
+  overflow: hidden;
+  margin: -5px -13px -13px -5px;
+  padding: 5px 13px 13px 5px;
+}
+
+.hero-carousel-media-track {
+  display: flex;
+  width: 100%;
+}
+
+.hero-carousel-media-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+.hero-carousel-media-track[class*="carousel-track-"] {
+  width: 200%;
+  will-change: transform;
+}
+
+.hero-carousel-media-track[class*="carousel-track-"] .hero-carousel-media-slide { flex-basis: 50%; }
+.hero-carousel-media-track[class*="carousel-track-"] .hero-carousel-media-slide[aria-hidden="true"] { pointer-events: none; }
+
+.carousel-track-next { animation: carousel-track-next 580ms cubic-bezier(0.65, 0, 0.35, 1) both; }
+.carousel-track-previous { animation: carousel-track-previous 580ms cubic-bezier(0.65, 0, 0.35, 1) both; }
+
+.hero-carousel-caption-viewport {
+  position: relative;
+  overflow: hidden;
+  margin: -4px -8px -8px -4px;
+  padding: 4px 8px 8px 4px;
+}
+
 .hero-carousel-caption {
   display: grid;
   grid-template-columns: minmax(130px, 0.62fr) minmax(0, 1fr);
@@ -203,6 +238,38 @@ button { cursor: pointer; }
   background: var(--landing-cream);
   padding: 13px 15px;
   box-shadow: 4px 4px 0 var(--landing-ink);
+  will-change: opacity;
+}
+
+.hero-carousel-caption.carousel-caption-exit {
+  position: absolute;
+  z-index: 1;
+  inset: 4px 8px 8px 4px;
+  pointer-events: none;
+}
+
+.hero-carousel-caption.carousel-caption-enter { position: relative; z-index: 2; }
+.carousel-caption-enter { animation: carousel-caption-enter 460ms 60ms ease both; }
+.carousel-caption-exit { animation: carousel-caption-exit 400ms ease both; }
+
+@keyframes carousel-track-next {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes carousel-track-previous {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes carousel-caption-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes carousel-caption-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .hero-carousel-caption .media-eyebrow {
@@ -477,6 +544,7 @@ footer > a:last-child { display: inline-flex; align-items: center; justify-self:
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .primary-cta, .hero-carousel-controls > button { transition: none; }
+  .hero-carousel-media-track, .carousel-caption-enter, .carousel-caption-exit { animation: none; }
   .media-slot-ready video { display: none; }
   .media-slot-ready .reduced-motion-poster { display: block; }
   .video-toggle { display: none; }

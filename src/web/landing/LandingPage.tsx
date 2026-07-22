@@ -178,10 +178,35 @@ export function LandingPage() {
 
 function HeroCarousel() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [transition, setTransition] = useState<{
+    direction: -1 | 1;
+    fromIndex: number;
+  } | null>(null);
   const activeSlide = heroCarousel[activeIndex];
+  const outgoingSlide = transition ? heroCarousel[transition.fromIndex] : null;
+  const transitionDirection = transition?.direction === 1 ? 'next' : 'previous';
+
+  useEffect(() => {
+    if (!transition) return;
+
+    const fallback = window.setTimeout(() => setTransition(null), 700);
+    return () => window.clearTimeout(fallback);
+  }, [transition]);
 
   function moveSlide(direction: -1 | 1) {
-    setActiveIndex((current) => (current + direction + heroCarousel.length) % heroCarousel.length);
+    showSlide((activeIndex + direction + heroCarousel.length) % heroCarousel.length, direction);
+  }
+
+  function showSlide(nextIndex: number, direction: -1 | 1) {
+    if (transition || nextIndex === activeIndex) return;
+
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setActiveIndex(nextIndex);
+      return;
+    }
+
+    setTransition({ direction, fromIndex: activeIndex });
+    setActiveIndex(nextIndex);
   }
 
   return (
@@ -190,17 +215,63 @@ function HeroCarousel() {
       aria-roledescription="carousel"
       className="hero-carousel"
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'ArrowLeft') moveSlide(-1);
         if (event.key === 'ArrowRight') moveSlide(1);
       }}
       role="region"
       tabIndex={0}
     >
-      <MediaSlot definition={activeSlide} hero />
-      <div aria-live="polite" className="hero-carousel-caption">
-        <span className="media-eyebrow">{activeSlide.eyebrow}</span>
-        <strong>{activeSlide.title}</strong>
-        <small>{activeSlide.description}</small>
+      <div className="hero-carousel-media-viewport">
+        <div
+          className={`hero-carousel-media-track ${transition ? `carousel-track-${transitionDirection}` : ''}`}
+          onAnimationEnd={(event) => {
+            if (event.currentTarget === event.target) setTransition(null);
+          }}
+        >
+          {transition?.direction === -1 && (
+            <div className="hero-carousel-media-slide" key={activeSlide.id}>
+              <MediaSlot definition={activeSlide} hero />
+            </div>
+          )}
+          <div
+            aria-hidden={outgoingSlide ? 'true' : undefined}
+            className="hero-carousel-media-slide"
+            key={(outgoingSlide ?? activeSlide).id}
+          >
+            <MediaSlot
+              definition={outgoingSlide ?? activeSlide}
+              hero
+              showPlaybackControl={!outgoingSlide}
+            />
+          </div>
+          {transition?.direction === 1 && (
+            <div className="hero-carousel-media-slide" key={activeSlide.id}>
+              <MediaSlot definition={activeSlide} hero />
+            </div>
+          )}
+        </div>
+      </div>
+      <div aria-live="polite" className="hero-carousel-caption-viewport">
+        {outgoingSlide && (
+          <div
+            aria-hidden="true"
+            className={`hero-carousel-caption carousel-caption-exit carousel-${transitionDirection}`}
+            key={outgoingSlide.id}
+          >
+            <span className="media-eyebrow">{outgoingSlide.eyebrow}</span>
+            <strong>{outgoingSlide.title}</strong>
+            <small>{outgoingSlide.description}</small>
+          </div>
+        )}
+        <div
+          className={`hero-carousel-caption ${transition ? `carousel-caption-enter carousel-${transitionDirection}` : ''}`}
+          key={activeSlide.id}
+        >
+          <span className="media-eyebrow">{activeSlide.eyebrow}</span>
+          <strong>{activeSlide.title}</strong>
+          <small>{activeSlide.description}</small>
+        </div>
       </div>
       <div className="hero-carousel-controls">
         <button aria-label="Previous carousel slide" onClick={() => moveSlide(-1)} type="button">
@@ -213,7 +284,7 @@ function HeroCarousel() {
               aria-label={`Show slide ${index + 1}: ${slide.title}`}
               className={index === activeIndex ? 'active' : ''}
               key={slide.id}
-              onClick={() => setActiveIndex(index)}
+              onClick={() => showSlide(index, index > activeIndex ? 1 : -1)}
               type="button"
             />
           ))}
@@ -230,10 +301,12 @@ function MediaSlot({
   definition,
   hero = false,
   showCaption = false,
+  showPlaybackControl = true,
 }: {
   definition: LandingMediaDefinition;
   hero?: boolean;
   showCaption?: boolean;
+  showPlaybackControl?: boolean;
 }) {
   const fitClass = `media-fit-${definition.fit ?? 'cover'}`;
   const positionClass = definition.position === 'left' ? 'media-position-left' : '';
@@ -245,7 +318,7 @@ function MediaSlot({
     >
       {definition.kind === 'video' ? (
         <>
-          <ViewportVideo definition={definition} />
+          <ViewportVideo definition={definition} showPlaybackControl={showPlaybackControl} />
           {definition.poster && <img alt="" aria-hidden="true" className="reduced-motion-poster" src={definition.poster} />}
         </>
       ) : (
@@ -262,7 +335,13 @@ function MediaSlot({
   );
 }
 
-function ViewportVideo({ definition }: { definition: LandingMediaDefinition }) {
+function ViewportVideo({
+  definition,
+  showPlaybackControl,
+}: {
+  definition: LandingMediaDefinition;
+  showPlaybackControl: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [pausedByUser, setPausedByUser] = useState(false);
@@ -323,14 +402,16 @@ function ViewportVideo({ definition }: { definition: LandingMediaDefinition }) {
         ref={videoRef}
         src={definition.src}
       />
-      <button
-        aria-label={`${isPlaying ? 'Pause' : 'Play'} ${definition.title}`}
-        className="video-toggle"
-        onClick={togglePlayback}
-        type="button"
-      >
-        {isPlaying ? <Pause aria-hidden="true" size={16} /> : <Play aria-hidden="true" fill="currentColor" size={16} />}
-      </button>
+      {showPlaybackControl && (
+        <button
+          aria-label={`${isPlaying ? 'Pause' : 'Play'} ${definition.title}`}
+          className="video-toggle"
+          onClick={togglePlayback}
+          type="button"
+        >
+          {isPlaying ? <Pause aria-hidden="true" size={16} /> : <Play aria-hidden="true" fill="currentColor" size={16} />}
+        </button>
+      )}
     </>
   );
 }

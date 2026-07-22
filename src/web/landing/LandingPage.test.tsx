@@ -40,6 +40,8 @@ describe('Lineage landing page', () => {
       expect(html).toContain(`data-media-slot="${id}"`);
     }
     expect(html).toContain('data-media-slot="hero-lineage-growth"');
+    expect(html).toContain('hero-carousel-media-viewport');
+    expect(html).toContain('hero-carousel-caption-viewport');
     expect(html).toContain('Previous carousel slide');
     expect(html).toContain('Next carousel slide');
     expect((html.match(/class="video-toggle"/g) ?? []).length).toBe(4);
