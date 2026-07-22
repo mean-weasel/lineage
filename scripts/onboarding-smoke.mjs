@@ -3,9 +3,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -65,6 +65,67 @@ function parsePack(output) {
   const item = Array.isArray(parsed) ? parsed[0] : parsed;
   assert.ok(item?.filename, 'npm pack did not return a filename');
   return item.filename;
+}
+
+function prepareCodexDriver() {
+  const detected = run('codex', ['--version']);
+  if (detected.status === 0) return 'real';
+
+  const driverRoot = join(temporary, 'codex-protocol-driver');
+  const driver = join(driverRoot, 'codex');
+  const state = join(driverRoot, 'state.json');
+  mkdirSync(driverRoot, { recursive: true });
+  writeFileSync(driver, `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const statePath = process.env.LINEAGE_CODEX_PROTOCOL_STATE;
+const expectedVersion = process.env.LINEAGE_CODEX_PROTOCOL_VERSION;
+const args = process.argv.slice(2);
+const current = existsSync(statePath)
+  ? JSON.parse(readFileSync(statePath, 'utf8'))
+  : { enabled: false, installed: false, marketplaceRoot: null };
+const key = args.slice(0, 3).join(' ');
+
+function finish(value, changed = false) {
+  if (changed) writeFileSync(statePath, JSON.stringify(current));
+  process.stdout.write(JSON.stringify(value) + '\\n');
+  process.exit(0);
+}
+
+if (key === 'plugin marketplace list') {
+  finish({ marketplaces: current.marketplaceRoot ? [{ name: 'lineage', root: current.marketplaceRoot }] : [] });
+}
+if (key === 'plugin list --available') {
+  const plugin = { pluginId: 'lineage-codex-plugin@lineage', version: expectedVersion, installed: current.installed, enabled: current.enabled };
+  finish({ installed: current.installed ? [plugin] : [], available: current.marketplaceRoot && !current.installed ? [plugin] : [] });
+}
+if (key === 'plugin marketplace add') {
+  current.marketplaceRoot = resolve(args[3]);
+  finish({ marketplaceName: 'lineage', installedRoot: current.marketplaceRoot }, true);
+}
+if (args[0] === 'plugin' && args[1] === 'add') {
+  current.installed = true;
+  current.enabled = true;
+  finish({ pluginId: 'lineage-codex-plugin@lineage', version: expectedVersion }, true);
+}
+if (args[0] === 'plugin' && args[1] === 'remove') {
+  current.installed = false;
+  current.enabled = false;
+  finish({ pluginId: 'lineage-codex-plugin@lineage' }, true);
+}
+if (key === 'plugin marketplace remove') {
+  current.marketplaceRoot = null;
+  finish({ marketplaceName: 'lineage' }, true);
+}
+process.stderr.write('Unexpected Codex protocol command: ' + args.join(' ') + '\\n');
+process.exit(64);
+`);
+  chmodSync(driver, 0o755);
+  environment.LINEAGE_CODEX_PROTOCOL_STATE = state;
+  environment.LINEAGE_CODEX_PROTOCOL_VERSION = packageInfo.version;
+  environment.PATH = `${driverRoot}${delimiter}${environment.PATH || ''}`;
+  return 'protocol-harness';
 }
 
 function createCleanPackageFixture() {
@@ -201,6 +262,7 @@ try {
   assert.equal(packedPlugin.ok, true);
   const artifact = packedPlugin.artifact;
   const pluginInstaller = join(root, 'packages', 'lineage-plugin-installer', 'bin', 'lineage-plugin-installer.mjs');
+  const codexDriver = prepareCodexDriver();
   const plugin = runJson(process.execPath, [
     pluginInstaller,
     'install',
@@ -229,7 +291,7 @@ try {
     cli: { brief: true, next: true },
     isolated_roots: { codex: codexHome, profile: profileRoot, runtime: runtimeRoot, service: serviceRoot },
     ok: true,
-    plugin: { activated: plugin.activated, doctor: pluginDoctor.ok, version: plugin.pluginVersion },
+    plugin: { activated: plugin.activated, doctor: pluginDoctor.ok, driver: codexDriver, version: plugin.pluginVersion },
     rich_seed: { png: rich.snapshot.png_preview_urls, total: rich.swissifier_media.total },
     runtime: { channel: runtime.channel, fingerprint: runtime.fingerprint, origin: runtime.origin },
   }, null, 2));
