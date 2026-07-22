@@ -98,7 +98,9 @@ function defaultLauncher(channel) {
       ? join(homedir(), 'Library', 'Application Support', 'Lineage', 'runtimes')
       : join(homedir(), '.local', 'share', 'lineage', 'runtimes'));
   const envName = channel === 'stable' ? 'LINEAGE_STABLE_BIN' : 'LINEAGE_PREVIEW_BIN';
-  return [process.env[envName] || join(runtimeRoot, 'bin', channel === 'stable' ? 'lineage-stable' : 'lineage-preview')];
+  return [process.env[envName]
+    || process.env.LINEAGE_CHANNEL_LAUNCHER
+    || join(runtimeRoot, 'bin', channel === 'stable' ? 'lineage-stable' : 'lineage-preview')];
 }
 
 function launcherFor(channel, args) {

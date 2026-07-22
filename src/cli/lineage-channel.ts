@@ -61,6 +61,24 @@ function runtimeRoot(): string {
   return join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'lineage', 'runtimes');
 }
 
+function globalNpmExecutableDirectory(): string {
+  let prefix: string;
+  try {
+    prefix = execFileSync('npm', ['prefix', '--global'], { encoding: 'utf8' }).trim();
+  } catch (error) {
+    throw new Error('Could not locate the global npm executable directory; pass --shim-dir explicitly', { cause: error });
+  }
+  if (!prefix) throw new Error('npm returned an empty global prefix; pass --shim-dir explicitly');
+  return platform() === 'win32' ? resolve(prefix) : resolve(prefix, 'bin');
+}
+
+function shimDirectory(args: string[], root: string): string {
+  const explicit = readOption(args, '--shim-dir');
+  if (explicit) return resolve(explicit);
+  if (readOption(args, '--root') || process.env.LINEAGE_RUNTIME_ROOT) return join(root, 'bin');
+  return globalNpmExecutableDirectory();
+}
+
 function parseChannel(value?: string): PublishedChannel {
   if (value === 'stable' || value === 'preview') return value;
   throw new Error('Channel must be stable or preview; dev is checkout-only');
@@ -170,9 +188,16 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function writeShim(path: string, channel: PublishedChannel, receiptPath: string, entrypoint: string): void {
+function writeShim(
+  path: string,
+  channel: PublishedChannel,
+  receiptPath: string,
+  entrypoint: string,
+  environment: Record<string, string> = {},
+): void {
   const tempPath = `${path}.tmp-${process.pid}`;
-  const script = `#!/bin/sh\nLINEAGE_RUNTIME_RECEIPT=${shellQuote(receiptPath)} LINEAGE_RELEASE_CHANNEL=${shellQuote(channel)} exec ${shellQuote(process.execPath)} ${shellQuote(entrypoint)} "$@"\n`;
+  const assignments = Object.entries(environment).map(([key, value]) => `${key}=${shellQuote(value)}`).join(' ');
+  const script = `#!/bin/sh\nLINEAGE_RUNTIME_RECEIPT=${shellQuote(receiptPath)} LINEAGE_RELEASE_CHANNEL=${shellQuote(channel)}${assignments ? ` ${assignments}` : ''} exec ${shellQuote(process.execPath)} ${shellQuote(entrypoint)} "$@"\n`;
   writeFileSync(tempPath, script, { mode: 0o755 });
   chmodSync(tempPath, 0o755);
   renameSync(tempPath, path);
@@ -204,7 +229,7 @@ function validateExistingReceipt(
 
 function install(channel: PublishedChannel, args: string[]): LineageRuntimeInstallReceipt & { receipt_path: string; service_shim: string; shim: string } {
   const root = resolve(readOption(args, '--root') || runtimeRoot());
-  const shimDir = resolve(readOption(args, '--shim-dir') || join(root, 'bin'));
+  const shimDir = shimDirectory(args, root);
   const requestedSpec = readOption(args, '--package') || `${packageInfo.name}@${channel === 'stable' ? 'latest' : 'next'}`;
   const resolvedSpec = resolveSpec(requestedSpec, args.includes('--allow-local-package'));
   const channelRoot = join(root, 'installs', channel);
@@ -260,7 +285,7 @@ function install(channel: PublishedChannel, args: string[]): LineageRuntimeInsta
     const serviceShim = join(shimDir, channel === 'stable' ? 'lineage-stable-service' : 'lineage-preview-service');
     const serviceEntrypoint = join(finalPackageRoot, 'dist', 'cli', 'managed-service.js');
     if (!existsSync(serviceEntrypoint)) throw new Error(`Installed package is missing ${serviceEntrypoint}`);
-    writeShim(serviceShim, channel, receiptPath, serviceEntrypoint);
+    writeShim(serviceShim, channel, receiptPath, serviceEntrypoint, { LINEAGE_CHANNEL_LAUNCHER: shim });
     const pointerDir = join(root, 'channels');
     mkdirSync(pointerDir, { recursive: true });
     writeFileSync(join(pointerDir, `${channel}.json`), `${JSON.stringify({ channel, receipt_path: receiptPath, service_shim: serviceShim, shim }, null, 2)}\n`, { mode: 0o600 });
@@ -296,7 +321,10 @@ Usage:
 
 Stable and preview are installed into separate content-addressed roots. Dev is
 checkout-only and is started with npm run lineage:dev -- <command>. Local
-tarballs are refused unless --allow-local-package is supplied explicitly.`;
+tarballs are refused unless --allow-local-package is supplied explicitly.
+Default installs put launchers in npm's global executable directory, which is
+already on PATH when lineage-channel is invoked. A custom --root keeps its
+launchers under <root>/bin unless --shim-dir is also supplied.`;
 }
 
 function print(value: unknown, json: boolean): void {

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -68,6 +68,26 @@ try {
 
   mkdirSync(packRoot, { recursive: true });
   const tarball = join(packRoot, parsePack(run('npm', ['pack', '--json', '--pack-destination', packRoot], { cwd: fixtureRoot })));
+  const defaultHome = join(tmp, 'default-home');
+  const defaultNpmPrefix = join(tmp, 'default-npm-prefix');
+  const defaultBin = join(defaultNpmPrefix, 'bin');
+  const defaultEnvironment = {
+    ...process.env,
+    HOME: defaultHome,
+    npm_config_prefix: defaultNpmPrefix,
+    PATH: `${defaultBin}${delimiter}${process.env.PATH || ''}`,
+  };
+  const defaultInstall = JSON.parse(run(process.execPath, [
+    channelCli,
+    'install', 'stable',
+    '--package', tarball,
+    '--allow-local-package',
+    '--json',
+  ], { env: defaultEnvironment }));
+  assert(defaultInstall.shim === join(defaultBin, 'lineage-stable'), 'Default install did not place its launcher in npm\'s global executable directory');
+  const defaultIdentity = JSON.parse(run('lineage-stable', ['runtime', 'doctor', '--json'], { env: defaultEnvironment }));
+  assert(defaultIdentity.verified && defaultIdentity.channel === 'stable', 'Default launcher was not immediately executable from PATH');
+
   const unacknowledgedLocal = spawnSync(process.execPath, [channelCli, 'install', 'stable', '--root', join(tmp, 'refused-local'), '--package', tarball, '--json'], { encoding: 'utf8' });
   assert(unacknowledgedLocal.status !== 0, 'Local tarball install unexpectedly succeeded without explicit acknowledgement');
   assert(unacknowledgedLocal.stderr.includes('--allow-local-package'), 'Local tarball refusal did not name the required acknowledgement');
@@ -75,6 +95,7 @@ try {
   const stable = JSON.parse(run(process.execPath, installArgs('stable')));
   const preview = JSON.parse(run(process.execPath, installArgs('preview')));
 
+  assert(stable.shim === join(runtimeRoot, 'bin', 'lineage-stable'), 'Custom runtime root did not keep its default launcher under <root>/bin');
   assert(stable.channel === 'stable' && preview.channel === 'preview', 'Channel receipts did not retain exact channel identity');
   assert(stable.package_root !== preview.package_root, 'Stable and preview resolved to the same package root');
   assert(stable.receipt_path !== preview.receipt_path, 'Stable and preview resolved to the same install receipt');
