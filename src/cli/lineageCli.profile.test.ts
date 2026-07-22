@@ -52,6 +52,55 @@ afterEach(() => {
 });
 
 describe('profile-aware CLI options', () => {
+  it('initializes a fresh profile atomically with an owner-only manifest and bound database', () => {
+    const result = runLineageProfileCommand(config, 'init', [
+      '--profile', 'development-fresh',
+      '--service-origin', 'http://lineage-fresh.localhost:5298',
+      '--confirm-write',
+      '--json',
+    ]);
+    const profile = resolveLineageProfile('development-fresh');
+    const doctor = runLineageProfileCommand(config, 'doctor', ['--profile', 'development-fresh', '--json']);
+
+    expect(result).toMatchObject({
+      environment: 'development',
+      identity: { profile_id: 'development-fresh', environment: 'development' },
+      profile_id: 'development-fresh',
+      runtime: { channel: 'dev', code_origin: 'checkout' },
+      schema_version: 'lineage.profile_init.v1',
+      service_origin: 'http://lineage-fresh.localhost:5298',
+    });
+    expect(doctor).toMatchObject({ ok: true, profile: { profile_id: 'development-fresh' } });
+    expect(statSync(join(scratchRoot, 'development-fresh')).mode & 0o777).toBe(0o700);
+    expect(statSync(profile.manifest_path).mode & 0o777).toBe(0o600);
+    expect(statSync(profile.database_path).mode & 0o777).toBe(0o600);
+    expect(existsSync(profileWriterLockPath(profile))).toBe(false);
+  });
+
+  it('requires confirmation and never adopts or overwrites an existing profile', () => {
+    expect(() => runLineageProfileCommand(config, 'init', ['--profile', 'development-new']))
+      .toThrow('requires --confirm-write');
+    expect(existsSync(join(scratchRoot, 'development-new'))).toBe(false);
+
+    const before = readFileSync(join(scratchRoot, 'development-main', 'profile.json'), 'utf8');
+    expect(() => runLineageProfileCommand(config, 'init', [
+      '--profile', 'development-main', '--confirm-write',
+    ])).toThrow('already exists or requires manual inspection');
+    expect(readFileSync(join(scratchRoot, 'development-main', 'profile.json'), 'utf8')).toBe(before);
+  });
+
+  it('validates profile init inputs before creating a profile directory', () => {
+    expect(() => runLineageProfileCommand(config, 'init', [
+      '--profile', 'development-invalid-origin',
+      '--service-origin', 'https://lineage-dev.localhost:5198',
+      '--confirm-write',
+    ])).toThrow('must use http');
+    expect(existsSync(join(scratchRoot, 'development-invalid-origin'))).toBe(false);
+    expect(() => runLineageProfileCommand(config, 'init', [
+      '--profile', '../outside', '--confirm-write',
+    ])).toThrow('Invalid profile ID');
+  });
+
   it('repins a development manifest through the CLI and releases its writer lease', () => {
     const manifest = join(scratchRoot, 'development-main', 'profile.json');
     const payload = JSON.parse(readFileSync(manifest, 'utf8')) as { expected_runtime: { code_fingerprint: string } };

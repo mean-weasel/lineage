@@ -53,6 +53,7 @@ import {
   cloneLineageProfileAssets,
   cloneLineageProfileDatabase,
   doctorLineageProfile,
+  initializeLineageProfile,
   repinLineageDevelopmentProfileRuntime,
   resolveLineageProfile,
 } from '../server/lineageProfiles';
@@ -63,6 +64,7 @@ import type {
   LineageProfileBindResult,
   LineageProfileCloneResult,
   LineageProfileDoctorResult,
+  LineageProfileInitResult,
   LineageProfileRuntimeRepinResult,
   ResolvedLineageProfile,
 } from '../shared/lineageProfileTypes';
@@ -257,6 +259,7 @@ export function formatLineageHelp(config: LineageCliConfig): string {
 
 Usage:
   ${config.binName} start [--profile <id-or-manifest>] [--port <port>] [--host <host>] [--db <path>] [--asset-root <path>] [--open] [--json]
+  ${config.binName} profile init --profile <new-profile-id> [--service-origin <http-origin>] --confirm-write [--json]
   ${config.binName} profile doctor --profile <id-or-manifest> [--json]
   ${config.binName} profile bind --profile <id-or-manifest> --confirm-write [--json]
   ${config.binName} profile clone --source-db <snapshot-source> --target-profile <id-or-manifest> --confirm-write [--json]
@@ -726,18 +729,38 @@ export function runLineageDbCommand(config: LineageCliConfig, command: string, a
 }
 
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'doctor', args: string[]): LineageProfileDoctorResult;
+export function runLineageProfileCommand(config: LineageCliConfig, command: 'init', args: string[]): LineageProfileInitResult;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'bind', args: string[]): LineageProfileBindResult;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'clone', args: string[]): Promise<LineageProfileCloneResult>;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'clone-assets', args: string[]): LineageProfileAssetsCloneResult;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'repin-runtime', args: string[]): LineageProfileRuntimeRepinResult;
-export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult>;
+export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult>;
 export function runLineageProfileCommand(
   config: LineageCliConfig,
   command: string,
   args: string[],
-): LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult> {
+): LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult> {
   const runtime = getLineageRuntimeInfo({ channel: config.channel });
   const runtimeIdentity = { channel: config.channel, code: runtime.code, gitSha: runtime.git_sha, version: runtime.version };
+  if (command === 'init') {
+    if (hasOption(args, '--db')) throw new Error('Profile init cannot be combined with --db');
+    if (hasOption(args, '--asset-root')) throw new Error('Profile init cannot be combined with --asset-root');
+    if (!args.includes('--confirm-write')) throw new Error('Profile init requires --confirm-write');
+    const profileId = readOption(args, '--profile');
+    if (!profileId) throw new Error('lineage profile init requires --profile');
+    if (process.env.LINEAGE_PROFILE && process.env.LINEAGE_PROFILE !== profileId) {
+      throw new Error('Profile init requires an explicit --profile that does not conflict with LINEAGE_PROFILE');
+    }
+    const serviceOrigin = readOption(args, '--service-origin') || `http://${config.defaultHost}:${config.defaultPort}`;
+    return initializeLineageProfile(profileId, serviceOrigin, runtimeIdentity, true, (profile, initialize) => {
+      const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
+      try {
+        return initialize();
+      } finally {
+        writerLease.release();
+      }
+    });
+  }
   if (command === 'clone') {
     const source = readOption(args, '--source-db');
     const target = readOption(args, '--target-profile');
@@ -793,12 +816,15 @@ export function runLineageProfileCommand(
   throw new Error(`Unknown profile command: ${command}`);
 }
 
-function printProfileResult(result: LineageProfileDoctorResult | LineageProfileBindResult | LineageProfileCloneResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult, json: boolean): void {
+function printProfileResult(result: LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileCloneResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  if (result.schema_version === 'lineage.profile_doctor.v1') {
+  if (result.schema_version === 'lineage.profile_init.v1') {
+    console.log(`Initialized ${result.profile_id} at ${result.manifest_path}`);
+    console.log(`Service: ${result.service_origin}`);
+  } else if (result.schema_version === 'lineage.profile_doctor.v1') {
     console.log(`Profile doctor: ${result.ok ? 'ok' : 'failed'}`);
     for (const check of result.checks) console.log(`${check.status.toUpperCase()} ${check.id}: ${check.message}`);
   } else if (result.schema_version === 'lineage.profile_bind.v1') {
@@ -1229,7 +1255,7 @@ export async function runLineageCli(config: LineageCliConfig, args = process.arg
         process.env.LINEAGE_DB_ACCESS = 'read-only';
       }
     } else if (requiresWriter) {
-      throw new Error('Persistent writes require --profile; legacy-unbound access is read-only');
+      throw new Error('Persistent writes require --profile; legacy-unbound access is read-only. Create a fresh profile with `profile init --profile <id> --confirm-write`, then pass that profile to the command');
     } else {
       process.env.LINEAGE_DB_ACCESS = 'read-only';
     }

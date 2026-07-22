@@ -107,7 +107,7 @@ app.use((req, res, next) => {
   if (startupProfile || req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   res.status(409).json({
     error: 'profile_required',
-    message: 'Persistent writes require a selected named Lineage profile; legacy-unbound service access is read-only.',
+    message: 'Persistent writes require a selected named Lineage profile; legacy-unbound service access is read-only. Create a fresh profile with `profile init --profile <id> --confirm-write`, then start with that profile.',
   });
 });
 function projectFrom(input: { body?: Record<string, unknown>; query?: Record<string, unknown> }): string {

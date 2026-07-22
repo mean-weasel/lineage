@@ -85,6 +85,20 @@ lineage-preview runtime doctor --json
 npm run lineage:dev -- runtime doctor --json
 ```
 
+On a first install, initialize one new profile per channel before starting it:
+
+```bash
+lineage-stable profile init --profile team-production --confirm-write --json
+lineage-preview profile init --profile team-preview --confirm-write --json
+npm run lineage:dev -- profile init --profile team-development --confirm-write --json
+```
+
+`profile init` derives the environment and exact verified code pin from the
+launcher, creates owner-only media and SQLite paths, binds the new database
+identity, and publishes the profile manifest only after those steps succeed.
+It is fresh-only: it never adopts or overwrites an existing directory or
+database. Use `profile bind` only to migrate an existing database.
+
 `runtime doctor` fails unless channel, canonical package/checkout root, exact
 version, embedded Git/build fingerprint, install receipt, and installed package
 tree agree. `runtime info` prints the same identity without requiring it to pass
@@ -155,13 +169,18 @@ service and its data:
 
 Named profiles live at `$LINEAGE_PROFILE_ROOT/<profile-id>/profile.json` by
 default, or can be selected with an explicit manifest path. Relative database
-and asset paths resolve from the manifest directory. Inspect a profile without
-creating or migrating anything:
+and asset paths resolve from the manifest directory. Create a fresh profile,
+then inspect it without making further changes:
 
 ```bash
+lineage-stable profile init --profile team-production --confirm-write --json
 lineage-stable profile doctor --profile team-production --json
 lineage-stable start --profile team-production
 ```
+
+Pass `--service-origin http://host:port` to `profile init` when the profile
+must use a non-default local origin. Once initialized, that origin is part of
+the immutable profile identity rather than a per-start override.
 
 `LINEAGE_PROFILE` is equivalent to `--profile`. Profile commands reject direct
 `--db` and `--asset-root` overrides, and a dev or preview runtime refuses to
@@ -178,6 +197,8 @@ can be bound or used for writes. `profile bind` may add a fingerprint to a
 matching legacy identity, but refuses a conflicting identity. An unprofiled
 CLI or service is `legacy-unbound` and read-only; mutating CLI commands and HTTP
 methods fail with a profile-required error instead of creating a database.
+That error points new installations to `profile init`; direct database paths do
+not opt a process into writes.
 
 Checkout fingerprints intentionally change as tracked or untracked source
 changes. To repin an existing development profile, first stop its managed

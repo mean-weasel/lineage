@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, st
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { repoRoot } from './assetCore';
-import { assertProfileChannel, assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, cloneLineageProfileAssets, cloneLineageProfileDatabase, doctorLineageProfile, repinLineageDevelopmentProfileRuntime, resolveLineageProfile, runtimeProfileIdentity } from './lineageProfiles';
+import { assertProfileChannel, assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, cloneLineageProfileAssets, cloneLineageProfileDatabase, doctorLineageProfile, initializeLineageProfile, repinLineageDevelopmentProfileRuntime, resolveLineageProfile, runtimeProfileIdentity } from './lineageProfiles';
 import { getLineageCodeIdentity, getLineageRuntimeInfo } from './runtimeInfo';
 
 const originalEnv = { ...process.env };
@@ -21,6 +21,20 @@ afterEach(() => {
 });
 
 describe('Lineage named profiles', () => {
+  it('rolls back a reserved profile when initialization fails under its writer lease', () => {
+    const profileRoot = join(scratchRoot, 'development-rollback');
+
+    expect(() => initializeLineageProfile(
+      'development-rollback',
+      'http://lineage-dev.localhost:5198',
+      testRuntime('dev'),
+      true,
+      () => { throw new Error('injected initialization failure'); },
+    )).toThrow('injected initialization failure');
+
+    expect(existsSync(profileRoot)).toBe(false);
+  });
+
   it('repins only expected_runtime for an owner-only development manifest before its targets exist', () => {
     const manifest = writeProfile('development-repin', 'development', { createAssetRoot: false });
     const payload = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown> & { expected_runtime: Record<string, unknown> };

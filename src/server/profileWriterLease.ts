@@ -203,7 +203,7 @@ export function acquireProfileWriterLease(
 
 export function assertProfileWriterLeaseHeld(): void {
   if (!process.env.LINEAGE_PROFILE) {
-    throw new Error('Persistent writes require a selected named Lineage profile and its writer lease; legacy-unbound access is read-only');
+    throw new Error('Persistent writes require a selected named Lineage profile and its writer lease; legacy-unbound access is read-only. Create a fresh profile with `profile init --profile <id> --confirm-write`, then pass that profile to the command');
   }
   const profileId = process.env.LINEAGE_PROFILE_ID;
   const profileFingerprint = process.env.LINEAGE_PROFILE_FINGERPRINT;
