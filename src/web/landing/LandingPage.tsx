@@ -1,16 +1,18 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowDownRight,
   ArrowRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   GitBranch,
   MousePointer2,
+  Pause,
   Play,
   RefreshCcw,
-  TerminalSquare,
 } from 'lucide-react';
-import { landingMedia, type LandingMediaDefinition } from './landingMedia';
+import { heroCarousel, landingMedia, type LandingMediaDefinition } from './landingMedia';
 
 const installCommand = 'npm install -g @mean-weasel/lineage@latest';
 
@@ -70,15 +72,7 @@ export function LandingPage() {
             </div>
           </div>
           <div className="hero-media-wrap">
-            <MediaSlot definition={landingMedia['hero-board']} hero />
-            <div className="hero-proof-card proof-human">
-              <MousePointer2 aria-hidden="true" size={17} />
-              <span>Human chooses the next move</span>
-            </div>
-            <div className="hero-proof-card proof-agent">
-              <TerminalSquare aria-hidden="true" size={17} />
-              <span>Agent reads the same state</span>
-            </div>
+            <HeroCarousel />
           </div>
         </section>
 
@@ -100,7 +94,7 @@ export function LandingPage() {
                 <h3>Never lose the state behind the work.</h3>
                 <p>Every asset, path, prompt, iteration, and relationship stays available so the work can continue accurately.</p>
               </div>
-              <MediaSlot definition={landingMedia['reroll-loop']} />
+              <MediaSlot definition={landingMedia['agent-to-canvas']} showCaption />
             </article>
 
             <div className="loop-bridge" aria-label="Assets, context, selections, and annotations move through one creative state">
@@ -118,7 +112,7 @@ export function LandingPage() {
                 <h3>Keep your creative history organized.</h3>
                 <p>Review and compare the history, then use selections and annotations to direct the next iteration.</p>
               </div>
-              <MediaSlot definition={landingMedia['selection-to-codex']} />
+              <MediaSlot definition={landingMedia['human-to-agent']} showCaption />
             </article>
           </div>
         </section>
@@ -126,18 +120,18 @@ export function LandingPage() {
         <section className="features-section" id="features">
           <div className="features-heading">
             <p className="section-index"><span>03</span> What it enables</p>
-            <h2>Your creative history, ready to continue.</h2>
+            <h2>A shared creative history you and your agents can build on.</h2>
             <p>Keep the useful context behind every asset available, understandable, and ready for the next human or agent action.</p>
           </div>
 
           <div className="feature-grid">
-            <Feature number="01" icon={<GitBranch />} title="Trace every iteration">
+            <Feature icon={<GitBranch />} media={landingMedia['trace-tree']} number="01" title="Trace every iteration">
               Follow an asset from its origin through branches, selections, and final campaign formats.
             </Feature>
-            <Feature number="02" icon={<MousePointer2 />} title="Continue from the exact asset">
+            <Feature icon={<MousePointer2 />} media={landingMedia['selection-still']} number="02" title="Continue from the exact asset">
               Select any useful point in the lineage and bring that context into the next agent session.
             </Feature>
-            <Feature number="03" icon={<RefreshCcw />} title="Keep attempts and decisions attached">
+            <Feature icon={<RefreshCcw />} media={landingMedia['reroll-history']} number="03" title="Keep every agent attempt tied to your decisions">
               Review another pass without losing earlier results, prompts, relationships, or human direction.
             </Feature>
           </div>
@@ -145,7 +139,7 @@ export function LandingPage() {
           <div className="final-cta" id="install">
             <div>
               <p className="section-index"><span>→</span> Local-first and agent-ready</p>
-              <h3>Give your creative work somewhere durable to live.</h3>
+              <h3>One durable home for visual work made with your agents.</h3>
             </div>
             <div className="install-panel">
               <div className="install-command">
@@ -182,50 +176,184 @@ export function LandingPage() {
   );
 }
 
-function MediaSlot({ definition, hero = false }: { definition: LandingMediaDefinition; hero?: boolean }) {
-  if (definition.src && definition.kind === 'video') {
-    return (
-      <figure className={`media-slot media-slot-ready ${hero ? 'media-slot-hero' : ''}`} data-media-slot={definition.id}>
-        <video aria-label={definition.description} autoPlay loop muted playsInline poster={definition.poster} src={definition.src} />
-      </figure>
-    );
-  }
+function HeroCarousel() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeSlide = heroCarousel[activeIndex];
 
-  if (definition.src) {
-    return (
-      <figure className={`media-slot media-slot-ready ${hero ? 'media-slot-hero' : ''}`} data-media-slot={definition.id}>
-        <img alt={definition.description} src={definition.src} />
-      </figure>
-    );
+  function moveSlide(direction: -1 | 1) {
+    setActiveIndex((current) => (current + direction + heroCarousel.length) % heroCarousel.length);
   }
 
   return (
-    <figure aria-label={`${definition.title}. Media placeholder: ${definition.description}`} className={`media-slot media-placeholder ${hero ? 'media-slot-hero' : ''}`} data-media-slot={definition.id}>
-      <div className="placeholder-canvas" aria-hidden="true">
-        <span className="placeholder-node node-root"><i /></span>
-        <span className="placeholder-node node-a"><i /></span>
-        <span className="placeholder-node node-b"><i /></span>
-        <span className="placeholder-node node-c"><i /></span>
-        <span className="placeholder-edge edge-a" />
-        <span className="placeholder-edge edge-b" />
-        <span className="placeholder-edge edge-c" />
+    <div
+      aria-label="Lineage product tour"
+      aria-roledescription="carousel"
+      className="hero-carousel"
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft') moveSlide(-1);
+        if (event.key === 'ArrowRight') moveSlide(1);
+      }}
+      role="region"
+      tabIndex={0}
+    >
+      <MediaSlot definition={activeSlide} hero />
+      <div aria-live="polite" className="hero-carousel-caption">
+        <span className="media-eyebrow">{activeSlide.eyebrow}</span>
+        <strong>{activeSlide.title}</strong>
+        <small>{activeSlide.description}</small>
       </div>
-      <figcaption>
-        <span className="media-eyebrow">{definition.eyebrow}</span>
-        <strong>{definition.title}</strong>
-        <small>{definition.description}</small>
-      </figcaption>
-      {definition.kind === 'video' && <span aria-hidden="true" className="play-badge"><Play fill="currentColor" size={14} /></span>}
+      <div className="hero-carousel-controls">
+        <button aria-label="Previous carousel slide" onClick={() => moveSlide(-1)} type="button">
+          <ChevronLeft aria-hidden="true" size={19} />
+        </button>
+        <div aria-label={`Slide ${activeIndex + 1} of ${heroCarousel.length}`} className="carousel-progress">
+          {heroCarousel.map((slide, index) => (
+            <button
+              aria-current={index === activeIndex ? 'true' : undefined}
+              aria-label={`Show slide ${index + 1}: ${slide.title}`}
+              className={index === activeIndex ? 'active' : ''}
+              key={slide.id}
+              onClick={() => setActiveIndex(index)}
+              type="button"
+            />
+          ))}
+        </div>
+        <button aria-label="Next carousel slide" onClick={() => moveSlide(1)} type="button">
+          <ChevronRight aria-hidden="true" size={19} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MediaSlot({
+  definition,
+  hero = false,
+  showCaption = false,
+}: {
+  definition: LandingMediaDefinition;
+  hero?: boolean;
+  showCaption?: boolean;
+}) {
+  const fitClass = `media-fit-${definition.fit ?? 'cover'}`;
+  const positionClass = definition.position === 'left' ? 'media-position-left' : '';
+
+  return (
+    <figure
+      className={`media-slot media-slot-ready ${fitClass} ${positionClass} ${hero ? 'media-slot-hero' : ''}`}
+      data-media-slot={definition.id}
+    >
+      {definition.kind === 'video' ? (
+        <>
+          <ViewportVideo definition={definition} />
+          {definition.poster && <img alt="" aria-hidden="true" className="reduced-motion-poster" src={definition.poster} />}
+        </>
+      ) : (
+        <img alt={definition.description} loading="lazy" src={definition.src} />
+      )}
+      {showCaption && (
+        <figcaption aria-live={hero ? 'polite' : undefined}>
+          <span className="media-eyebrow">{definition.eyebrow}</span>
+          <strong>{definition.title}</strong>
+          <small>{definition.description}</small>
+        </figcaption>
+      )}
     </figure>
   );
 }
 
-function Feature({ children, icon, number, title }: { children: string; icon: ReactNode; number: string; title: string }) {
+function ViewportVideo({ definition }: { definition: LandingMediaDefinition }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [pausedByUser, setPausedByUser] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    if (pausedByUser) {
+      video.pause();
+      return;
+    }
+
+    if (!('IntersectionObserver' in window)) {
+      void video.play().catch(() => undefined);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        void video.play().catch(() => undefined);
+      } else {
+        video.pause();
+      }
+    }, { threshold: 0.45 });
+
+    observer.observe(video);
+    return () => {
+      observer.disconnect();
+      video.pause();
+    };
+  }, [definition.src, pausedByUser]);
+
+  function togglePlayback() {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      setPausedByUser(false);
+      void video.play().catch(() => undefined);
+    } else {
+      setPausedByUser(true);
+      video.pause();
+    }
+  }
+
+  return (
+    <>
+      <video
+        aria-label={definition.description}
+        loop
+        muted
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
+        playsInline
+        poster={definition.poster}
+        preload="metadata"
+        ref={videoRef}
+        src={definition.src}
+      />
+      <button
+        aria-label={`${isPlaying ? 'Pause' : 'Play'} ${definition.title}`}
+        className="video-toggle"
+        onClick={togglePlayback}
+        type="button"
+      >
+        {isPlaying ? <Pause aria-hidden="true" size={16} /> : <Play aria-hidden="true" fill="currentColor" size={16} />}
+      </button>
+    </>
+  );
+}
+
+function Feature({
+  children,
+  icon,
+  media,
+  number,
+  title,
+}: {
+  children: string;
+  icon: ReactNode;
+  media: LandingMediaDefinition;
+  number: string;
+  title: string;
+}) {
   return (
     <article className="feature-card">
       <div className="feature-top"><span>{number}</span>{icon}</div>
       <h3>{title}</h3>
       <p>{children}</p>
+      <div className="feature-media"><MediaSlot definition={media} /></div>
     </article>
   );
 }
