@@ -1,27 +1,19 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      operation:
-        description: Release operation
-        required: true
-        default: publish-next
-        type: choice
-        options:
-          - publish-next
-          - publish-latest
-          - promote-latest
-          - deprecate-0.1.13
-      dry_run:
-        description: Preview the release operation without changing npm
-        required: true
-        default: true
-        type: boolean
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: lineage-release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
+    name: Publish Tagged Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       id-token: write
@@ -35,7 +27,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - uses: actions/setup-node@v5
         with:
-          node-version: '22.22.3'
+          node-version: "22.22.3"
           cache: npm
           registry-url: https://registry.npmjs.org
       - name: Use release npm
@@ -45,97 +37,118 @@ jobs:
           npm --version
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Publish next dry run
-        if: ${{ inputs.dry_run && inputs.operation == 'publish-next' }}
-        run: |
-          npm run release -- --tag next --dry-run
-          npm run release:github:next:dry-run
+      - id: release
+        name: Verify immutable release tag and version lock
         env:
-          GH_TOKEN: ${{ github.token }}
-      - name: Publish next
-        if: ${{ !inputs.dry_run && inputs.operation == 'publish-next' }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          npm run release:github:next
-          npm run release -- --tag next
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
-          GH_TOKEN: ${{ github.token }}
-      - name: Publish latest dry run
-        if: ${{ inputs.dry_run && inputs.operation == 'publish-latest' }}
-        run: |
-          npm run release -- --tag latest --dry-run
-          npm run release:github:dry-run
-        env:
-          GH_TOKEN: ${{ github.token }}
-      - name: Publish latest
-        if: ${{ !inputs.dry_run && inputs.operation == 'publish-latest' }}
-        run: |
-          npm run release:github
-          npm run release -- --tag latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
-          GH_TOKEN: ${{ github.token }}
-      - name: Promote next to latest dry run
-        if: ${{ inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: |
-          git fetch --tags origin
-          release_tag="v$(node -p "require('./package.json').version")"
-          npm run release -- --promote-latest --dry-run --skip-ci
-          npm run release:github:dry-run -- --target "$release_tag"
-        env:
-          GH_TOKEN: ${{ github.token }}
-      - name: Promote next to latest
-        if: ${{ !inputs.dry_run && inputs.operation == 'promote-latest' }}
-        run: |
-          git fetch --tags origin
-          release_tag="v$(node -p "require('./package.json').version")"
-          npm run release -- --promote-latest --skip-ci
-          npm run release:github -- --target "$release_tag"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-      - name: Verify Lineage 0.1.13 is safe to deprecate
-        if: ${{ inputs.operation == 'deprecate-0.1.13' }}
-        env:
-          PACKAGE_NAME: "@mean-weasel/lineage"
-          TARGET_VERSION: "0.1.13"
-        run: |
-          resolved="$(npm view "${PACKAGE_NAME}@${TARGET_VERSION}" version --json | tr -d '"')"
-          if [ "$resolved" != "$TARGET_VERSION" ]; then
-            echo "::error::Expected ${PACKAGE_NAME}@${TARGET_VERSION}, got ${resolved:-<missing>}."
+          git fetch origin main --tags
+
+          object_type="$(git cat-file -t "refs/tags/${RELEASE_TAG}")"
+          if [ "$object_type" != "tag" ]; then
+            echo "::error::Release tag ${RELEASE_TAG} must be annotated; got ${object_type}."
             exit 1
           fi
 
-          latest="$(npm view "$PACKAGE_NAME" dist-tags.latest --json | tr -d '"')"
-          next="$(npm view "$PACKAGE_NAME" dist-tags.next --json | tr -d '"')"
-          if [ "$latest" = "$TARGET_VERSION" ] || [ "$next" = "$TARGET_VERSION" ]; then
-            echo "::error::Refusing to deprecate tagged version ${TARGET_VERSION}; latest=${latest:-<missing>} next=${next:-<missing>}."
+          tag_commit="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            echo "::error::Release tag ${RELEASE_TAG} points to ${tag_commit}, which is not on main."
             exit 1
           fi
-          printf 'Verified %s@%s with latest=%s and next=%s.\n' "$PACKAGE_NAME" "$TARGET_VERSION" "$latest" "$next"
-      - name: Deprecate Lineage 0.1.13 dry run
-        if: ${{ inputs.dry_run && inputs.operation == 'deprecate-0.1.13' }}
-        run: echo "Dry run would deprecate @mean-weasel/lineage@0.1.13; both release tags were verified elsewhere."
-      - name: Deprecate Lineage 0.1.13
-        if: ${{ !inputs.dry_run && inputs.operation == 'deprecate-0.1.13' }}
+
+          plan="$(node scripts/tag-release-plan.mjs --tag "$RELEASE_TAG")"
+          version="$(PLAN="$plan" node -e 'process.stdout.write(JSON.parse(process.env.PLAN).version)')"
+          npm_tag="$(PLAN="$plan" node -e 'process.stdout.write(JSON.parse(process.env.PLAN).npm_tag)')"
+          github_channel="$(PLAN="$plan" node -e 'process.stdout.write(JSON.parse(process.env.PLAN).github_channel)')"
+          github_prerelease="$(PLAN="$plan" node -e 'process.stdout.write(String(JSON.parse(process.env.PLAN).github_prerelease))')"
+
+          {
+            echo "version=${version}"
+            echo "npm_tag=${npm_tag}"
+            echo "github_channel=${github_channel}"
+            echo "github_prerelease=${github_prerelease}"
+            echo "tag_commit=${tag_commit}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Tagged release plan"
+            echo
+            echo "- Tag: \`${RELEASE_TAG}\`"
+            echo "- Commit: \`${tag_commit}\`"
+            echo "- npm dist-tag: \`${npm_tag}\`"
+            echo "- GitHub channel: \`${github_channel}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Build GitHub Release assets before npm publication
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm deprecate "@mean-weasel/lineage@0.1.13" "Cannot bootstrap isolated channel installs with affected npm metadata output. Upgrade to >=0.1.14."
-      - name: Verify Lineage 0.1.13 deprecation
-        if: ${{ !inputs.dry_run && inputs.operation == 'deprecate-0.1.13' }}
-        env:
-          DEPRECATION_MESSAGE: "Cannot bootstrap isolated channel installs with affected npm metadata output. Upgrade to >=0.1.14."
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_RELEASE_CHANNEL: ${{ steps.release.outputs.github_channel }}
+          LINEAGE_RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          if [ "$GITHUB_RELEASE_CHANNEL" = "next" ]; then
+            npm run release:github:next -- --target "$LINEAGE_RELEASE_TAG"
+          else
+            npm run release:github -- --target "$LINEAGE_RELEASE_TAG"
+          fi
+      - name: Publish exact tagged version to npm
+        env:
+          LINEAGE_RELEASE_TAG: ${{ github.ref_name }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+          RELEASE_NPM_TAG: ${{ steps.release.outputs.npm_tag }}
+        run: npm run release -- --tag "$RELEASE_NPM_TAG"
+      - name: Verify npm and GitHub release state
+        env:
+          EXPECTED_PRERELEASE: ${{ steps.release.outputs.github_prerelease }}
+          EXPECTED_TAG: ${{ github.ref_name }}
+          EXPECTED_TAG_COMMIT: ${{ steps.release.outputs.tag_commit }}
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NPM_TAG: ${{ steps.release.outputs.npm_tag }}
+        run: |
+          resolved=""
+          tagged=""
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            deprecated="$(npm view "@mean-weasel/lineage@0.1.13" deprecated --json | tr -d '"')"
-            if [ "$deprecated" = "$DEPRECATION_MESSAGE" ]; then
-              npm view "@mean-weasel/lineage@0.1.13" version deprecated --json
-              exit 0
+            resolved="$(npm view "@mean-weasel/lineage@${EXPECTED_VERSION}" version --json | tr -d '"')"
+            tagged="$(npm view "@mean-weasel/lineage" "dist-tags.${RELEASE_NPM_TAG}" --json | tr -d '"')"
+            if [ "$resolved" = "$EXPECTED_VERSION" ] && [ "$tagged" = "$EXPECTED_VERSION" ]; then
+              break
             fi
-            echo "Registry has not exposed the deprecation yet (attempt ${attempt}/12)."
+            echo "Registry has not converged yet (attempt ${attempt}/12)."
             sleep 5
           done
-          echo "::error::Deprecation verification did not converge."
-          exit 1
+          if [ "$resolved" != "$EXPECTED_VERSION" ] || [ "$tagged" != "$EXPECTED_VERSION" ]; then
+            echo "::error::npm verification failed: version=${resolved:-<missing>} ${RELEASE_NPM_TAG}=${tagged:-<missing>}."
+            exit 1
+          fi
+
+          release_tag="$(gh release view "$EXPECTED_TAG" --json tagName --jq .tagName)"
+          release_prerelease="$(gh release view "$EXPECTED_TAG" --json isPrerelease --jq .isPrerelease)"
+          if [ "$release_tag" != "$EXPECTED_TAG" ] || [ "$release_prerelease" != "$EXPECTED_PRERELEASE" ]; then
+            echo "::error::GitHub release verification failed: tag=${release_tag:-<missing>} prerelease=${release_prerelease:-<missing>}."
+            exit 1
+          fi
+
+          remote_tag_commit="$(git ls-remote origin "refs/tags/${EXPECTED_TAG}^{}" | awk '{print $1}')"
+          if [ "$remote_tag_commit" != "$EXPECTED_TAG_COMMIT" ]; then
+            echo "::error::Remote tag commit ${remote_tag_commit:-<missing>} does not match ${EXPECTED_TAG_COMMIT}."
+            exit 1
+          fi
+
+          artifact="lineage-codex-plugin-${EXPECTED_VERSION}.tgz"
+          assets="$(gh release view "$EXPECTED_TAG" --json assets --jq '.assets[].name')"
+          for required in "$artifact" "${artifact}.sha256"; do
+            if ! grep -Fxq "$required" <<< "$assets"; then
+              echo "::error::GitHub release ${EXPECTED_TAG} is missing ${required}."
+              exit 1
+            fi
+          done
+
+          {
+            echo
+            echo "## Published state"
+            echo
+            echo "- npm: \`@mean-weasel/lineage@${EXPECTED_VERSION}\` on \`${RELEASE_NPM_TAG}\`"
+            echo "- GitHub: \`${EXPECTED_TAG}\` prerelease=\`${EXPECTED_PRERELEASE}\`"
+            echo "- Tag commit: \`${EXPECTED_TAG_COMMIT}\`"
+            echo "- Plugin assets: verified"
+          } >> "$GITHUB_STEP_SUMMARY"

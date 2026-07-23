@@ -77,6 +77,11 @@ if (!notes) {
   process.exit(1);
 }
 
+if (!dryRun && process.env.LINEAGE_RELEASE_TAG !== tag) {
+  console.error(`Refusing GitHub release mutation outside the tag-triggered Release workflow: LINEAGE_RELEASE_TAG must be ${tag}`);
+  process.exit(1);
+}
+
 const remoteTag = maybeCapture('git', ['ls-remote', '--exit-code', '--tags', 'origin', `refs/tags/${tag}`]);
 const localTag = maybeCapture('git', ['rev-parse', '--verify', `refs/tags/${tag}^{commit}`]);
 const release = maybeCapture('gh', ['release', 'view', tag, '--repo', repo, '--json', 'tagName']);
