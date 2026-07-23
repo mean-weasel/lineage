@@ -6,11 +6,20 @@ const richWorkspaceTitle = 'Swissifier rich demo';
 test('QA seed shows truthful progress and rich PNG previews in the first lineage view', async ({ page, request }) => {
   const consoleErrors: string[] = [];
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  await page.route(/\/api\/lineage-workspaces(?:\?|$)/, async route => {
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+    await route.continue();
+  });
   await page.goto('/');
   const actions = page.locator('header.lineage-header .lineage-overflow');
   await actions.locator('summary').click();
-  await expect(actions.getByText('Checking media')).toHaveCount(0);
   const download = actions.getByRole('button', { name: 'Download rich images' });
+  await expect.poll(async () => (
+    await download.isEnabled()
+    || await actions.getByText('14/14 PNG images').count() > 0
+  ), {
+    message: 'wait for rich media status and workspace readiness',
+  }).toBe(true);
   if (await download.isEnabled()) {
     const downloaded = page.waitForResponse(response => response.request().method() === 'POST'
       && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/swissifier/media/download');
