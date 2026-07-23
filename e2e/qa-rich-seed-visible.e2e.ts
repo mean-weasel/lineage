@@ -15,7 +15,14 @@ test('QA seed shows truthful progress and rich PNG previews in the first lineage
     const downloaded = page.waitForResponse(response => response.request().method() === 'POST'
       && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/swissifier/media/download');
     await download.click();
-    expect((await downloaded).ok()).toBe(true);
+    const downloadResponse = await downloaded;
+    expect(downloadResponse.ok()).toBe(true);
+    await expect(downloadResponse.json()).resolves.toMatchObject({
+      result: {
+        media_status: { present: 14, total: 14 },
+        restored: 14,
+      },
+    });
   }
   await expect(actions).toContainText('14/14 PNG images');
 
