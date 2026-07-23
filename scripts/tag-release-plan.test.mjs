@@ -112,6 +112,25 @@ test('npm publication receives GitHub credentials for the assets-first proof', (
   assert.match(publishStep[0], /GH_TOKEN: \$\{\{ github\.token \}\}/);
 });
 
+test('tagged release proves the published installer can install the tagged plugin', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+  const compatibilityStep = workflow.match(/- name: Verify published installer can install tagged plugin[\s\S]*?(?=\n {6}- name:|\s*$)/);
+  assert.ok(compatibilityStep, 'release workflow must contain the published-installer compatibility gate');
+  assert.ok(
+    workflow.indexOf('- name: Verify published installer can install tagged plugin') < workflow.indexOf('- name: Publish exact tagged version to npm'),
+    'published-installer compatibility must pass before npm publication',
+  );
+  assert.match(compatibilityStep[0], /npx --yes "@mean-weasel\/lineage-plugin-installer@latest"/);
+  assert.match(compatibilityStep[0], /--version "\$EXPECTED_VERSION"/);
+  assert.match(compatibilityStep[0], /--target-dir "\$RUNNER_TEMP\/lineage-plugin-install"/);
+  assert.match(compatibilityStep[0], /receipt\.pluginVersion !== expectedVersion/);
+  assert.match(compatibilityStep[0], /receipt\.lineageVersion !== expectedVersion/);
+  assert.match(compatibilityStep[0], /receipt\.checksum/);
+  assert.match(compatibilityStep[0], /\.codex-plugin', 'plugin\.json'/);
+  assert.match(compatibilityStep[0], /manifest\.version !== expectedVersion/);
+  assert.match(compatibilityStep[0], /manifest\.lineage\?\.version !== expectedVersion/);
+});
+
 test('installer promotion waits for npm dist-tag propagation', () => {
   const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'lineage-plugin-installer-promote.yml'), 'utf8');
   const verifyStep = workflow.match(/- name: Verify promoted dist tag[\s\S]*$/);

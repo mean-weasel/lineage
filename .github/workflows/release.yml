@@ -94,6 +94,75 @@ jobs:
           else
             npm run release:github -- --target "$LINEAGE_RELEASE_TAG"
           fi
+      - name: Verify published installer can install tagged plugin
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          install_root="$RUNNER_TEMP/lineage-plugin-install"
+          receipt_file="$RUNNER_TEMP/lineage-plugin-install-receipt.json"
+
+          npx --yes "@mean-weasel/lineage-plugin-installer@latest" install \
+            --version "$EXPECTED_VERSION" \
+            --github-repo mean-weasel/lineage \
+            --target-dir "$RUNNER_TEMP/lineage-plugin-install" \
+            --json > "$receipt_file"
+
+          EXPECTED_VERSION="$EXPECTED_VERSION" \
+          INSTALL_ROOT="$install_root" \
+          RECEIPT_FILE="$receipt_file" \
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { join, resolve } from 'node:path';
+
+          const expectedVersion = process.env.EXPECTED_VERSION;
+          const installRoot = process.env.INSTALL_ROOT;
+          const receipt = JSON.parse(readFileSync(process.env.RECEIPT_FILE, 'utf8'));
+          const expectedArtifact = `https://github.com/mean-weasel/lineage/releases/download/v${expectedVersion}/lineage-codex-plugin-${expectedVersion}.tgz`;
+
+          assert.equal(receipt.ok, true);
+          assert.equal(receipt.activated, false);
+          assert.equal(receipt.plugin, 'lineage-codex-plugin');
+          if (receipt.pluginVersion !== expectedVersion) {
+            throw new Error(`Installed plugin ${receipt.pluginVersion || '<missing>'} does not match ${expectedVersion}.`);
+          }
+          assert.equal(receipt.lineagePackage, '@mean-weasel/lineage');
+          if (receipt.lineageVersion !== expectedVersion) {
+            throw new Error(`Installed plugin targets Lineage ${receipt.lineageVersion || '<missing>'}, not ${expectedVersion}.`);
+          }
+          assert.match(receipt.checksum, /^[a-f0-9]{64}$/);
+          assert.equal(receipt.artifact, expectedArtifact);
+          assert.equal(receipt.checksumSource, `${expectedArtifact}.sha256`);
+          assert.equal(resolve(receipt.destination), resolve(installRoot, 'lineage-codex-plugin'));
+
+          const manifestPath = join(receipt.destination, '.codex-plugin', 'plugin.json');
+          const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+          if (manifest.version !== expectedVersion) {
+            throw new Error(`Plugin manifest ${manifest.version || '<missing>'} does not match ${expectedVersion}.`);
+          }
+          assert.equal(manifest.lineage?.package, '@mean-weasel/lineage');
+          if (manifest.lineage?.version !== expectedVersion) {
+            throw new Error(`Plugin manifest targets Lineage ${manifest.lineage?.version || '<missing>'}, not ${expectedVersion}.`);
+          }
+
+          console.log(JSON.stringify({
+            artifact: receipt.artifact,
+            checksum: receipt.checksum,
+            destination: receipt.destination,
+            lineageVersion: receipt.lineageVersion,
+            pluginVersion: receipt.pluginVersion,
+          }, null, 2));
+          NODE
+
+          {
+            echo
+            echo "## Published installer compatibility"
+            echo
+            echo "- Installer: \`@mean-weasel/lineage-plugin-installer@latest\`"
+            echo "- Plugin and Lineage version: \`${EXPECTED_VERSION}\`"
+            echo "- Destination: isolated runner temporary directory"
+            echo "- Artifact checksum and installed manifest: verified"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Publish exact tagged version to npm
         env:
           GH_TOKEN: ${{ github.token }}
