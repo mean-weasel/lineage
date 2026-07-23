@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Make missing Codex CLI failures explain how to restore `PATH`, and verify `npx` and Codex prerequisites explicitly in the public and hermetic plugin-install instructions.
+
 ## 0.1.22
 
 - Harden the landing page, README, and packaged manual dogfood guide with fail-fast first-run commands that complete the post-initialization runtime, profile, database, and service identity gate.
