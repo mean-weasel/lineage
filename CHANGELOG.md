@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.21-rc.2
+
+- Refresh the single pushed release tag from `origin` before validating it so GitHub Actions cannot confuse its synthetic checkout ref with the authoritative annotated tag.
+
 ## 0.1.21-rc.1
 
 - Make a new immutable annotated release tag on reviewed `main` the sole authority for matching npm and GitHub releases, with prereleases routed to `next`, stable releases routed to `latest`, and plugin assets verified before publication.
