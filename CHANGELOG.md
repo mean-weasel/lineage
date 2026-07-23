@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.21-rc.1
+
+- Make a new immutable annotated release tag on reviewed `main` the sole authority for matching npm and GitHub releases, with prereleases routed to `next`, stable releases routed to `latest`, and plugin assets verified before publication.
+
 ## 0.1.20
 
 - Generate every server and browser handoff with the verified stable, preview, or checkout-development launcher and pin it to the active profile or explicit database instead of emitting unsafe `npx` fallbacks.
