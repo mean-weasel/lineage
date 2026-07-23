@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { LandingPage } from './LandingPage';
@@ -57,5 +59,22 @@ describe('Lineage landing page', () => {
 
     expect(html).toContain('https://github.com/mean-weasel/lineage');
     expect(html).toContain('npm install -g @mean-weasel/lineage@latest');
+    expect(html).toContain('lineage-channel install stable');
+    expect(html).toContain('lineage-stable runtime doctor --json');
+    expect(html).toContain('lineage-stable profile init --profile team-production --confirm-write --json');
+    expect(html).toContain('lineage-stable profile doctor --profile team-production --json');
+    expect(html).toContain('lineage-stable db info --profile team-production --json');
+    expect(html).toContain('lineage-stable start --profile team-production');
+    expect(html).toContain('Copy first-run commands');
+    expect(html).toContain('https://github.com/mean-weasel/lineage#first-run');
+    expect(html.match(/&amp;&amp;/g)).toHaveLength(7);
+  });
+
+  it('keeps every first-run command visible without horizontal scrolling', () => {
+    const css = readFileSync(fileURLToPath(new URL('./landing.css', import.meta.url)), 'utf8');
+
+    expect(css).toContain('white-space: pre-wrap');
+    expect(css).toContain('overflow-wrap: anywhere');
+    expect(css).not.toContain('.install-command pre { overflow-x: auto;');
   });
 });

@@ -14,7 +14,16 @@ import {
 } from 'lucide-react';
 import { heroCarousel, landingMedia, type LandingMediaDefinition } from './landingMedia';
 
-const installCommand = 'npm install -g @mean-weasel/lineage@latest';
+const installCommand = [
+  'npm install -g @mean-weasel/lineage@latest',
+  'lineage-channel install stable',
+  'lineage-stable runtime doctor --json',
+  'lineage-stable profile init --profile team-production --confirm-write --json',
+  'lineage-stable runtime doctor --json',
+  'lineage-stable profile doctor --profile team-production --json',
+  'lineage-stable db info --profile team-production --json',
+  'lineage-stable start --profile team-production',
+].join(' &&\n');
 
 export function LandingPage() {
   const [copied, setCopied] = useState(false);
@@ -144,12 +153,15 @@ export function LandingPage() {
             <div className="install-panel">
               <div className="install-command">
                 <span aria-hidden="true">$</span>
-                <code>{installCommand}</code>
-                <button aria-label="Copy install command" onClick={() => void copyInstallCommand()} type="button">
+                <pre><code>{installCommand}</code></pre>
+                <button aria-label="Copy first-run commands" onClick={() => void copyInstallCommand()} type="button">
                   {copied ? <Check aria-hidden="true" size={18} /> : <Copy aria-hidden="true" size={18} />}
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? 'Copied' : 'Copy first-run commands'}
                 </button>
               </div>
+              <a className="install-guide-link" href="https://github.com/mean-weasel/lineage#first-run" rel="noreferrer" target="_blank">
+                Read the complete first-run guide <ArrowDownRight aria-hidden="true" size={15} />
+              </a>
               <div className="install-meta">
                 <span>Local-first</span>
                 <span>MIT licensed</span>

@@ -17,6 +17,12 @@ contract. Never infer them from a window title, PID, port, PATH, or old command.
 Do not globally install `latest` and `next` into one prefix. Do not use `npx`, a
 PATH-resolved `lineage-dev`, or checkout code for production operations.
 
+Fresh-profile bootstrap exception: when the intended named profile does not
+exist yet, run runtime doctor first, run the atomic `profile init --profile
+<profile> --confirm-write --json`, and then immediately run runtime doctor,
+profile doctor, and `db info --profile <profile> --json`. Do not run another
+operational command or write until that post-init gate passes.
+
 ## Prove identity before work
 
 Set the intended profile selector, then run the matching launcher:

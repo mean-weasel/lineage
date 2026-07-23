@@ -15,6 +15,7 @@
     "dist",
     "fixtures/demo-project",
     "README.md",
+    "MANUAL_INSTALL_DOGFOOD.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
