@@ -17,6 +17,19 @@ Use Node.js 22.22.0 or newer and npm. Installing or doctoring an activated
 plugin also requires a real Codex CLI. Point verification at a temporary
 `--codex-home`; do not use your real Codex profile for installer tests.
 
+Verify that the launcher and activation prerequisites resolve in the same
+shell before installing:
+
+```bash
+node --version
+npm --version
+npx --version
+codex --version
+```
+
+If `npx` or `codex` is missing, restore its executable directory on `PATH`
+before running the installer.
+
 ## Publishing
 
 The package is published manually from GitHub Actions with npm provenance.

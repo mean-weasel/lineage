@@ -630,10 +630,13 @@ export function runCodexCommandSync(command, args, { codexHome } = {}) {
       ...(codexHome ? { CODEX_HOME: path.resolve(codexHome) } : {}),
     },
   });
+  const stderr = result.error?.code === "ENOENT"
+    ? "Codex CLI was not found on PATH. Install Codex or restore its executable directory, then verify `codex --version` in this shell before rerunning the Lineage plugin installer."
+    : result.stderr || result.error?.message || "";
   return {
     status: result.status ?? 1,
     stdout: result.stdout || "",
-    stderr: result.stderr || result.error?.message || "",
+    stderr,
   };
 }
 

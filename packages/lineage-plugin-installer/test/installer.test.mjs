@@ -16,6 +16,7 @@ import {
   pluginArtifactFilename,
   releaseArtifactUrls,
   resolveLineageVersion,
+  runCodexCommandSync,
   sha256,
 } from "../src/installer.mjs";
 
@@ -37,6 +38,16 @@ test("CLI prints installer package version", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), installerVersion);
   assert.equal(result.stderr, "");
+});
+
+test("Codex runner explains how to recover when the CLI is not on PATH", () => {
+  const result = runCodexCommandSync("lineage-codex-cli-missing-for-test", [], {
+    codexHome: "/tmp/lineage-codex-home",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Codex CLI was not found on PATH/);
+  assert.match(result.stderr, /codex --version/);
 });
 
 test("CLI help is non-mutating and documents install isolation and doctor", async () => {

@@ -59,14 +59,17 @@ Before installing anything, verify the tools used by the path you choose:
 ```bash
 node --version
 npm --version
+npx --version
 make --version
 ```
 
-Lineage requires Node.js 22.22.0 or newer and npm. Make is required only for
-the documented `make` shortcuts. A real Codex installation is optional for the
-app, but required to install and activate the Codex plugin; verify that
-additional prerequisite with `codex --version` before following the plugin
-step.
+Lineage requires Node.js 22.22.0 or newer and npm, including the accompanying
+`npx` command used by the plugin installer. Make is required only for the
+documented `make` shortcuts. A real Codex installation is optional for the app,
+but required to install and activate the Codex plugin; verify that additional
+prerequisite with `codex --version` in the same shell before following the
+plugin step. If either command is missing, restore its executable directory on
+`PATH` before installing.
 
 On the minimum supported Node 22 line, foreground startup can print one
 `ExperimentalWarning` for Node's built-in SQLite module before the healthy

@@ -72,6 +72,7 @@ Record the prerequisites and registry selection:
 ```bash
 run_lineage_dogfood node --version
 run_lineage_dogfood npm --version
+run_lineage_dogfood npx --version
 run_lineage_dogfood codex --version
 run_lineage_dogfood npm view @mean-weasel/lineage dist-tags version engines --json
 ```
