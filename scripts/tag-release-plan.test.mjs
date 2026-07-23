@@ -111,3 +111,11 @@ test('npm publication receives GitHub credentials for the assets-first proof', (
   assert.ok(publishStep, 'release workflow must contain the npm publication step');
   assert.match(publishStep[0], /GH_TOKEN: \$\{\{ github\.token \}\}/);
 });
+
+test('installer promotion waits for npm dist-tag propagation', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'lineage-plugin-installer-promote.yml'), 'utf8');
+  const verifyStep = workflow.match(/- name: Verify promoted dist tag[\s\S]*$/);
+  assert.ok(verifyStep, 'installer promotion workflow must verify the promoted dist-tag');
+  assert.match(verifyStep[0], /for attempt in 1 2 3 4 5 6/);
+  assert.match(verifyStep[0], /sleep 5/);
+});
