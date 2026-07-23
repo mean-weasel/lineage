@@ -11,6 +11,7 @@ const filesToScan = [
   'LICENSE',
   'Makefile',
   'README.md',
+  'MANUAL_INSTALL_DOGFOOD.md',
   'eslint.config.js',
   'knip.json',
   'package.json',

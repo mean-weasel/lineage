@@ -12,6 +12,12 @@ Five-step channel gate before any operation:
 4. Confirm code root/origin/fingerprint, channel, profile/environment/fingerprint, database identity, and service origin all agree.
 5. Stop on any mismatch. For an intentional checkout change, stop the dev service, run `make repin-dev LINEAGE_DEV_PROFILE=<profile>`, then repeat the gate. Repin never applies to stable/preview/package code.
 
+Fresh-profile bootstrap exception: when the intended named profile does not
+exist yet, run runtime doctor first, run the atomic `profile init --profile
+<profile> --confirm-write --json`, and then immediately run runtime doctor,
+profile doctor, and `db info --profile <profile> --json`. No other operational
+command or write is allowed until that post-init gate passes.
+
 Runtime channel memory:
 
 - `stable` resolves npm `latest` once into an isolated, receipt-bound code root and is launched with `lineage-stable` (normally through `make start-prod`).

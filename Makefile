@@ -7,7 +7,8 @@ PREVIEW_TAG ?= next
 LINEAGE_RUNTIME_ROOT ?= $(HOME)/Library/Application Support/Lineage/runtimes
 LINEAGE_NPM_PREFIX ?= $(shell npm prefix --global)
 LINEAGE_USER_BIN ?= $(LINEAGE_NPM_PREFIX)/bin
-LINEAGE_CHANNEL_CLI ?= node dist/cli/lineage-channel.js
+LINEAGE_BOOTSTRAP_PREFIX ?= $(LINEAGE_RUNTIME_ROOT)/bootstrap
+LINEAGE_CHANNEL_CLI ?= $(LINEAGE_BOOTSTRAP_PREFIX)/bin/lineage-channel
 LINEAGE_STABLE_BIN ?= $(LINEAGE_USER_BIN)/lineage-stable
 LINEAGE_PREVIEW_BIN ?= $(LINEAGE_USER_BIN)/lineage-preview
 LINEAGE_STABLE_SERVICE_MANAGER ?= $(LINEAGE_USER_BIN)/lineage-stable-service
@@ -63,10 +64,12 @@ init:
 	npm ci
 
 install-prod:
-	$(LINEAGE_CHANNEL_CLI) install stable --shim-dir "$(LINEAGE_USER_BIN)" --package $(LINEAGE_PACKAGE)@$(PROD_TAG)
+	npm install --global --prefix "$(LINEAGE_BOOTSTRAP_PREFIX)" $(LINEAGE_PACKAGE)@$(PROD_TAG)
+	"$(LINEAGE_CHANNEL_CLI)" install stable --root "$(LINEAGE_RUNTIME_ROOT)" --shim-dir "$(LINEAGE_USER_BIN)" --package $(LINEAGE_PACKAGE)@$(PROD_TAG)
 
 install-preview:
-	$(LINEAGE_CHANNEL_CLI) install preview --shim-dir "$(LINEAGE_USER_BIN)" --package $(LINEAGE_PACKAGE)@$(PREVIEW_TAG)
+	npm install --global --prefix "$(LINEAGE_BOOTSTRAP_PREFIX)" $(LINEAGE_PACKAGE)@$(PROD_TAG)
+	"$(LINEAGE_CHANNEL_CLI)" install preview --root "$(LINEAGE_RUNTIME_ROOT)" --shim-dir "$(LINEAGE_USER_BIN)" --package $(LINEAGE_PACKAGE)@$(PREVIEW_TAG)
 
 install-dev:
 	npm ci

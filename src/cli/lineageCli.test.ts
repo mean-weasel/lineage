@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { defaultProject, repoRoot } from '../server/assetCore';
@@ -974,5 +974,108 @@ describe('lineage CLI handoff commands', () => {
     expect(readme).toContain('make install-dev');
     expect(readme).toContain('make start-dev LINEAGE_DEV_PROFILE=team-development');
     expect(readme).toContain('no separate build command is needed');
+  });
+
+  it('bootstraps published Make installs without checkout build artifacts', () => {
+    const makefile = readFileSync(join(repoRoot, 'Makefile'), 'utf8');
+    const installProd = makefile.match(/^install-prod:\n((?:\t.*\n)+)/m)?.[1] || '';
+
+    expect(makefile).toContain('LINEAGE_BOOTSTRAP_PREFIX ?= $(LINEAGE_RUNTIME_ROOT)/bootstrap');
+    expect(makefile).toContain('LINEAGE_CHANNEL_CLI ?= $(LINEAGE_BOOTSTRAP_PREFIX)/bin/lineage-channel');
+    expect(installProd).toContain('npm install --global --prefix "$(LINEAGE_BOOTSTRAP_PREFIX)" $(LINEAGE_PACKAGE)@$(PROD_TAG)');
+    expect(installProd).toContain('"$(LINEAGE_CHANNEL_CLI)" install stable');
+    expect(installProd).toContain('--root "$(LINEAGE_RUNTIME_ROOT)"');
+    expect(installProd).toContain('--shim-dir "$(LINEAGE_USER_BIN)"');
+    expect(installProd).not.toContain('node dist/cli/lineage-channel.js');
+    expect(makefile).not.toContain('LINEAGE_CHANNEL_CLI ?= node dist/cli/lineage-channel.js');
+  });
+
+  it('uses the stable registry bootstrap for isolated preview Make installs', () => {
+    const makefile = readFileSync(join(repoRoot, 'Makefile'), 'utf8');
+    const installPreview = makefile.match(/^install-preview:\n((?:\t.*\n)+)/m)?.[1] || '';
+
+    expect(installPreview).toContain('npm install --global --prefix "$(LINEAGE_BOOTSTRAP_PREFIX)" $(LINEAGE_PACKAGE)@$(PROD_TAG)');
+    expect(installPreview).toContain('"$(LINEAGE_CHANNEL_CLI)" install preview');
+    expect(installPreview).toContain('--root "$(LINEAGE_RUNTIME_ROOT)"');
+    expect(installPreview).toContain('--shim-dir "$(LINEAGE_USER_BIN)"');
+    expect(installPreview).toContain('--package $(LINEAGE_PACKAGE)@$(PREVIEW_TAG)');
+    expect(installPreview).not.toContain('node dist/cli/lineage-channel.js');
+  });
+
+  it('documents the one-time fresh-profile bootstrap exception consistently', () => {
+    const agents = readFileSync(join(repoRoot, 'AGENTS.md'), 'utf8');
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const operator = readFileSync(join(repoRoot, 'plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md'), 'utf8');
+
+    for (const text of [agents, readme, operator]) {
+      expect(text).toContain('Fresh-profile bootstrap exception');
+      expect(text).toContain('runtime doctor');
+      expect(text).toContain('profile init');
+      expect(text).toContain('profile doctor');
+      expect(text).toContain('db info');
+    }
+    expect(readme).toContain([
+      'npm ci &&',
+      'npm run lineage:dev -- runtime doctor --json &&',
+      'npm run lineage:dev -- profile init --profile team-development --confirm-write --json &&',
+      'npm run lineage:dev -- runtime doctor --json &&',
+      'npm run lineage:dev -- profile doctor --profile team-development --json &&',
+      'npm run lineage:dev -- db info --profile team-development --json &&',
+      'npm run dev -- --profile team-development',
+    ].join('\n'));
+    expect(readme).toContain([
+      'lineage-stable runtime doctor --json &&',
+      'lineage-stable profile init --profile team-production --confirm-write --json &&',
+      'lineage-stable runtime doctor --json &&',
+      'lineage-stable profile doctor --profile team-production --json &&',
+      'lineage-stable db info --profile team-production --json &&',
+      'lineage-stable start --profile team-production',
+    ].join('\n'));
+    expect(readme).toContain([
+      'lineage-preview runtime doctor --json &&',
+      'lineage-preview profile init --profile team-preview --confirm-write --json &&',
+      'lineage-preview runtime doctor --json &&',
+      'lineage-preview profile doctor --profile team-preview --json &&',
+      'lineage-preview db info --profile team-preview --json &&',
+      'lineage-preview start --profile team-preview',
+    ].join('\n'));
+  });
+
+  it('ships a hermetic manual install dogfood runbook', () => {
+    const runbookPath = join(repoRoot, 'MANUAL_INSTALL_DOGFOOD.md');
+    expect(existsSync(runbookPath)).toBe(true);
+    if (!existsSync(runbookPath)) return;
+
+    const runbook = readFileSync(runbookPath, 'utf8');
+    const packageInfo = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as { files?: string[] };
+    expect(packageInfo.files).toContain('MANUAL_INSTALL_DOGFOOD.md');
+    for (const required of [
+      'mktemp -d',
+      'LINEAGE_RUNTIME_ROOT',
+      'LINEAGE_PROFILE_ROOT',
+      'LINEAGE_SERVICE_ROOT',
+      '--codex-home',
+      'runtime doctor',
+      'profile doctor',
+      'db info',
+      'lineage-stable-service stop',
+      'run_lineage_dev_dogfood npm run lineage:dev -- profile init',
+      'Refusing unexpected cleanup target',
+    ]) {
+      expect(runbook).toContain(required);
+    }
+    expect(runbook).toContain([
+      '  --json',
+      'run_lineage_dev_dogfood npm run lineage:dev -- runtime doctor --json',
+      'run_lineage_dev_dogfood npm run lineage:dev -- profile doctor',
+    ].join('\n'));
+  });
+
+  it('declares the plugin installer minimum Node version', () => {
+    const pluginInstaller = JSON.parse(readFileSync(join(repoRoot, 'packages', 'lineage-plugin-installer', 'package.json'), 'utf8')) as {
+      engines?: { node?: string };
+    };
+
+    expect(pluginInstaller.engines?.node).toBe('>=22.22.0');
   });
 });

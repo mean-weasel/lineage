@@ -68,6 +68,11 @@ app, but required to install and activate the Codex plugin; verify that
 additional prerequisite with `codex --version` before following the plugin
 step.
 
+On the minimum supported Node 22 line, foreground startup can print one
+`ExperimentalWarning` for Node's built-in SQLite module before the healthy
+`Lineage listening` line. Lineage keeps that category-specific warning visible;
+it does not indicate an identity or database failure.
+
 ### Develop from a fresh clone
 
 This is the shortest source-development path with hot reload and isolated
@@ -76,8 +81,12 @@ development data:
 ```bash
 git clone https://github.com/mean-weasel/lineage.git
 cd lineage
-npm ci
-npm run lineage:dev -- profile init --profile team-development --confirm-write --json
+npm ci &&
+npm run lineage:dev -- runtime doctor --json &&
+npm run lineage:dev -- profile init --profile team-development --confirm-write --json &&
+npm run lineage:dev -- runtime doctor --json &&
+npm run lineage:dev -- profile doctor --profile team-development --json &&
+npm run lineage:dev -- db info --profile team-development --json &&
 npm run dev -- --profile team-development
 ```
 
@@ -94,19 +103,25 @@ Use the currently published npm dist-tags when you want installed rather than
 checkout code:
 
 ```bash
-npm install -g @mean-weasel/lineage@latest
-lineage-channel install stable
-lineage-stable runtime doctor --json
-lineage-stable profile init --profile team-production --confirm-write --json
+npm install -g @mean-weasel/lineage@latest &&
+lineage-channel install stable &&
+lineage-stable runtime doctor --json &&
+lineage-stable profile init --profile team-production --confirm-write --json &&
+lineage-stable runtime doctor --json &&
+lineage-stable profile doctor --profile team-production --json &&
+lineage-stable db info --profile team-production --json &&
 lineage-stable start --profile team-production
 ```
 
 Preview is independent and must use its own runtime root and profile:
 
 ```bash
-lineage-channel install preview
-lineage-preview runtime doctor --json
-lineage-preview profile init --profile team-preview --confirm-write --json
+lineage-channel install preview &&
+lineage-preview runtime doctor --json &&
+lineage-preview profile init --profile team-preview --confirm-write --json &&
+lineage-preview runtime doctor --json &&
+lineage-preview profile doctor --profile team-preview --json &&
+lineage-preview db info --profile team-preview --json &&
 lineage-preview start --profile team-preview
 ```
 
@@ -127,6 +142,10 @@ npx --yes @mean-weasel/lineage-plugin-installer@latest doctor --channel latest -
 If doctor fails, it prints a version-pinned remediation command for that same
 Codex home. For verification, use a temporary `--codex-home`; do not test an
 installer against your real Codex profile.
+
+Maintainers can exercise the complete published and source journeys without
+touching an existing Lineage or Codex installation by following the
+[hermetic manual install dogfood runbook](MANUAL_INSTALL_DOGFOOD.md).
 
 ## Package Channels
 
@@ -174,6 +193,12 @@ lineage-stable profile init --profile team-production --confirm-write --json
 lineage-preview profile init --profile team-preview --confirm-write --json
 npm run lineage:dev -- profile init --profile team-development --confirm-write --json
 ```
+
+Fresh-profile bootstrap exception: because profile doctor and `db info` cannot
+pass before a profile and database exist, run runtime doctor first, perform the
+atomic `profile init`, and then immediately run runtime doctor, profile doctor,
+and `db info --profile <profile> --json`. Do not start a service or perform
+another write until that post-init gate passes.
 
 `profile init` derives the environment and exact verified code pin from the
 launcher, creates owner-only media and SQLite paths, binds the new database
@@ -614,6 +639,10 @@ and then cleans up.
 
 The root `Makefile` provides memorable wrappers for common setup, startup, and
 verification commands. Run `make` or `make help` to list the available targets.
+`make install-prod` and `make install-preview` bootstrap the published
+`@mean-weasel/lineage@latest` package under the isolated runtime root before
+creating the channel runtime and its launchers, so they work from a fresh clone
+without checkout build artifacts or overwriting an existing channel launcher.
 
 ```bash
 make install-prod
