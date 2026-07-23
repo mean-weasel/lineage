@@ -96,6 +96,7 @@ jobs:
           fi
       - name: Publish exact tagged version to npm
         env:
+          GH_TOKEN: ${{ github.token }}
           LINEAGE_RELEASE_TAG: ${{ github.ref_name }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

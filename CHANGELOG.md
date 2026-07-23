@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.21-rc.3
+
+- Pass the workflow GitHub token into npm publication so the assets-first release guard can verify the matching prerelease tarball and checksum before publishing.
+
 ## 0.1.21-rc.2
 
 - Refresh the single pushed release tag from `origin` before validating it so GitHub Actions cannot confuse its synthetic checkout ref with the authoritative annotated tag.

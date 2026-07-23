@@ -1,6 +1,6 @@
 {
   "name": "lineage-codex-plugin",
-  "version": "0.1.21-rc.2",
+  "version": "0.1.21-rc.3",
   "private": true,
   "type": "module",
   "files": [

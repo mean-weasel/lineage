@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -102,4 +103,11 @@ test('GitHub release mutation refuses direct execution without the exact tag aut
   });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Refusing GitHub release mutation outside the tag-triggered Release workflow/);
+});
+
+test('npm publication receives GitHub credentials for the assets-first proof', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+  const publishStep = workflow.match(/- name: Publish exact tagged version to npm[\s\S]*?run: npm run release/);
+  assert.ok(publishStep, 'release workflow must contain the npm publication step');
+  assert.match(publishStep[0], /GH_TOKEN: \$\{\{ github\.token \}\}/);
 });
