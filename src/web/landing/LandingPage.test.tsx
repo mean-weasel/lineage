@@ -33,6 +33,7 @@ describe('Lineage landing page', () => {
       'Humans and agents continue from the same place.',
     ]);
     expect(heroCarousel[2]?.src).not.toBe(landingMedia['agent-to-canvas'].src);
+    expect(heroCarousel[2]?.poster).not.toBe(landingMedia['agent-to-canvas'].poster);
     expect(html).not.toContain('Human chooses the next move');
 
     for (const id of ['agent-to-canvas', 'human-to-agent', 'trace-tree', 'selection-still', 'reroll-history'] as const) {
@@ -44,6 +45,8 @@ describe('Lineage landing page', () => {
     expect(html).toContain('hero-carousel-caption-viewport');
     expect(html).toContain('Previous carousel slide');
     expect(html).toContain('Next carousel slide');
+    expect(html).toContain('Pause carousel rotation');
+    expect(html).toContain('carousel-autoplay-toggle');
     expect((html.match(/class="video-toggle"/g) ?? []).length).toBe(4);
     expect(html).toContain('Play Turn agent output into visual creative history.');
     expect(html).toContain('Play Bring agent results back into the shared state.');

@@ -177,14 +177,75 @@ export function LandingPage() {
 }
 
 function HeroCarousel() {
+  const carouselRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hasFocusWithin, setHasFocusWithin] = useState(false);
+  const [isCarouselInView, setIsCarouselInView] = useState(false);
+  const [isPageVisible, setIsPageVisible] = useState(() => (
+    typeof document === 'undefined' || document.visibilityState === 'visible'
+  ));
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [transition, setTransition] = useState<{
     direction: -1 | 1;
     fromIndex: number;
+    initiatedBy: 'automatic' | 'manual';
   } | null>(null);
   const activeSlide = heroCarousel[activeIndex];
   const outgoingSlide = transition ? heroCarousel[transition.fromIndex] : null;
   const transitionDirection = transition?.direction === 1 ? 'next' : 'previous';
+  const isRotationActive = isAutoPlaying
+    && !isHovered
+    && !hasFocusWithin
+    && isCarouselInView
+    && isPageVisible
+    && !prefersReducedMotion
+    && !transition;
+
+  useEffect(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    if (!('IntersectionObserver' in window)) {
+      setIsCarouselInView(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsCarouselInView(Boolean(entry && entry.intersectionRatio >= 0.35));
+    }, { threshold: 0.35 });
+
+    observer.observe(carousel);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateMotionPreference = () => setPrefersReducedMotion(motionPreference.matches);
+
+    updateMotionPreference();
+    motionPreference.addEventListener('change', updateMotionPreference);
+    return () => motionPreference.removeEventListener('change', updateMotionPreference);
+  }, []);
+
+  useEffect(() => {
+    const updatePageVisibility = () => setIsPageVisible(document.visibilityState === 'visible');
+
+    document.addEventListener('visibilitychange', updatePageVisibility);
+    return () => document.removeEventListener('visibilitychange', updatePageVisibility);
+  }, []);
+
+  useEffect(() => {
+    if (!isRotationActive) return;
+
+    const rotationTimer = window.setTimeout(() => {
+      setTransition({ direction: 1, fromIndex: activeIndex, initiatedBy: 'automatic' });
+      setActiveIndex((activeIndex + 1) % heroCarousel.length);
+    }, 15_000);
+
+    return () => window.clearTimeout(rotationTimer);
+  }, [activeIndex, isRotationActive]);
 
   useEffect(() => {
     if (!transition) return;
@@ -205,7 +266,7 @@ function HeroCarousel() {
       return;
     }
 
-    setTransition({ direction, fromIndex: activeIndex });
+    setTransition({ direction, fromIndex: activeIndex, initiatedBy: 'manual' });
     setActiveIndex(nextIndex);
   }
 
@@ -214,12 +275,19 @@ function HeroCarousel() {
       aria-label="Lineage product tour"
       aria-roledescription="carousel"
       className="hero-carousel"
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setHasFocusWithin(false);
+      }}
+      onFocusCapture={() => setHasFocusWithin(true)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === 'ArrowLeft') moveSlide(-1);
         if (event.key === 'ArrowRight') moveSlide(1);
       }}
       role="region"
+      ref={carouselRef}
       tabIndex={0}
     >
       <div className="hero-carousel-media-viewport">
@@ -252,7 +320,10 @@ function HeroCarousel() {
           )}
         </div>
       </div>
-      <div aria-live="polite" className="hero-carousel-caption-viewport">
+      <div
+        aria-live={isRotationActive || transition?.initiatedBy === 'automatic' ? 'off' : 'polite'}
+        className="hero-carousel-caption-viewport"
+      >
         {outgoingSlide && (
           <div
             aria-hidden="true"
@@ -277,17 +348,29 @@ function HeroCarousel() {
         <button aria-label="Previous carousel slide" onClick={() => moveSlide(-1)} type="button">
           <ChevronLeft aria-hidden="true" size={19} />
         </button>
-        <div aria-label={`Slide ${activeIndex + 1} of ${heroCarousel.length}`} className="carousel-progress">
-          {heroCarousel.map((slide, index) => (
-            <button
-              aria-current={index === activeIndex ? 'true' : undefined}
-              aria-label={`Show slide ${index + 1}: ${slide.title}`}
-              className={index === activeIndex ? 'active' : ''}
-              key={slide.id}
-              onClick={() => showSlide(index, index > activeIndex ? 1 : -1)}
-              type="button"
-            />
-          ))}
+        <div className="carousel-center-controls">
+          <button
+            aria-label={isAutoPlaying ? 'Pause carousel rotation' : 'Resume carousel rotation'}
+            className="carousel-autoplay-toggle"
+            onClick={() => setIsAutoPlaying((isPlaying) => !isPlaying)}
+            type="button"
+          >
+            {isAutoPlaying
+              ? <Pause aria-hidden="true" size={13} />
+              : <Play aria-hidden="true" size={13} />}
+          </button>
+          <div aria-label={`Slide ${activeIndex + 1} of ${heroCarousel.length}`} className="carousel-progress">
+            {heroCarousel.map((slide, index) => (
+              <button
+                aria-current={index === activeIndex ? 'true' : undefined}
+                aria-label={`Show slide ${index + 1}: ${slide.title}`}
+                className={index === activeIndex ? 'active' : ''}
+                key={slide.id}
+                onClick={() => showSlide(index, index > activeIndex ? 1 : -1)}
+                type="button"
+              />
+            ))}
+          </div>
         </div>
         <button aria-label="Next carousel slide" onClick={() => moveSlide(1)} type="button">
           <ChevronRight aria-hidden="true" size={19} />

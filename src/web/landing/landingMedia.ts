@@ -3,6 +3,7 @@ import agentToCanvasVideo from './media/agent-to-canvas.mp4';
 import attemptHistoryPoster from './media/attempt-history.webp';
 import branchingTreeImage from './media/branching-tree.png';
 import canvasCliPoster from './media/canvas-cli.png';
+import heroAgentSyncPoster from './media/hero-agent-sync-poster.png';
 import heroAgentSyncVideo from './media/hero-agent-sync.mp4';
 import heroBoardPoster from './media/hero-board.webp';
 import heroLineageGrowthVideo from './media/hero-lineage-growth.mp4';
@@ -66,7 +67,7 @@ export const heroCarousel: LandingMediaDefinition[] = [
     description: 'New agent work returns to the canvas, ready for the next decision.',
     kind: 'video',
     src: heroAgentSyncVideo,
-    poster: agentSharedStatePoster,
+    poster: heroAgentSyncPoster,
     fit: 'contain',
   },
 ];
