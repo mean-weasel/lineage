@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.21
+
+- Make immutable annotated tags on reviewed `main` the sole authority for matching npm and GitHub releases, with verified plugin assets built before publication and stable/prerelease channels selected directly from SemVer.
+- Harden the tag-triggered workflow against synthetic checkout refs and require GitHub credentials for the assets-first npm publication proof.
+
 ## 0.1.21-rc.3
 
 - Pass the workflow GitHub token into npm publication so the assets-first release guard can verify the matching prerelease tarball and checksum before publishing.
