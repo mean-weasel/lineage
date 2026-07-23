@@ -113,9 +113,16 @@ jobs:
       - name: Verify promoted dist tag
         if: ${{ !inputs.dry_run }}
         run: |
-          promoted="$(npm view "$PACKAGE_NAME" "dist-tags.${NPM_TAG}" --json | tr -d '"')"
-          if [ "$promoted" != "$PROMOTE_VERSION" ]; then
-            echo "::error::npm tag ${NPM_TAG} points to ${promoted:-<missing>}, expected ${PROMOTE_VERSION}."
-            exit 1
-          fi
+          for attempt in 1 2 3 4 5 6; do
+            promoted="$(npm view "$PACKAGE_NAME" "dist-tags.${NPM_TAG}" --json --prefer-online | tr -d '"')"
+            if [ "$promoted" = "$PROMOTE_VERSION" ]; then
+              break
+            fi
+            if [ "$attempt" = "6" ]; then
+              echo "::error::npm tag ${NPM_TAG} points to ${promoted:-<missing>}, expected ${PROMOTE_VERSION}."
+              exit 1
+            fi
+            echo "npm tag ${NPM_TAG} still reports ${promoted:-<missing>}; waiting for registry propagation (${attempt}/6)."
+            sleep 5
+          done
           npm view "$PACKAGE_NAME" dist-tags --json
