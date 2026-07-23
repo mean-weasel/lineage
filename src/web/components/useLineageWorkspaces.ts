@@ -188,12 +188,16 @@ export function useLineageWorkspaces({
   async function downloadSwissifierDemoMedia() {
     setWorkspaceLoading(true);
     try {
-      const result = await api<{ result: { restored?: number; download_available?: boolean } }>('/api/lineage-workspaces/demo/swissifier/media/download', {
+      const result = await api<{ result: { restored?: number; download_available?: boolean; media_status?: DemoSeedMediaStatus } }>('/api/lineage-workspaces/demo/swissifier/media/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project, confirmWrite: true }),
       });
-      await refreshDemoSeedStatus();
+      if (result.result.media_status) {
+        setSwissifierDemoStatus(result.result.media_status);
+      } else {
+        await refreshDemoSeedStatus();
+      }
       if (!result.result.download_available) {
         onToast('error', 'Swissifier media download is not configured');
         return false;
