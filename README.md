@@ -642,20 +642,20 @@ For local release validation:
 ```bash
 npm run release:dry-run -- --tag next
 npm run release:claim-smoke -- --package @mean-weasel/lineage@next
-npm run release:next
 npm run release:dry-run -- --tag latest
-npm run release:latest
+npm run release:policy:test
 ```
 
-The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, package contents, and the version-locked Codex plugin before publishing. The GitHub plugin artifact and checksum must exist before npm publish or dist-tag mutation. Promotion also installs the candidate package and runs a claim lifecycle smoke that creates a target claim, proves missing-token writes fail, proves matching-token writes succeed, verifies read surfaces do not expose the raw token, and proves release invalidates the token. GitHub Actions runs CI on pull requests and `main`; publishing is manual through the Release workflow.
+The release script verifies package metadata, changelog version coverage, public-readiness scans, install smoke, browser smoke, audit, package contents, and the version-locked Codex plugin before publishing. The GitHub plugin artifact and checksum must exist before npm publish. GitHub Actions runs CI on pull requests and `main`; publishing is controlled by a new immutable annotated release tag.
 
-Use the Release workflow operations this way:
+The release tag is the public release authority:
 
-- `publish-next`: publish the current package version to npm with the `next` dist-tag using trusted publishing and provenance.
-- `promote-latest`: move the already-published `next` version to `latest` after dogfooding. This uses the repository `NPM_TOKEN` secret and refuses to promote unless npm's `next` tag points at the local package version.
-- `publish-latest`: publish the current package version directly to `latest` using trusted publishing and provenance, reserved for cases where the version should skip the `next` channel.
+- Merge the exact root, lockfile, plugin package, plugin manifest, `lineage.version`, and changelog version to `main` and require CI to pass.
+- Create a new annotated `v<package.json version>` tag on that reviewed `main` commit and push the tag once. Never move, replace, or reuse a release tag.
+- A stable SemVer tag such as `v0.2.0` creates a full GitHub Release and publishes the same npm version to `latest`.
+- A prerelease SemVer tag such as `v0.2.0-rc.1` creates a GitHub prerelease and publishes the same npm version to `next`.
 
-The normal cadence is: bump version and changelog, merge to `main`, run `publish-next`, install or run `@mean-weasel/lineage@next`, dogfood it, then run `promote-latest`. After promotion, both npm tags point to the same version until the next development version is published to `next`.
+The tag-triggered Release workflow rejects lightweight tags, tags that do not point to a commit already on `main`, mismatched version metadata, and missing changelog sections. It builds and verifies the plugin tarball and checksum on the matching GitHub Release before publishing npm, then verifies the GitHub release mode, npm dist-tag, tag commit, and assets. To dogfood before a stable release, publish an explicit prerelease version such as `0.2.0-rc.1`; do not publish a stable version to `next` and later reinterpret the same version.
 
 ## Demo Fixture
 
