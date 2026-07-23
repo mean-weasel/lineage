@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.22
+
+- Harden the landing page, README, and packaged manual dogfood guide with fail-fast first-run commands that complete the post-initialization runtime, profile, database, and service identity gate.
+- Isolate bootstrap dependencies from stable and preview shims so repeat and coexisting channel installs cannot clobber their launchers.
+- Package and scan the manual install runbook, and make the Node.js 22.22+ requirement explicit for the independently published Codex plugin installer.
+- Stabilize the rich-demo browser readiness proof so delayed workspace discovery cannot race the media download check.
+- Make plugin-installer dist-tag promotion verification tolerate npm registry propagation while still failing closed on the wrong version.
+
 ## 0.1.21
 
 - Make immutable annotated tags on reviewed `main` the sole authority for matching npm and GitHub releases, with verified plugin assets built before publication and stable/prerelease channels selected directly from SemVer.
