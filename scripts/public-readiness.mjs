@@ -22,6 +22,7 @@ const filesToScan = [
   'vite.config.ts',
   'vitest.config.ts',
   '.github',
+  'docs-site',
   'fixtures',
   'src',
   'e2e',

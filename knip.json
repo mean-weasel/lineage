@@ -7,6 +7,8 @@
     "src/cli/lineage-dev.ts",
     "src/cli/lineage-preview.ts",
     "src/web/landing/main.tsx",
+    "docs-site/astro.config.mjs",
+    "docs-site/src/content.config.ts",
     "scripts/*.mjs",
     "vite.config.ts",
     "vitest.config.ts",
@@ -16,11 +18,17 @@
   ],
   "project": [
     "src/**/*.{ts,tsx}",
+    "docs-site/**/*.{js,mjs,ts}",
     "scripts/**/*.{js,mjs,ts}",
     "*.config.{js,mjs,ts}",
     "tsconfig.build.json"
   ],
-  "ignore": ["dist/**", "coverage/**", ".lineage-scratch/**"],
+  "ignore": [
+    "dist/**",
+    "coverage/**",
+    ".lineage-scratch/**",
+    "docs-site/.astro/**"
+  ],
   "ignoreBinaries": ["gh", "ps"],
   "ignoreIssues": {
     "src/server/assetCore.ts": ["exports"],

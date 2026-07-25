@@ -67,6 +67,9 @@ describe('Lineage landing page', () => {
     expect(html).toContain('lineage-stable start --profile team-production');
     expect(html).toContain('Copy first-run commands');
     expect(html).toContain('https://github.com/mean-weasel/lineage#first-run');
+    expect(html).toContain('Documentation');
+    expect(html).toContain('href="/docs/"');
+    expect(html).toContain('Browse Lineage documentation');
     expect(html.match(/&amp;&amp;/g)).toHaveLength(7);
   });
 

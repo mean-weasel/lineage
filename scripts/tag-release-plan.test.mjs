@@ -13,6 +13,11 @@ const repoRoot = dirname(scriptsRoot);
 function metadata(version = '1.2.3') {
   return {
     changelog: `# Changelog\n\n## ${version}\n\n- Release notes.\n`,
+    docsReview: {
+      reviewedFor: version,
+      result: 'updated',
+      areas: ['concepts', 'workflows'],
+    },
     packageInfo: { name: '@mean-weasel/lineage', version },
     packageLock: { version, packages: { '': { version } } },
     pluginManifest: {
@@ -46,6 +51,12 @@ test('maps a prerelease version tag to npm next and a GitHub prerelease', () => 
   });
 });
 
+test('accepts an explicit no-changes documentation review', () => {
+  const input = metadata();
+  input.docsReview.result = 'no-changes';
+  assert.equal(planTagRelease(input).version, '1.2.3');
+});
+
 test('rejects a tag that does not exactly match package.json', () => {
   assert.throws(
     () => planTagRelease({ ...metadata(), tag: 'v1.2.4' }),
@@ -69,6 +80,30 @@ test('rejects an unsupported release version or missing changelog section', () =
   assert.throws(
     () => planTagRelease(input),
     /Invalid release version[\s\S]*CHANGELOG\.md is missing/,
+  );
+});
+
+test('rejects a documentation review for a different exact release version', () => {
+  const input = metadata();
+  input.docsReview.reviewedFor = '1.2.2';
+  assert.throws(
+    () => planTagRelease(input),
+    /docs review 1\.2\.2 must exactly match package version 1\.2\.3/,
+  );
+});
+
+test('rejects a missing or malformed documentation review declaration', () => {
+  assert.throws(
+    () => planTagRelease({ ...metadata(), docsReview: undefined }),
+    /must contain a review object/,
+  );
+
+  const input = metadata();
+  input.docsReview.result = 'implicit';
+  input.docsReview.areas = [];
+  assert.throws(
+    () => planTagRelease(input),
+    /invalid result[\s\S]*at least one reviewed area/,
   );
 });
 
@@ -110,6 +145,36 @@ test('npm publication receives GitHub credentials for the assets-first proof', (
   const publishStep = workflow.match(/- name: Publish exact tagged version to npm[\s\S]*?run: npm run release/);
   assert.ok(publishStep, 'release workflow must contain the npm publication step');
   assert.match(publishStep[0], /GH_TOKEN: \$\{\{ github\.token \}\}/);
+});
+
+test('release workflow creates the documentation verification issue only after published state verification', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+  const verifyName = '- name: Verify npm and GitHub release state';
+  const issueName = '- name: Open post-release documentation verification issue';
+  const issueStep = workflow.match(/- name: Open post-release documentation verification issue[\s\S]*$/);
+
+  assert.ok(issueStep, 'release workflow must contain the post-release documentation issue step');
+  assert.ok(
+    workflow.indexOf(verifyName) < workflow.indexOf(issueName),
+    'documentation verification issue must be created after published state verification',
+  );
+  assert.match(workflow, /issues: write/);
+  assert.match(issueStep[0], /if: \$\{\{ success\(\) \}\}/);
+  assert.match(issueStep[0], /gh issue create/);
+  assert.match(issueStep[0], /Verify representative screenshots and examples/);
+  assert.match(issueStep[0], /Confirm capability maturity and provider labels/);
+  assert.match(issueStep[0], /Test landing-page deep links/);
+  assert.match(issueStep[0], /Test the deployed hub on desktop and mobile/);
+  assert.match(issueStep[0], /Record whether follow-up changes are necessary/);
+});
+
+test('pull request template requires one explicit documentation impact declaration', () => {
+  const template = readFileSync(join(repoRoot, '.github', 'pull_request_template.md'), 'utf8');
+  assert.match(template, /Select exactly one option/);
+  assert.equal((template.match(/- \[ \] Documentation updated/g) || []).length, 1);
+  assert.equal((template.match(/- \[ \] Documentation reviewed and already accurate/g) || []).length, 1);
+  assert.equal((template.match(/- \[ \] No user-facing documentation impact/g) || []).length, 1);
+  assert.match(template, /Reason \(required when selecting “No user-facing documentation impact”\)/);
 });
 
 test('tagged release proves the published installer can install the tagged plugin', () => {
