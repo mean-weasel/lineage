@@ -18,6 +18,39 @@ new visible branch. Use the `reroll` sequence for another attempt on one asset.
 Use `generate image plan`, `inspect`, and `import` for the Codex handoff
 workflow.
 
+## Social marks
+
+Mark an asset when it is ready for social discussion, captioning, or scheduling.
+Marks are scoped to one project and lineage canvas; Lineage does not upload,
+schedule, or publish the media.
+
+```bash
+lineage-stable social list \
+  --profile team-production \
+  --project <project> \
+  --root <root-asset-id> \
+  --json
+
+lineage-stable social mark \
+  --profile team-production \
+  --project <project> \
+  --root <root-asset-id> \
+  --asset <asset-id-or-exact-title> \
+  --confirm-write \
+  --json
+
+lineage-stable social unmark \
+  --profile team-production \
+  --project <project> \
+  --root <root-asset-id> \
+  --asset <asset-id-or-exact-title> \
+  --confirm-write \
+  --json
+```
+
+The canvas exposes the same state from the asset card, context menu, and `S`
+keyboard shortcut. Agent mutations still require any active claim token.
+
 ## Agent commands
 
 Use `agent claim`, `heartbeat`, and `release` around a bounded mutation. Claim
