@@ -1,5 +1,6 @@
 import { defaultProject, listProjects } from '../assetCore';
 import { lineageDb, nowIso, type DatabaseSync } from '../assetLineageDb';
+import { findAdapterCatalogEntry } from '../../shared/adapterCatalog';
 import type { AdapterProvider, AdapterSetting, AdapterSettingsSnapshot, AdapterType } from '../../shared/adapterSettingsTypes';
 
 interface AdapterDefinition {
@@ -43,8 +44,8 @@ const definitions: AdapterDefinition[] = [
   {
     adapter_type: 'cloud',
     default_enabled: false,
-    description: 'Optional cloud storage inspection for projects that configure it explicitly.',
-    label: 'Cloud storage',
+    description: findAdapterCatalogEntry('cloud', 's3').description,
+    label: findAdapterCatalogEntry('cloud', 's3').providerLabel,
     provider: 's3',
     safeConfig: project => {
       if (project === defaultProject) return { bucket: '', mode: 'local-public-fallback', region: '' };
@@ -56,8 +57,8 @@ const definitions: AdapterDefinition[] = [
   {
     adapter_type: 'scheduler',
     default_enabled: false,
-    description: 'Prepare reviewed social posts for external scheduling.',
-    label: 'Buffer',
+    description: findAdapterCatalogEntry('scheduler', 'buffer').description,
+    label: findAdapterCatalogEntry('scheduler', 'buffer').providerLabel,
     provider: 'buffer',
     safeConfig: () => ({ defaultMode: 'dry-run' }),
     secret_ref: 'env:LINEAGE_SCHEDULER_TOKEN',
@@ -65,8 +66,8 @@ const definitions: AdapterDefinition[] = [
   {
     adapter_type: 'image_generator',
     default_enabled: true,
-    description: 'Create generation handoff packets and store proof receipts.',
-    label: 'Codex handoff',
+    description: findAdapterCatalogEntry('image_generator', 'codex-handoff').description,
+    label: findAdapterCatalogEntry('image_generator', 'codex-handoff').providerLabel,
     provider: 'codex-handoff',
     safeConfig: () => ({ clearSelectionAfterImport: true, defaultVariationCount: 3, receipts: 'sqlite' }),
     secret_ref: null,

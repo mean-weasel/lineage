@@ -9,6 +9,7 @@ const releaseVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+
 
 export function planTagRelease({
   changelog,
+  docsReview,
   packageInfo,
   packageLock,
   pluginManifest,
@@ -28,6 +29,23 @@ export function planTagRelease({
   if (pluginManifest.lineage?.version !== version) failures.push('plugin lineage.version does not match package.json');
   if (pluginManifest.lineage?.package !== packageInfo.name) failures.push('plugin lineage.package does not match package.json');
   if (!changelog.includes(`## ${version}`)) failures.push(`CHANGELOG.md is missing ## ${version}`);
+  if (!docsReview || typeof docsReview !== 'object' || Array.isArray(docsReview)) {
+    failures.push('docs-site/docs-review.json must contain a review object');
+  } else {
+    if (docsReview.reviewedFor !== version) {
+      failures.push(`docs review ${docsReview.reviewedFor || '(missing)'} must exactly match package version ${version || '(missing)'}`);
+    }
+    if (!['updated', 'no-changes'].includes(docsReview.result)) {
+      failures.push(`docs review has invalid result: ${docsReview.result || '(missing)'}`);
+    }
+    if (
+      !Array.isArray(docsReview.areas)
+      || docsReview.areas.length === 0
+      || docsReview.areas.some(area => typeof area !== 'string' || !area.trim())
+    ) {
+      failures.push('docs review must list at least one reviewed area');
+    }
+  }
 
   if (failures.length > 0) throw new Error(failures.join('\n'));
 
@@ -57,6 +75,7 @@ function readOption(name) {
 function run() {
   const plan = planTagRelease({
     changelog: readFileSync(join(root, 'CHANGELOG.md'), 'utf8'),
+    docsReview: readJson(join(root, 'docs-site', 'docs-review.json')),
     packageInfo: readJson(join(root, 'package.json')),
     packageLock: readJson(join(root, 'package-lock.json')),
     pluginManifest: readJson(join(root, 'plugins', 'lineage-codex-plugin', '.codex-plugin', 'plugin.json')),

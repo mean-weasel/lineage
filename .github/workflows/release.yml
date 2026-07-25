@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      issues: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -227,3 +228,24 @@ jobs:
             echo "- Tag commit: \`${EXPECTED_TAG_COMMIT}\`"
             echo "- Plugin assets: verified"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Open post-release documentation verification issue
+        if: ${{ success() }}
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue_body="$(cat <<EOF
+          Lineage ${EXPECTED_VERSION} has passed npm and GitHub release verification. Complete the secondary documentation check against the published package and deployed site.
+
+          - [ ] Verify representative screenshots and examples.
+          - [ ] Confirm capability maturity and provider labels.
+          - [ ] Test landing-page deep links.
+          - [ ] Test the deployed hub on desktop and mobile.
+          - [ ] Record whether follow-up changes are necessary.
+
+          This issue is a secondary safety net and does not replace the pre-release documentation review.
+          EOF
+          )"
+          gh issue create \
+            --title "Verify published documentation for ${EXPECTED_VERSION}" \
+            --body "$issue_body"

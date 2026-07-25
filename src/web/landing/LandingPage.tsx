@@ -24,6 +24,7 @@ const installCommand = [
   'lineage-stable db info --profile team-production --json',
   'lineage-stable start --profile team-production',
 ].join(' &&\n');
+const documentationHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/docs/`;
 
 export function LandingPage() {
   const [copied, setCopied] = useState(false);
@@ -52,6 +53,7 @@ export function LandingPage() {
         <nav aria-label="Landing page">
           <a href="#loop">How it works</a>
           <a href="#features">What it enables</a>
+          <a href={documentationHref}>Documentation</a>
           <a href="#install">Install</a>
         </nav>
         <a className="nav-cta" href="https://github.com/mean-weasel/lineage" rel="noreferrer" target="_blank">
@@ -161,6 +163,9 @@ export function LandingPage() {
               </div>
               <a className="install-guide-link" href="https://github.com/mean-weasel/lineage#first-run" rel="noreferrer" target="_blank">
                 Read the complete first-run guide <ArrowDownRight aria-hidden="true" size={15} />
+              </a>
+              <a className="install-guide-link" href={documentationHref}>
+                Browse Lineage documentation <ArrowDownRight aria-hidden="true" size={15} />
               </a>
               <div className="install-meta">
                 <span>Local-first</span>

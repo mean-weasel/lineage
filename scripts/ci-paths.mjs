@@ -29,6 +29,21 @@ function isLandingOnly(file) {
   return file.startsWith('src/web/landing/') || landingOnlyFiles.has(file);
 }
 
+function isDocsOnly(file) {
+  return file.startsWith('docs-site/')
+    || file === 'scripts/docs-check.mjs'
+    || file === 'scripts/docs-check.test.mjs';
+}
+
+function isAppAndDocs(file) {
+  return file === 'src/shared/adapterCatalog.ts'
+    || file === 'src/shared/adapterCatalog.test.ts'
+    || file === 'src/shared/adapterSettingsTypes.ts'
+    || file === 'src/server/adapters/adapterSettings.ts'
+    || file === 'src/server/adapters/adapterSettings.test.ts'
+    || file === 'src/web/components/SettingsView.tsx';
+}
+
 function isShared(file) {
   return sharedFiles.has(file)
     || /^tsconfig(?:\.[^/]+)?\.json$/.test(file)
@@ -38,15 +53,22 @@ function isShared(file) {
 }
 
 export function classifyChangedFiles(files) {
-  if (files.includes('__all__')) return { app: true, landing: true };
+  if (files.includes('__all__')) return { app: true, docs: true, landing: true };
 
   let app = false;
+  let docs = false;
   let landing = false;
 
   for (const file of files) {
     if (isShared(file)) {
       app = true;
+      docs = true;
       landing = true;
+    } else if (isDocsOnly(file)) {
+      docs = true;
+    } else if (isAppAndDocs(file)) {
+      app = true;
+      docs = true;
     } else if (isLandingOnly(file)) {
       landing = true;
     } else {
@@ -54,7 +76,7 @@ export function classifyChangedFiles(files) {
     }
   }
 
-  return { app, landing };
+  return { app, docs, landing };
 }
 
 function run() {
@@ -64,6 +86,7 @@ function run() {
   }
 
   const routes = classifyChangedFiles(files);
+  process.stdout.write(`docs=${routes.docs}\n`);
   process.stdout.write(`landing=${routes.landing}\napp=${routes.app}\n`);
 }
 

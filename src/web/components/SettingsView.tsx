@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Cloud, Eye, ImagePlus, Loader2, RefreshCcw, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { adapterCatalog, findAdapterCatalogEntry } from '../../shared/adapterCatalog';
 import type { AdapterSetting, AdapterSettingsSnapshot, AdapterType } from '../../shared/adapterSettingsTypes';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import { api } from '../api';
@@ -13,11 +14,9 @@ const iconFor: Record<AdapterType, typeof Cloud> = {
   scheduler: Send,
 };
 
-const titleFor: Record<AdapterType, string> = {
-  cloud: 'Cloud storage',
-  image_generator: 'Image generation',
-  scheduler: 'Social scheduling',
-};
+const titleFor = Object.fromEntries(
+  adapterCatalog.map(entry => [entry.adapterType, entry.capabilityLabel]),
+) as Record<AdapterType, string>;
 
 const sections: Array<{ adapterType: AdapterType; ariaLabel: string }> = [
   { adapterType: 'cloud', ariaLabel: 'Cloud storage settings' },
@@ -200,6 +199,7 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
             <div className="settings-grid">
               {(snapshot?.settings || []).filter(setting => setting.adapter_type === section.adapterType).map(setting => {
                 const Icon = iconFor[setting.adapter_type];
+                const catalogEntry = findAdapterCatalogEntry(setting.adapter_type, setting.provider);
                 const switchLabel = `Enable ${setting.label === 'Buffer' ? 'Buffer scheduling' : setting.label}`;
                 const saving = savingKey === `${setting.adapter_type}:${setting.provider}`;
                 return (
@@ -219,6 +219,10 @@ export function SettingsView(props: { project: string; onToast: (type: 'ok' | 'e
                           {setting.health_status === 'configured' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
                           {setting.health_status.replace(/_/g, ' ')}
                         </dd>
+                      </div>
+                      <div>
+                        <dt>Maturity</dt>
+                        <dd>{catalogEntry.maturity}</dd>
                       </div>
                       <div>
                         <dt>Credential source</dt>
