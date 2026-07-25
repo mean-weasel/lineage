@@ -1,6 +1,9 @@
 import { defaultProject, listProjects } from './assetCore';
 import { chooseReviewSetLabels, labelsFromPrompt } from './assetSelections';
+import { listAssetSocialMarks } from './assetSocialMarks';
+import { listLineageWorkspaces } from './assetLineageWorkspaces';
 import { getAssetSelectionAgentHandoff, getContentQueueNextAgentHandoff, getContentTargetAgentHandoff, getLineageWorkspaceAgentHandoff } from './contentAgentHandoff';
+import { lineageCliCommand, shellQuote } from './lineageRuntimeCommand';
 import type { ContentAgentHandoff, ContentAgentHandoffNaturalLanguage, ContentAgentResolvedHandoff } from '../shared/types';
 
 const assetSelectionTerms = [
@@ -21,6 +24,12 @@ const variationChoiceTerms = [
   'select variation',
   'pick variation',
   'use variation',
+];
+const socialMarkTerms = [
+  'marked for social',
+  'social marked',
+  'social marks',
+  'social candidates',
 ];
 const lineageWorkspaceTerms = [
   'active lineage',
@@ -129,6 +138,70 @@ function withNatural(handoff: ContentAgentHandoff, natural: ContentAgentHandoffN
   return { ...handoff, natural_language: natural };
 }
 
+function socialMarksHandoff(project: string, prompt: string, alias: string | null, matched: string[]): ContentAgentResolvedHandoff {
+  const workspace = listLineageWorkspaces(project).active_workspace;
+  if (!workspace) {
+    return unresolved(
+      project,
+      prompt,
+      { matched_intent: 'asset.selection.current', matched_terms: matched, project_alias: alias },
+      'needs_clarification',
+      'question',
+      'No active lineage canvas is available. Name the canvas root before asking for Social marks.',
+    );
+  }
+  const listed = listAssetSocialMarks(project, workspace.root_asset_id);
+  const listCommand = lineageCliCommand(`social list --project ${shellQuote(project)} --root ${shellQuote(workspace.root_asset_id)}`);
+  return {
+    context: {
+      notes: listed.marks.flatMap(mark => [
+        `${mark.asset_id} (${mark.title}) local=${mark.local.absolute_path || 'unavailable'} checksum=${mark.checksum_sha256 || 'unavailable'}`,
+        ...mark.warnings,
+      ]),
+      related_assets: listed.marks.map(mark => mark.asset_id),
+      selected_assets: listed.marks.map(mark => mark.asset_id),
+      selected_target: null,
+    },
+    guardrails: {
+      do_not_modify: defaultDoNotModify,
+      requires_confirmation: true,
+      safe_to_start: true,
+      write_scope: [],
+    },
+    intent: {
+      project,
+      resolved: 'asset.selection.current',
+      selection_mode: 'asset_selection',
+    },
+    messages: [{
+      level: 'info',
+      text: `${listed.marks.length} asset(s) are marked for Social in ${workspace.title}. A Social mark is context for discussion, not permission to upload, schedule, or post.`,
+    }],
+    natural_language: {
+      matched_intent: 'asset.selection.current',
+      matched_terms: matched,
+      normalized_prompt: normalizePrompt(prompt),
+      project_alias: alias,
+      prompt,
+    },
+    next_action: {
+      canonical_call: {
+        args: { project, root: workspace.root_asset_id },
+        command: 'social list',
+        tool: 'lineage_cli',
+      },
+      commands: { list: listCommand },
+      instructions: 'Use the listed local asset context to discuss or prepare social work. Do not upload, schedule, or post without a separate explicit request and confirmation.',
+      kind: 'continue_asset_selection',
+      label: 'Continue with Social-marked assets',
+      lane: null,
+    },
+    schema_version: 'lineage.agent_handoff.v1',
+    status: 'ok',
+    target: null,
+  };
+}
+
 export function resolveContentAgentHandoff(prompt: string, fallbackProject = defaultProject): ContentAgentResolvedHandoff {
   const normalized = normalizePrompt(prompt);
   const { alias, project } = resolveProject(prompt, fallbackProject);
@@ -153,6 +226,9 @@ export function resolveContentAgentHandoff(prompt: string, fallbackProject = def
       prompt,
     });
   }
+
+  const socialMarks = matchedTerms(normalized, socialMarkTerms);
+  if (socialMarks.length > 0) return socialMarksHandoff(project, prompt, alias, socialMarks);
 
   const lineageWorkspace = matchedTerms(normalized, lineageWorkspaceTerms);
   if (lineageWorkspace.length > 0) {

@@ -107,17 +107,19 @@ describe('AssetNode', () => {
     expect(onPreviewDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('runs Branch, Re-roll, and Details from focus-scoped shortcuts', () => {
+  it('runs Branch, Re-roll, Social, and Details from focus-scoped shortcuts', () => {
     const onOpenDetail = vi.fn();
     const onOpenHistory = vi.fn();
     const onPreviewDismiss = vi.fn();
     const onToggleBranch = vi.fn();
     const onToggleReroll = vi.fn();
-    renderNode({ attempt_count: 3, onOpenDetail, onOpenHistory, onPreviewDismiss, onToggleBranch, onToggleReroll });
+    const onToggleSocial = vi.fn();
+    renderNode({ attempt_count: 3, onOpenDetail, onOpenHistory, onPreviewDismiss, onToggleBranch, onToggleReroll, onToggleSocial });
     const node = container!.querySelector<HTMLElement>('.lineage-node')!;
 
     act(() => node.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'b' })));
     act(() => node.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'R' })));
+    act(() => node.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 's' })));
     act(() => node.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'd' })));
     act(() => node.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ctrlKey: true, key: 'b' })));
     act(() => node.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, metaKey: true, key: 'd' })));
@@ -126,10 +128,29 @@ describe('AssetNode', () => {
     expect(onToggleBranch).toHaveBeenCalledWith(expect.objectContaining({ asset_id: 'local-node' }));
     expect(onToggleReroll).toHaveBeenCalledTimes(1);
     expect(onToggleReroll).toHaveBeenCalledWith(expect.objectContaining({ asset_id: 'local-node' }));
+    expect(onToggleSocial).toHaveBeenCalledTimes(1);
+    expect(onToggleSocial).toHaveBeenCalledWith(expect.objectContaining({ asset_id: 'local-node' }));
     expect(onPreviewDismiss).toHaveBeenCalledTimes(1);
     expect(onOpenDetail).toHaveBeenCalledTimes(1);
     expect(onOpenDetail).toHaveBeenCalledWith('local-node');
     expect(onOpenHistory).not.toHaveBeenCalled();
+  });
+
+  it('shows a persistent Social badge for an active mark', () => {
+    renderNode({
+      social_mark: {
+        active: true,
+        asset_id: 'local-node',
+        id: 'social-1',
+        marked_at: '2026-07-25T00:00:00.000Z',
+        marked_by: 'human:owner',
+        project_id: 'demo-project',
+        root_asset_id: 'local-root',
+        updated_at: '2026-07-25T00:00:00.000Z',
+      },
+    });
+
+    expect(container!.querySelector('.lineage-badges .social')?.textContent).toBe('social');
   });
 
   it('renders compact badges for pending and locked lineage tasks', () => {

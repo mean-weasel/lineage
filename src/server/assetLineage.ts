@@ -569,6 +569,21 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     const request = rerollRequestFrom(row);
     return [request.node_asset_id, withRerollTask(request, lineageTasksByNode.get(request.node_asset_id)?.reroll)] as const;
   }));
+  const hasSocialMarks = database.prepare("select 1 from sqlite_master where type = 'table' and name = 'asset_social_marks'").get() !== undefined;
+  const socialMarkRows = ids.length > 0 && hasSocialMarks
+    ? database.prepare(`select * from asset_social_marks where project_id = ? and root_asset_id = ? and unmarked_at is null and asset_id in (${placeholders})`).all(project, root, ...ids) as Array<Record<string, unknown>>
+    : [];
+  const socialMarksByNode = new Map(socialMarkRows.map(row => [String(row.asset_id), {
+    active: true,
+    asset_id: String(row.asset_id),
+    id: String(row.id),
+    marked_at: String(row.marked_at),
+    marked_by: String(row.marked_by),
+    notes: rowString(row.notes),
+    project_id: String(row.project_id),
+    root_asset_id: String(row.root_asset_id),
+    updated_at: String(row.updated_at),
+  }] as const));
   const childIds = new Set(edges.map(edge => edge.parent_asset_id));
   const selectedIds = new Set(selected.map(row => row.asset_id));
   const selections = selected.map(row => ({
@@ -595,6 +610,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
       preview_url: canPreviewLocally(row.media_type, previewPath) ? localPreviewUrl(project, previewPath) : undefined,
       reroll_request: rerollsByNode.get(row.asset_id),
       selection_note: nodeSelection?.notes,
+      social_mark: socialMarksByNode.get(row.asset_id),
       user_selected: selectedIds.has(row.asset_id),
     };
   });

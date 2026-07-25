@@ -145,6 +145,28 @@ describe('LineageContextMenu', () => {
     expect(labels).toContain('Needs revision');
   });
 
+  it('toggles the independent Social marker and closes the menu', () => {
+    const events: string[] = [];
+    const unmarkedMenu = LineageContextMenu(baseProps(node, events));
+    collectButtons(unmarkedMenu).find(button => flattenText(button) === 'Mark for Social')?.props.onClick();
+    const markedMenu = LineageContextMenu(baseProps({
+      ...node,
+      social_mark: {
+        active: true,
+        asset_id: node.asset_id,
+        id: 'social-1',
+        marked_at: '2026-07-25T00:00:00.000Z',
+        marked_by: 'human:owner',
+        project_id: node.project,
+        root_asset_id: 'root-asset',
+        updated_at: '2026-07-25T00:00:00.000Z',
+      },
+    }, events));
+    collectButtons(markedMenu).find(button => flattenText(button) === 'Unmark from Social')?.props.onClick();
+
+    expect(events).toEqual(['toggle-social', 'close', 'toggle-social', 'close']);
+  });
+
   it('routes remove from lineage and closes after confirmation path starts', () => {
     const events: string[] = [];
     const menu = LineageContextMenu(baseProps(node, events));
@@ -205,6 +227,7 @@ function baseProps(
     onReplaceNext: () => events.push('replace'),
     onReview: (reviewState: string) => events.push(`review:${reviewState}`),
     onSelectNext: () => events.push('select'),
+    onToggleSocial: () => events.push('toggle-social'),
     position: { x: 20, y: 20 },
     selectedCount: options.selectedCount ?? (nextNode.user_selected ? 1 : 0),
     selectionFull: options.selectionFull ?? false,

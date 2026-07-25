@@ -27,6 +27,7 @@ import {
   markLineageRerollRequest,
 } from '../server/assetLineage';
 import { getLineageBrief, linkSelectedLineageChild } from '../server/assetLineageHandoff';
+import { listAssetSocialMarks, markAssetSocial, unmarkAssetSocial } from '../server/assetSocialMarks';
 import {
   addLineageTaskComment,
   cancelLineageTask,
@@ -284,6 +285,9 @@ Usage:
   ${config.binName} reroll cancel --root <asset-id> --target <asset-id> [--project <project>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} reroll plan --root <asset-id> --target <asset-id> --prompt <text> [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll import --job-id <job-id> --file <scratch-file> --confirm-write [--project <project>] [--db <path>] [--json]
+  ${config.binName} social list --project <project> --root <asset-id> [--db <path>] [--json]
+  ${config.binName} social mark --project <project> --root <asset-id> --asset <asset-id-or-exact-title> --confirm-write [--actor <actor>] [--notes <text>] [--claim-token <claim-id.secret>] [--db <path>] [--json]
+  ${config.binName} social unmark --project <project> --root <asset-id> --asset <asset-id-or-exact-title> --confirm-write [--actor <actor>] [--claim-token <claim-id.secret>] [--db <path>] [--json]
   ${config.binName} tasks list --root <asset-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks inspect --task <task-id> [--project <project>] [--db <path>] [--json]
   ${config.binName} tasks claim --task <task-id> --agent-name <name> [--project <project>] [--db <path>] [--json]
@@ -569,6 +573,35 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
     }
     throw new Error(`Unknown reroll command: ${subcommand}`);
   }
+  if (command === 'social') {
+    const subcommand = positionalArgs(args)[0] || '';
+    const explicitProject = readOption(args, '--project');
+    const asset = readOption(args, '--asset');
+    if (!explicitProject) throw new Error(`lineage social ${subcommand || 'command'} requires --project`);
+    if (!options.rootAssetId) throw new Error(`lineage social ${subcommand || 'command'} requires --root`);
+    if (subcommand === 'list') return listAssetSocialMarks(explicitProject, options.rootAssetId);
+    if (!asset) throw new Error(`lineage social ${subcommand || 'command'} requires --asset`);
+    if (subcommand === 'mark') {
+      return markAssetSocial(explicitProject, {
+        asset,
+        claimToken: options.claimToken,
+        confirmWrite: options.confirmWrite,
+        markedBy: readOption(args, '--actor') || 'agent',
+        notes: readOption(args, '--notes'),
+        rootAssetId: options.rootAssetId,
+      });
+    }
+    if (subcommand === 'unmark') {
+      return unmarkAssetSocial(explicitProject, {
+        asset,
+        claimToken: options.claimToken,
+        confirmWrite: options.confirmWrite,
+        rootAssetId: options.rootAssetId,
+        unmarkedBy: readOption(args, '--actor') || 'agent',
+      });
+    }
+    throw new Error(`Unknown social command: ${subcommand}`);
+  }
   if (command === 'tasks') {
     const subcommand = positionalArgs(args)[0] || '';
     const taskId = readOption(args, '--task');
@@ -699,6 +732,20 @@ export function printDataResult(command: string, result: unknown, json: boolean)
       console.log(`${mutation.dryRun ? 'Dry run: ' : ''}Re-roll ${mutation.request?.status || 'request'} for ${mutation.request?.node_asset_id || 'target'}`);
       return;
     }
+  }
+  if (command === 'social' && result && typeof result === 'object') {
+    if ('marks' in result) {
+      const listed = result as { marks: Array<{ asset_id: string; title: string; warnings?: string[] }> };
+      console.log(`${listed.marks.length} social-marked asset(s)`);
+      for (const mark of listed.marks) {
+        console.log(`${mark.asset_id}: ${mark.title}`);
+        for (const warning of mark.warnings || []) console.log(`Warning: ${warning}`);
+      }
+      return;
+    }
+    const mutation = result as { active?: boolean; dryRun?: boolean; mark?: { asset_id?: string } };
+    console.log(`${mutation.dryRun ? 'Dry run: ' : ''}${mutation.active ? 'Marked' : 'Unmarked'} ${mutation.mark?.asset_id || 'asset'} for social`);
+    return;
   }
   if (command === 'tasks' && result && typeof result === 'object') {
     if ('tasks' in result) {
@@ -876,6 +923,7 @@ export function lineageCliRequiresWriterLease(command: string, args: string[]): 
   const subcommand = positions[0] || '';
   if (command === 'generate') return positions[0] !== 'image' || positions[1] !== 'inspect';
   if (command === 'reroll') return subcommand !== 'list';
+  if (command === 'social') return subcommand !== 'list';
   if (command === 'tasks') return subcommand !== 'list' && subcommand !== 'inspect';
   if (command === 'db') return subcommand !== 'info';
   if (command === 'agent') return subcommand !== 'status' && subcommand !== 'graph' && subcommand !== 'inspect';
@@ -888,6 +936,7 @@ export function lineageCliCanDelegateMutation(command: string, args: string[]): 
   if (command === 'link-child') return true;
   if (command === 'generate') return positions[0] === 'image' && ['plan', 'import'].includes(positions[1] || '');
   if (command === 'reroll') return ['mark', 'cancel', 'plan', 'import'].includes(subcommand);
+  if (command === 'social') return ['mark', 'unmark'].includes(subcommand);
   if (command === 'tasks') return ['claim', 'start', 'comment', 'cancel', 'override', 'instructions'].includes(subcommand);
   if (command === 'agent') return ['claim', 'heartbeat', 'release', 'revoke', 'transfer'].includes(subcommand);
   return false;
@@ -1269,7 +1318,7 @@ export async function runLineageCli(config: LineageCliConfig, args = process.arg
     process.exit(1);
   }
 
-  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'link-child' || command === 'generate' || command === 'reroll' || command === 'tasks') {
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'link-child' || command === 'generate' || command === 'reroll' || command === 'social' || command === 'tasks') {
     const commandArgs = normalizedArgs.slice(1);
     const json = commandArgs.includes('--json');
     try {
