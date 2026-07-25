@@ -22,7 +22,7 @@ START_PROD_CMD = "$(LINEAGE_STABLE_BIN)" start --profile "$(LINEAGE_PROD_PROFILE
 START_PREVIEW_CMD = "$(LINEAGE_PREVIEW_BIN)" start --profile "$(LINEAGE_PREVIEW_PROFILE)" --open
 START_DEV_CMD = npm run --silent lineage:dev -- start --profile "$(LINEAGE_DEV_PROFILE)" --open
 
-.PHONY: help init install-prod install-preview install-dev install-plugin-prod install-plugin-preview repin-dev start-prod start-preview start-dev start-prod-bg status-prod stop-prod logs-prod start-preview-bg status-preview stop-preview logs-preview start-dev-bg status-dev stop-dev logs-dev dev check test lint build smoke ci release-status
+.PHONY: help init install-prod install-preview install-dev install-plugin-prod install-plugin-preview upgrade-prod repin-dev start-prod start-preview start-dev start-prod-bg status-prod stop-prod logs-prod start-preview-bg status-preview stop-preview logs-preview start-dev-bg status-dev stop-dev logs-dev dev check test lint build smoke ci release-status
 
 help:
 	@printf "Lineage shortcuts\n"
@@ -38,6 +38,7 @@ help:
 	@printf "  make install-dev            install dependencies and build runnable dev artifacts\n"
 	@printf "  make install-plugin-prod    $(PLUGIN_INSTALLER) install --channel $(PROD_TAG)\n"
 	@printf "  make install-plugin-preview $(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)\n"
+	@printf "  make upgrade-prod LINEAGE_PROD_PROFILE=<profile>  upgrade a stopped production profile and run the identity gate\n"
 	@printf "  make repin-dev LINEAGE_DEV_PROFILE=<profile>  intentionally pin a stopped dev profile to this checkout\n"
 	@printf "\n"
 	@printf "Foreground (browser opens only after exact runtime readiness):\n"
@@ -80,6 +81,15 @@ install-plugin-prod:
 
 install-plugin-preview:
 	$(PLUGIN_INSTALLER) install --channel $(PREVIEW_TAG)
+
+upgrade-prod:
+	@test -n "$(strip $(LINEAGE_PROD_PROFILE))" || { printf "LINEAGE_PROD_PROFILE is required\n"; exit 2; }
+	$(MAKE) install-prod
+	"$(LINEAGE_STABLE_BIN)" runtime doctor --json
+	"$(LINEAGE_STABLE_BIN)" profile upgrade-runtime --profile "$(LINEAGE_PROD_PROFILE)" --confirm-write --json
+	"$(LINEAGE_STABLE_BIN)" runtime doctor --json
+	"$(LINEAGE_STABLE_BIN)" profile doctor --profile "$(LINEAGE_PROD_PROFILE)" --json
+	"$(LINEAGE_STABLE_BIN)" db info --profile "$(LINEAGE_PROD_PROFILE)" --json
 
 repin-dev:
 	@test -n "$(strip $(LINEAGE_DEV_PROFILE))" || { printf "LINEAGE_DEV_PROFILE is required\n"; exit 2; }

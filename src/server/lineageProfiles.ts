@@ -26,6 +26,7 @@ import {
   lineageProfileDoctorSchemaVersion,
   lineageProfileInitSchemaVersion,
   lineageProfileRuntimeRepinReceiptSchemaVersion,
+  lineageProfileRuntimeUpgradeReceiptSchemaVersion,
   lineageProfileSchemaVersion,
   type LineageProfileBindResult,
   type LineageProfileAssetsCloneResult,
@@ -37,6 +38,8 @@ import {
   type LineageProfileInitResult,
   type LineageProfileManifest,
   type LineageProfileRuntimeRepinResult,
+  type LineageProfileRuntimeUpgradeIdentity,
+  type LineageProfileRuntimeUpgradeResult,
   type ResolvedLineageProfile,
 } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeChannel, LineageRuntimeCodeIdentity, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
@@ -259,6 +262,8 @@ export function initializeLineageProfile(
       channel: runtime.channel,
       code_fingerprint: runtime.code.fingerprint.toLowerCase(),
       code_origin: runtime.code.origin,
+      ...(runtime.gitSha ? { git_sha: runtime.gitSha } : {}),
+      version: runtime.version,
     },
     profile_id: profileId,
     schema_version: lineageProfileSchemaVersion,
@@ -317,6 +322,8 @@ export function initializeLineageProfile(
         channel: runtime.channel,
         code_fingerprint: runtime.code.fingerprint,
         code_origin: runtime.code.origin,
+        ...(runtime.gitSha ? { git_sha: runtime.gitSha } : {}),
+        version: runtime.version,
       },
       schema_version: lineageProfileInitSchemaVersion,
       service_origin: profile.service_origin,
@@ -359,6 +366,256 @@ function sameFileIdentity(left: Stats, right: Stats): boolean {
     && left.size === right.size
     && left.mtimeMs === right.mtimeMs
     && left.ctimeMs === right.ctimeMs;
+}
+
+function fsyncDirectory(path: string): void {
+  const directoryFd = openSync(path, 'r');
+  try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+}
+
+function parseStableVersion(value: string, label: string): [bigint, bigint, bigint] {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(value);
+  if (!match) throw new Error(`${label} must be a valid stable SemVer without a prerelease, found ${value}`);
+  return match.slice(1).map(BigInt) as [bigint, bigint, bigint];
+}
+
+function compareStableVersions(left: [bigint, bigint, bigint], right: [bigint, bigint, bigint]): number {
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1;
+  }
+  return 0;
+}
+
+function profileUpgradePreflight(profile: ResolvedLineageProfile, runtime: ProfileRuntime): void {
+  const doctor = doctorLineageProfile(profile.manifest_path, runtime);
+  const allowedRuntimeMismatches = new Set(['runtime_code', 'runtime_version', 'runtime_git_sha']);
+  const failures = doctor.checks.filter(check => check.status === 'fail' && !allowedRuntimeMismatches.has(check.id));
+  if (failures.length > 0) {
+    throw new Error(`Stable profile runtime upgrade requires a healthy production profile before changing its pin: ${failures.map(check => `${check.id}: ${check.message}`).join('; ')}`);
+  }
+}
+
+function upgradeRuntimeIdentity(
+  fingerprint: string,
+  options: { codeRoot?: string; gitSha?: string; version?: string } = {},
+): LineageProfileRuntimeUpgradeIdentity {
+  return {
+    channel: 'stable',
+    code_fingerprint: fingerprint,
+    code_origin: 'package',
+    ...(options.codeRoot ? { code_root: options.codeRoot } : {}),
+    ...(options.gitSha ? { git_sha: options.gitSha } : {}),
+    ...(options.version ? { version: options.version } : {}),
+  };
+}
+
+export interface LineageProfileRuntimeUpgradeTestHooks {
+  afterPublish?: () => void;
+  beforePublish?: () => void;
+}
+
+export function upgradeLineageStableProfileRuntime(
+  selector: string,
+  runtime: ProfileRuntime,
+  confirmWrite: boolean,
+  testHooks: LineageProfileRuntimeUpgradeTestHooks = {},
+): LineageProfileRuntimeUpgradeResult {
+  if (!confirmWrite) throw new Error('Stable profile runtime upgrade requires --confirm-write');
+  if (runtime.channel !== 'stable') throw new Error(`Stable profile runtime upgrade requires stable code, not ${runtime.channel}`);
+  if (!runtime.code?.verified) throw new Error('Stable profile runtime upgrade requires a verified package runtime');
+  if (runtime.code.channel !== 'stable') throw new Error(`Stable profile runtime upgrade requires stable code identity, not ${runtime.code.channel}`);
+  if (runtime.code.origin !== 'package') throw new Error(`Stable profile runtime upgrade requires package code, not ${runtime.code.origin}`);
+  if (!runtime.code.fingerprint || !/^[a-f0-9]{64}$/i.test(runtime.code.fingerprint)) {
+    throw new Error('Stable profile runtime upgrade requires a valid executing code fingerprint');
+  }
+  if (runtime.code.package_version !== runtime.version) {
+    throw new Error(`Stable profile runtime upgrade version ${runtime.version} does not match package version ${runtime.code.package_version || 'missing'}`);
+  }
+  const targetVersion = parseStableVersion(runtime.version, 'Stable profile runtime upgrade target version');
+  const executingRoot = realpathSync(runtime.code.root);
+  if (!statSync(executingRoot).isDirectory()) {
+    throw new Error(`Stable profile runtime upgrade code root is not a directory: ${executingRoot}`);
+  }
+
+  const profile = resolveLineageProfile(selector);
+  if (profile.environment !== 'production') {
+    throw new Error(`Stable profile runtime upgrade requires a production profile, not ${profile.environment}`);
+  }
+  if (profile.expected_runtime?.channel !== 'stable') {
+    throw new Error('Stable profile runtime upgrade requires an existing stable channel pin');
+  }
+  if (profile.expected_runtime.code_origin !== 'package') {
+    throw new Error('Stable profile runtime upgrade requires an existing package origin pin');
+  }
+  const previousFingerprint = profile.expected_runtime.code_fingerprint;
+  if (!previousFingerprint) throw new Error('Stable profile runtime upgrade requires an existing code fingerprint pin');
+
+  const previousVersion = profile.expected_runtime.version;
+  if (previousVersion) {
+    const comparison = compareStableVersions(targetVersion, parseStableVersion(previousVersion, 'Stable profile runtime upgrade source version'));
+    if (previousFingerprint === runtime.code.fingerprint && previousVersion !== runtime.version) {
+      throw new Error(`Stable profile runtime upgrade found one code fingerprint claiming conflicting versions ${previousVersion} and ${runtime.version}`);
+    }
+    if (comparison === 0 && previousFingerprint !== runtime.code.fingerprint) {
+      throw new Error(`Stable profile runtime upgrade refuses same-version fingerprint change for ${runtime.version}`);
+    }
+    if (comparison < 0) {
+      throw new Error(`Stable profile runtime upgrade refuses downgrade from ${previousVersion} to ${runtime.version}`);
+    }
+    if (comparison > 0 && previousFingerprint === runtime.code.fingerprint) {
+      throw new Error(`Stable profile runtime upgrade requires a new code fingerprint for version ${runtime.version}`);
+    }
+  }
+  if (
+    previousFingerprint === runtime.code.fingerprint
+    && profile.expected_runtime.git_sha
+    && runtime.gitSha
+    && profile.expected_runtime.git_sha !== runtime.gitSha
+  ) {
+    throw new Error('Stable profile runtime upgrade found one code fingerprint claiming conflicting Git revisions');
+  }
+
+  profileUpgradePreflight(profile, runtime);
+
+  const manifestPath = profile.manifest_path;
+  const profileDirectory = dirname(manifestPath);
+  assertOwnerOnlyPath(profileDirectory, 'profile directory');
+  const beforeStats = assertOwnerOnlyPath(manifestPath, 'manifest');
+  const beforeText = readFileSync(manifestPath, 'utf8');
+  const beforeHash = sha256(beforeText);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(beforeText);
+  } catch (error) {
+    throw new Error(`Could not parse profile manifest ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Profile manifest must be a JSON object');
+
+  const nextExpectedRuntime = {
+    channel: 'stable' as const,
+    code_fingerprint: runtime.code.fingerprint.toLowerCase(),
+    code_origin: 'package' as const,
+    ...(runtime.gitSha ? { git_sha: runtime.gitSha } : {}),
+    version: runtime.version,
+  };
+  const afterText = `${JSON.stringify({ ...(raw as Record<string, unknown>), expected_runtime: nextExpectedRuntime }, null, 2)}\n`;
+  const afterHash = sha256(afterText);
+  const normalizedTargetMatches = previousFingerprint === nextExpectedRuntime.code_fingerprint
+    && previousVersion === nextExpectedRuntime.version
+    && profile.expected_runtime.git_sha === nextExpectedRuntime.git_sha;
+  const newRuntime = upgradeRuntimeIdentity(runtime.code.fingerprint, {
+    codeRoot: executingRoot,
+    gitSha: runtime.gitSha,
+    version: runtime.version,
+  }) as LineageProfileRuntimeUpgradeResult['new_runtime'];
+  const result: LineageProfileRuntimeUpgradeResult = {
+    asset_root: profile.asset_root,
+    changed: !normalizedTargetMatches,
+    database_path: profile.database_path,
+    manifest_after_sha256: normalizedTargetMatches ? beforeHash : afterHash,
+    manifest_before_sha256: beforeHash,
+    manifest_path: manifestPath,
+    new_runtime: newRuntime,
+    post_upgrade_doctor_ok: true,
+    previous_runtime: upgradeRuntimeIdentity(previousFingerprint, {
+      gitSha: profile.expected_runtime.git_sha,
+      version: previousVersion,
+    }),
+    profile_fingerprint: profile.profile_fingerprint,
+    profile_id: profile.profile_id,
+    schema_version: lineageProfileRuntimeUpgradeReceiptSchemaVersion,
+    service_origin: profile.service_origin,
+    upgrade_kind: normalizedTargetMatches ? 'idempotent' : previousVersion ? 'versioned' : 'legacy_unversioned',
+  };
+  if (!result.changed) {
+    const doctor = doctorLineageProfile(manifestPath, runtime);
+    if (!doctor.ok) throw new Error('Stable profile runtime upgrade idempotency check did not pass profile doctor');
+    return result;
+  }
+
+  const operationId = randomUUID();
+  const temporaryPath = join(profileDirectory, `.profile.runtime-upgrade-${operationId}.tmp`);
+  const rollbackPath = join(profileDirectory, `.profile.runtime-upgrade-${operationId}.rollback`);
+  let temporaryExists = false;
+  let rollbackExists = false;
+  let published = false;
+  let preserveRollback = false;
+  try {
+    writeFileSync(temporaryPath, afterText, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    temporaryExists = true;
+    chmodSync(temporaryPath, 0o600);
+    const temporaryFd = openSync(temporaryPath, 'r');
+    try { fsyncSync(temporaryFd); } finally { closeSync(temporaryFd); }
+    const preparedReplacement = resolveLineageProfile(temporaryPath);
+    if (runtimeRepinInvariant(preparedReplacement) !== runtimeRepinInvariant(profile)) {
+      throw new Error('Stable profile runtime upgrade would change immutable profile routing identity');
+    }
+
+    testHooks.beforePublish?.();
+    const currentStats = assertOwnerOnlyPath(manifestPath, 'manifest');
+    const currentText = readFileSync(manifestPath, 'utf8');
+    if (!sameFileIdentity(beforeStats, currentStats) || sha256(currentText) !== beforeHash) {
+      throw new Error('Profile manifest changed while stable runtime upgrade was being prepared; refusing replacement');
+    }
+
+    linkSync(manifestPath, rollbackPath);
+    rollbackExists = true;
+    chmodSync(rollbackPath, 0o600);
+    const rollbackStats = assertOwnerOnlyPath(rollbackPath, 'manifest');
+    const linkedCurrentStats = assertOwnerOnlyPath(manifestPath, 'manifest');
+    if (!sameFileIdentity(rollbackStats, linkedCurrentStats) || readFileSync(rollbackPath, 'utf8') !== beforeText) {
+      throw new Error('Stable profile runtime upgrade could not preserve an exact rollback preimage');
+    }
+    fsyncDirectory(profileDirectory);
+
+    renameSync(temporaryPath, manifestPath);
+    temporaryExists = false;
+    published = true;
+    fsyncDirectory(profileDirectory);
+    testHooks.afterPublish?.();
+
+    const replacement = resolveLineageProfile(manifestPath);
+    if (runtimeRepinInvariant(replacement) !== runtimeRepinInvariant(profile)) {
+      throw new Error('Stable profile runtime upgrade changed immutable profile routing identity');
+    }
+    if (readFileSync(manifestPath, 'utf8') !== afterText) {
+      throw new Error('Stable profile runtime upgrade replacement bytes do not match the prepared manifest');
+    }
+    const doctor = doctorLineageProfile(manifestPath, runtime);
+    if (!doctor.ok) {
+      const failures = doctor.checks.filter(check => check.status === 'fail').map(check => `${check.id}: ${check.message}`).join('; ');
+      throw new Error(`Stable profile runtime upgrade failed post-upgrade profile doctor: ${failures}`);
+    }
+    rmSync(rollbackPath);
+    rollbackExists = false;
+    fsyncDirectory(profileDirectory);
+    return result;
+  } catch (error) {
+    if (published && rollbackExists) {
+      try {
+        if (readFileSync(manifestPath, 'utf8') !== afterText) {
+          throw new Error('published manifest no longer matches the prepared replacement', { cause: error });
+        }
+        renameSync(rollbackPath, manifestPath);
+        rollbackExists = false;
+        fsyncDirectory(profileDirectory);
+        const restoredText = readFileSync(manifestPath, 'utf8');
+        if (restoredText !== beforeText || sha256(restoredText) !== beforeHash) {
+          throw new Error('restored manifest does not match the exact preimage', { cause: error });
+        }
+      } catch (rollbackError) {
+        preserveRollback = true;
+        throw new Error(
+          `Stable profile runtime upgrade failed and automatic rollback could not be proven: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+          { cause: rollbackError },
+        );
+      }
+    }
+    throw error;
+  } finally {
+    if (temporaryExists) rmSync(temporaryPath, { force: true });
+    if (rollbackExists && !preserveRollback) rmSync(rollbackPath, { force: true });
+  }
 }
 
 export function repinLineageDevelopmentProfileRuntime(

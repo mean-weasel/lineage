@@ -96,6 +96,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage start --profile <id-or-manifest> [--open] [--json]');
     expect(help).toContain('lineage profile init --profile <new-profile-id> [--service-origin <http-origin>] --confirm-write [--json]');
     expect(help).toContain('lineage profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]');
+    expect(help).toContain('lineage profile upgrade-runtime --profile <production-profile> --confirm-write [--json]');
     expect(help).toContain('--asset-root <path>');
     expect(help).not.toContain('lineage tasks cancel --task <task-id> --confirm-write [--project <project>] [--db <path>] [--json]');
   });

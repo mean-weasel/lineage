@@ -6,6 +6,7 @@ export const lineageProfileDoctorSchemaVersion = 'lineage.profile_doctor.v1' as 
 export const lineageProfileCloneReceiptSchemaVersion = 'lineage.profile_clone_receipt.v1' as const;
 export const lineageProfileAssetsCloneReceiptSchemaVersion = 'lineage.profile_assets_clone_receipt.v1' as const;
 export const lineageProfileRuntimeRepinReceiptSchemaVersion = 'lineage.profile_runtime_repin_receipt.v1' as const;
+export const lineageProfileRuntimeUpgradeReceiptSchemaVersion = 'lineage.profile_runtime_upgrade_receipt.v1' as const;
 
 export type LineageProfileEnvironment = 'production' | 'preview' | 'development';
 
@@ -59,6 +60,8 @@ export interface LineageProfileInitResult {
     channel: LineageRuntimeChannel;
     code_fingerprint: string;
     code_origin: 'checkout' | 'package';
+    git_sha?: string;
+    version: string;
   };
   schema_version: typeof lineageProfileInitSchemaVersion;
   service_origin: string;
@@ -102,6 +105,32 @@ export interface LineageProfileRuntimeRepinResult {
   profile_fingerprint: string;
   profile_id: string;
   schema_version: typeof lineageProfileRuntimeRepinReceiptSchemaVersion;
+}
+
+export interface LineageProfileRuntimeUpgradeIdentity {
+  channel: 'stable';
+  code_fingerprint: string;
+  code_origin: 'package';
+  code_root?: string;
+  git_sha?: string;
+  version?: string;
+}
+
+export interface LineageProfileRuntimeUpgradeResult {
+  asset_root: string;
+  changed: boolean;
+  database_path: string;
+  manifest_after_sha256: string;
+  manifest_before_sha256: string;
+  manifest_path: string;
+  new_runtime: LineageProfileRuntimeUpgradeIdentity & { code_root: string; version: string };
+  post_upgrade_doctor_ok: true;
+  previous_runtime: LineageProfileRuntimeUpgradeIdentity;
+  profile_fingerprint: string;
+  profile_id: string;
+  schema_version: typeof lineageProfileRuntimeUpgradeReceiptSchemaVersion;
+  service_origin: string;
+  upgrade_kind: 'idempotent' | 'legacy_unversioned' | 'versioned';
 }
 
 type LineageProfileDoctorCheckStatus = 'pass' | 'fail' | 'warning';

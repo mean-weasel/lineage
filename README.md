@@ -335,6 +335,43 @@ wrong-root, unsafe-manifest, unconfirmed, and active-service cases fail closed.
 The command may prepare a new structurally valid development manifest before
 its database and asset root are cloned.
 
+### Upgrade a stable production profile
+
+A stable package update and a production profile runtime pin are separate
+operations. Upgrade only while the matching managed service is stopped:
+
+```bash
+make stop-prod LINEAGE_PROD_PROFILE=team-production
+make upgrade-prod LINEAGE_PROD_PROFILE=team-production
+make start-prod-bg LINEAGE_PROD_PROFILE=team-production
+make status-prod LINEAGE_PROD_PROFILE=team-production
+```
+
+`upgrade-prod` installs the current npm `latest` into a new receipt-bound stable
+root, runs stable runtime doctor, confirms `profile upgrade-runtime`, then runs
+runtime doctor, profile doctor, and profile-selected `db info`. It deliberately
+does not stop or restart the service for you, so the stopped interval and the
+post-upgrade readiness check stay explicit.
+
+The equivalent commands between stop and start are:
+
+```bash
+make install-prod
+lineage-stable runtime doctor --json
+lineage-stable profile upgrade-runtime \
+  --profile team-production --confirm-write --json
+lineage-stable runtime doctor --json
+lineage-stable profile doctor --profile team-production --json
+lineage-stable db info --profile team-production --json
+```
+
+The upgrade target comes only from the executing verified stable package.
+Preview/dev/unverified code, an active writer, a downgrade, a same-version
+identity change, unhealthy profile data, or unsafe manifest ownership fails
+before a new pin is accepted. The operation preserves the profile fingerprint,
+database and asset paths and contents, service origin, migration requirements,
+and unknown manifest fields.
+
 To create a realistic preview or development database without copying a live
 SQLite file directly, define a new non-production target profile whose database
 does not exist, then run:

@@ -57,6 +57,7 @@ import {
   initializeLineageProfile,
   repinLineageDevelopmentProfileRuntime,
   resolveLineageProfile,
+  upgradeLineageStableProfileRuntime,
 } from '../server/lineageProfiles';
 import { executeManagedWriterCommand } from '../server/managedWriterRouting';
 import { acquireProfileWriterLease, ProfileWriterLeaseConflictError } from '../server/profileWriterLease';
@@ -67,6 +68,7 @@ import type {
   LineageProfileDoctorResult,
   LineageProfileInitResult,
   LineageProfileRuntimeRepinResult,
+  LineageProfileRuntimeUpgradeResult,
   ResolvedLineageProfile,
 } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeCodeIdentity, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
@@ -269,6 +271,7 @@ Usage:
   ${config.binName} profile clone --source-db <snapshot-source> --target-profile <id-or-manifest> --confirm-write [--json]
   ${config.binName} profile clone-assets --source-asset-root <path> --target-profile <id-or-manifest> --confirm-write [--json]
   ${config.binName} profile repin-runtime --profile <development-profile> --checkout-root <path> --confirm-write [--json]
+  ${config.binName} profile upgrade-runtime --profile <production-profile> --confirm-write [--json]
   ${config.binName} runtime info [--json]
   ${config.binName} runtime doctor [--json]
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
@@ -784,12 +787,13 @@ export function runLineageProfileCommand(config: LineageCliConfig, command: 'bin
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'clone', args: string[]): Promise<LineageProfileCloneResult>;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'clone-assets', args: string[]): LineageProfileAssetsCloneResult;
 export function runLineageProfileCommand(config: LineageCliConfig, command: 'repin-runtime', args: string[]): LineageProfileRuntimeRepinResult;
-export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult>;
+export function runLineageProfileCommand(config: LineageCliConfig, command: 'upgrade-runtime', args: string[]): LineageProfileRuntimeUpgradeResult;
+export function runLineageProfileCommand(config: LineageCliConfig, command: string, args: string[]): LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | LineageProfileRuntimeUpgradeResult | Promise<LineageProfileCloneResult>;
 export function runLineageProfileCommand(
   config: LineageCliConfig,
   command: string,
   args: string[],
-): LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | Promise<LineageProfileCloneResult> {
+): LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | LineageProfileRuntimeUpgradeResult | Promise<LineageProfileCloneResult> {
   const runtime = getLineageRuntimeInfo({ channel: config.channel });
   const runtimeIdentity = { channel: config.channel, code: runtime.code, gitSha: runtime.git_sha, version: runtime.version };
   if (command === 'init') {
@@ -853,6 +857,30 @@ export function runLineageProfileCommand(
       writerLease.release();
     }
   }
+  if (command === 'upgrade-runtime') {
+    if (!args.includes('--confirm-write')) throw new Error('Profile runtime upgrade requires --confirm-write');
+    for (const option of [
+      '--checkout-root',
+      '--code-fingerprint',
+      '--code-root',
+      '--from-code-fingerprint',
+      '--git-sha',
+      '--runtime-receipt',
+      '--runtime-root',
+      '--to-code-fingerprint',
+      '--to-version',
+      '--version',
+    ]) {
+      if (hasOption(args, option)) throw new Error(`Profile runtime upgrade derives its target from the executing stable package and does not accept ${option}`);
+    }
+    const profile = resolveLineageProfile(selector);
+    const writerLease = acquireProfileWriterLease(profile, config.channel, 'cli');
+    try {
+      return upgradeLineageStableProfileRuntime(selector, runtimeIdentity, true);
+    } finally {
+      writerLease.release();
+    }
+  }
   if (command === 'bind') {
     if (!args.includes('--confirm-write')) throw new Error('Profile bind requires --confirm-write');
     const profile = resolveLineageProfile(selector);
@@ -866,7 +894,7 @@ export function runLineageProfileCommand(
   throw new Error(`Unknown profile command: ${command}`);
 }
 
-function printProfileResult(result: LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileCloneResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult, json: boolean): void {
+function printProfileResult(result: LineageProfileDoctorResult | LineageProfileInitResult | LineageProfileBindResult | LineageProfileCloneResult | LineageProfileAssetsCloneResult | LineageProfileRuntimeRepinResult | LineageProfileRuntimeUpgradeResult, json: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -885,6 +913,9 @@ function printProfileResult(result: LineageProfileDoctorResult | LineageProfileI
   } else if (result.schema_version === 'lineage.profile_runtime_repin_receipt.v1') {
     console.log(`${result.changed ? 'Repinned' : 'Already pinned'} ${result.profile_id} to checkout ${result.checkout_root}`);
     console.log(`Code fingerprint: ${result.new_code_fingerprint}`);
+  } else if (result.schema_version === 'lineage.profile_runtime_upgrade_receipt.v1') {
+    console.log(`${result.changed ? 'Upgraded' : 'Already pinned'} ${result.profile_id} to stable ${result.new_runtime.version}`);
+    console.log(`Code fingerprint: ${result.new_runtime.code_fingerprint}`);
   } else {
     console.log(`Cloned ${result.files_copied} referenced asset file(s) into ${result.asset_root}`);
     console.log(`Receipt: ${result.receipt_path}`);
