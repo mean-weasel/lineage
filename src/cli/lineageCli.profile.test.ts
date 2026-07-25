@@ -66,7 +66,7 @@ describe('profile-aware CLI options', () => {
       environment: 'development',
       identity: { profile_id: 'development-fresh', environment: 'development' },
       profile_id: 'development-fresh',
-      runtime: { channel: 'dev', code_origin: 'checkout' },
+      runtime: { channel: 'dev', code_origin: 'checkout', version: expect.any(String) },
       schema_version: 'lineage.profile_init.v1',
       service_origin: 'http://lineage-fresh.localhost:5298',
     });
@@ -166,6 +166,45 @@ describe('profile-aware CLI options', () => {
     } finally {
       serviceLease.release();
     }
+  });
+
+  it('exposes stable runtime upgrade inputs without broadening development repin', () => {
+    expect(() => runLineageProfileCommand(config, 'upgrade-runtime', [
+      '--profile', 'development-main',
+    ])).toThrow('requires --confirm-write');
+    expect(() => runLineageProfileCommand(config, 'upgrade-runtime', [
+      '--profile', 'development-main',
+      '--confirm-write',
+      '--checkout-root', repoRoot,
+    ])).toThrow('derives its target from the executing stable package');
+    for (const option of [
+      '--code-root',
+      '--from-code-fingerprint',
+      '--git-sha',
+      '--to-code-fingerprint',
+      '--to-version',
+    ]) {
+      expect(() => runLineageProfileCommand(config, 'upgrade-runtime', [
+        '--profile', 'development-main',
+        '--confirm-write',
+        option, 'caller-controlled',
+      ])).toThrow(`does not accept ${option}`);
+    }
+    expect(() => runLineageProfileCommand(config, 'upgrade-runtime', [
+      '--profile', 'development-main',
+      '--confirm-write',
+    ])).toThrow('requires stable code');
+    const profile = resolveLineageProfile('development-main');
+    const serviceLease = acquireProfileWriterLease(profile, 'dev', 'service');
+    try {
+      expect(() => runLineageProfileCommand(config, 'upgrade-runtime', [
+        '--profile', 'development-main',
+        '--confirm-write',
+      ])).toThrow('already has an active service writer');
+    } finally {
+      serviceLease.release();
+    }
+    expect(existsSync(profileWriterLockPath(resolveLineageProfile('development-main')))).toBe(false);
   });
 
   it('supports --profile and sources all protected paths and origin from its manifest', () => {

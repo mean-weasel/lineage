@@ -56,8 +56,10 @@ try {
     'profile clone --source-db',
     'profile clone-assets --source-asset-root',
     'profile repin-runtime',
+    'profile upgrade-runtime',
     '--checkout-root',
     'make repin-dev',
+    'make upgrade-prod',
     'lineage-stable-service',
     'Legacy-unbound access is diagnostic/read-only',
   ]) {

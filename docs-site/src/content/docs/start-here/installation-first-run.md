@@ -31,4 +31,18 @@ Persistent writes require a named profile. Direct database paths are intended
 for diagnostic, read-only use; they are not a substitute for profile identity.
 Stable, preview, and development code must use separate profiles and databases.
 
+For later stable releases, do not reinitialize the profile. Follow the guarded
+stopped-service workflow:
+
+```bash
+make stop-prod LINEAGE_PROD_PROFILE=team-production
+make upgrade-prod LINEAGE_PROD_PROFILE=team-production
+make start-prod-bg LINEAGE_PROD_PROFILE=team-production
+make status-prod LINEAGE_PROD_PROFILE=team-production
+```
+
+The upgrade target is derived from the newly installed verified stable package,
+and the Make target repeats runtime doctor, profile doctor, and `db info` before
+you restart.
+
 Continue with [Create your first workspace](first-workspace).

@@ -68,6 +68,30 @@ matches `--checkout-root`. It changes only `expected_runtime`; never use or
 adapt it for stable, preview, package code, a wrong checkout root, or a running
 service. Stop on any refusal instead of editing the manifest by hand.
 
+## Upgrade a stopped stable production profile
+
+Stable package installation does not implicitly change an existing production
+profile's runtime pin. Keep stop, upgrade/gate, and restart explicit:
+
+```bash
+make stop-prod LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+make upgrade-prod LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+make start-prod-bg LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+make status-prod LINEAGE_PROD_PROFILE="$LINEAGE_PROD_PROFILE"
+```
+
+`make upgrade-prod` installs npm `latest`, runs
+`lineage-stable runtime doctor --json`, confirms
+`lineage-stable profile upgrade-runtime --profile "$LINEAGE_PROD_PROFILE" --confirm-write --json`,
+then repeats runtime doctor, profile doctor, and `db info --profile`. It does
+not stop or restart the service.
+
+The executing verified stable package is the only target authority. Never pass
+or invent a fingerprint, version, receipt, or code root. An active service,
+preview/dev/unverified code, a downgrade, a same-version identity anomaly, or
+an unhealthy profile must fail closed. After the gate, start with the matching
+stable packaged service manager and require healthy managed status.
+
 ## Start and inspect services
 
 From a checkout, use the profile-scoped managed targets:

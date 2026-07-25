@@ -23,6 +23,7 @@ Runtime channel memory:
 - `stable` resolves npm `latest` once into an isolated, receipt-bound code root and is launched with `lineage-stable` (normally through `make start-prod`).
 - `preview` resolves npm `next` into a different isolated, receipt-bound code root and is launched with `lineage-preview`.
 - `dev` is checkout-only. Run it with `npm run lineage:dev -- <command>` or the `make start-dev*` targets; a published `lineage-dev` must fail closed.
+- To move a stopped production profile to a newer stable package, stop its managed service, run `make upgrade-prod LINEAGE_PROD_PROFILE=<profile>`, repeat the complete identity gate, then start it again. `profile upgrade-runtime` derives its target only from the executing verified stable package and never applies to preview/dev.
 - Never install `latest` and `next` into the same global npm prefix. Do not use PATH-resolved `lineage-dev` as evidence that checkout code is running.
 - Run `<launcher> runtime doctor --json` before operational commands and check `code.root`, `code.fingerprint`, `code.verified`, channel, profile, and SQLite identity. Use `runtime info` only to diagnose an unverified install.
 - Check `lineage-stable db info --profile <profile> --json`, `lineage-preview db info --profile <profile> --json`, or `npm run lineage:dev -- db info --profile <profile> --json` before assuming which SQLite database a CLI/app session is using.
@@ -46,6 +47,7 @@ For meaningful changes, prefer:
 - `npm run public:readiness` for no-private-data and package-boundary proof.
 - `npm run package:smoke` for installability proof.
 - `npm run runtime:oracle` for simultaneous stable/preview/dev isolation and named negative-case proof.
+- `npm run stable-upgrade:smoke` for the verified stable-package A-to-B profile transition, active-writer refusal, preserved routing/data/assets, and managed readiness.
 - `npm run e2e` for browser workflow proof.
 - `npm run plugin:smoke` for exact Lineage/plugin version lock, safe guidance, checksum, artifact, and atomic temporary-install proof.
 - `npm run plugin:codex-smoke` for supported marketplace registration, installed/enabled state, reinstall, cleanup, and dry-run proof in an isolated temporary `HOME` and `CODEX_HOME`.

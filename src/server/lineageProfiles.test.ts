@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, st
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { repoRoot } from './assetCore';
-import { assertProfileChannel, assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, cloneLineageProfileAssets, cloneLineageProfileDatabase, doctorLineageProfile, initializeLineageProfile, repinLineageDevelopmentProfileRuntime, resolveLineageProfile, runtimeProfileIdentity } from './lineageProfiles';
+import { assertProfileChannel, assertResolvedRuntimeProfileEnvironment, assertRuntimeProfileSafety, assertUnselectedDatabaseIsUnbound, bindLineageProfileDatabase, cloneLineageProfileAssets, cloneLineageProfileDatabase, doctorLineageProfile, initializeLineageProfile, repinLineageDevelopmentProfileRuntime, resolveLineageProfile, runtimeProfileIdentity, upgradeLineageStableProfileRuntime } from './lineageProfiles';
 import { getLineageCodeIdentity, getLineageRuntimeInfo } from './runtimeInfo';
 
 const originalEnv = { ...process.env };
@@ -127,6 +127,216 @@ describe('Lineage named profiles', () => {
     expect(() => repinLineageDevelopmentProfileRuntime(linkedManifest, repoRoot, testRuntime('dev'), true))
       .toThrow('manifest must be a nonsymlink regular file');
     expect(readFileSync(manifest, 'utf8')).toBe(before);
+  });
+
+  it('upgrades only a stable production runtime pin and preserves routing and unknown fields', () => {
+    const manifest = writeStableUpgradeProfile('production-upgrade', {
+      fingerprint: 'a'.repeat(64),
+      version: '0.1.22',
+    });
+    const payload = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown>;
+    payload.operator_note = { preserve: true };
+    writeFileSync(manifest, `${JSON.stringify(payload, null, 2)}\n`);
+    chmodSync(manifest, 0o600);
+    const before = resolveLineageProfile(manifest);
+    const databaseBefore = readFileSync(before.database_path);
+    writeFileSync(join(before.asset_root, 'sentinel.txt'), 'preserve-asset');
+    const runtime = stablePackageRuntime('0.1.23', 'b'.repeat(64), 'new-git-sha');
+
+    const result = upgradeLineageStableProfileRuntime(manifest, runtime, true);
+    const after = resolveLineageProfile(manifest);
+    const rawAfter = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      changed: true,
+      new_runtime: {
+        channel: 'stable',
+        code_fingerprint: 'b'.repeat(64),
+        code_origin: 'package',
+        git_sha: 'new-git-sha',
+        version: '0.1.23',
+      },
+      previous_runtime: {
+        channel: 'stable',
+        code_fingerprint: 'a'.repeat(64),
+        code_origin: 'package',
+        version: '0.1.22',
+      },
+      profile_fingerprint: before.profile_fingerprint,
+      post_upgrade_doctor_ok: true,
+      schema_version: 'lineage.profile_runtime_upgrade_receipt.v1',
+      upgrade_kind: 'versioned',
+    });
+    expect(result.manifest_before_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.manifest_after_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(after.profile_fingerprint).toBe(before.profile_fingerprint);
+    expect(runtimeRepinTestInvariant(after)).toEqual(runtimeRepinTestInvariant(before));
+    expect(rawAfter.operator_note).toEqual({ preserve: true });
+    expect(readFileSync(after.database_path)).toEqual(databaseBefore);
+    expect(readFileSync(join(after.asset_root, 'sentinel.txt'), 'utf8')).toBe('preserve-asset');
+    expect(doctorLineageProfile(manifest, runtime).ok).toBe(true);
+    expect(statSync(manifest).mode & 0o777).toBe(0o600);
+  });
+
+  it('is exactly idempotent and backfills missing verified stable metadata', () => {
+    const idempotentManifest = writeStableUpgradeProfile('production-idempotent', {
+      fingerprint: 'b'.repeat(64),
+      gitSha: 'new-git-sha',
+      version: '0.1.23',
+    });
+    const runtime = stablePackageRuntime('0.1.23', 'b'.repeat(64), 'new-git-sha');
+    const before = readFileSync(idempotentManifest, 'utf8');
+
+    const idempotent = upgradeLineageStableProfileRuntime(idempotentManifest, runtime, true);
+    expect(idempotent).toMatchObject({ changed: false, post_upgrade_doctor_ok: true, upgrade_kind: 'idempotent' });
+    expect(idempotent.manifest_after_sha256).toBe(idempotent.manifest_before_sha256);
+    expect(readFileSync(idempotentManifest, 'utf8')).toBe(before);
+
+    const backfillManifest = writeStableUpgradeProfile('production-backfill', {
+      fingerprint: 'b'.repeat(64),
+    });
+    const backfill = upgradeLineageStableProfileRuntime(backfillManifest, runtime, true);
+    expect(backfill).toMatchObject({
+      changed: true,
+      previous_runtime: { code_fingerprint: 'b'.repeat(64) },
+      new_runtime: { git_sha: 'new-git-sha', version: '0.1.23' },
+    });
+    expect(backfill.previous_runtime).not.toHaveProperty('version');
+    expect(resolveLineageProfile(backfillManifest).expected_runtime).toMatchObject({
+      code_fingerprint: 'b'.repeat(64),
+      git_sha: 'new-git-sha',
+      version: '0.1.23',
+    });
+  });
+
+  it('allows the one-time versionless compatibility transition then enforces stable SemVer monotonicity', () => {
+    const compatibilityManifest = writeStableUpgradeProfile('production-versionless', {
+      fingerprint: 'a'.repeat(64),
+    });
+    const compatibility = upgradeLineageStableProfileRuntime(
+      compatibilityManifest,
+      stablePackageRuntime('0.1.23', 'b'.repeat(64)),
+      true,
+    );
+    expect(compatibility.changed).toBe(true);
+    expect(compatibility.previous_runtime).not.toHaveProperty('version');
+
+    const cases = [
+      { id: 'same-version', old: '0.1.23', next: '0.1.23', fingerprint: 'c'.repeat(64), message: 'same-version fingerprint change' },
+      { id: 'downgrade', old: '0.1.23', next: '0.1.22', fingerprint: 'c'.repeat(64), message: 'refuses downgrade' },
+      { id: 'unchanged-fingerprint', old: '0.1.23', next: '0.1.24', fingerprint: 'a'.repeat(64), message: 'claiming conflicting versions' },
+      { id: 'prerelease', old: '0.1.23', next: '0.1.24-rc.1', fingerprint: 'c'.repeat(64), message: 'valid stable SemVer without a prerelease' },
+    ];
+    for (const testCase of cases) {
+      const manifest = writeStableUpgradeProfile(`production-${testCase.id}`, {
+        fingerprint: 'a'.repeat(64),
+        version: testCase.old,
+      });
+      const before = readFileSync(manifest, 'utf8');
+      expect(() => upgradeLineageStableProfileRuntime(
+        manifest,
+        stablePackageRuntime(testCase.next, testCase.fingerprint),
+        true,
+      )).toThrow(testCase.message);
+      expect(readFileSync(manifest, 'utf8')).toBe(before);
+    }
+
+    const malformed = writeStableUpgradeProfile('production-malformed-version', {
+      fingerprint: 'a'.repeat(64),
+      version: 'not-semver',
+    });
+    expect(() => upgradeLineageStableProfileRuntime(
+      malformed,
+      stablePackageRuntime('0.1.24', 'c'.repeat(64)),
+      true,
+    )).toThrow('source version must be a valid stable SemVer without a prerelease');
+  });
+
+  it('fails closed outside the verified stable package and production profile contract', () => {
+    const production = writeStableUpgradeProfile('production-contract', {
+      fingerprint: 'a'.repeat(64),
+      version: '0.1.22',
+    });
+    const stable = stablePackageRuntime('0.1.23', 'b'.repeat(64));
+    expect(() => upgradeLineageStableProfileRuntime(production, stable, false)).toThrow('requires --confirm-write');
+    expect(() => upgradeLineageStableProfileRuntime(production, { ...stable, channel: 'preview' }, true)).toThrow('requires stable code');
+    expect(() => upgradeLineageStableProfileRuntime(production, {
+      ...stable,
+      code: { ...stable.code, verified: false },
+    }, true)).toThrow('requires a verified package runtime');
+    expect(() => upgradeLineageStableProfileRuntime(production, {
+      ...stable,
+      code: { ...stable.code, origin: 'checkout' },
+    }, true)).toThrow('requires package code');
+    expect(() => upgradeLineageStableProfileRuntime(production, {
+      ...stable,
+      code: { ...stable.code, package_version: '0.1.99' },
+    }, true)).toThrow('does not match package version');
+    const productionProfile = resolveLineageProfile(production);
+    const database = new DatabaseSync(productionProfile.database_path);
+    database.prepare('update lineage_profile_identity set profile_id = ?').run('wrong-profile');
+    database.close();
+    const unhealthyBefore = readFileSync(production, 'utf8');
+    expect(() => upgradeLineageStableProfileRuntime(production, stable, true))
+      .toThrow('requires a healthy production profile');
+    expect(readFileSync(production, 'utf8')).toBe(unhealthyBefore);
+
+    const development = writeProfile('development-upgrade-refusal', 'development', { createAssetRoot: false });
+    chmodSync(dirname(development), 0o700);
+    chmodSync(development, 0o600);
+    expect(() => upgradeLineageStableProfileRuntime(development, stable, true)).toThrow('requires a production profile');
+  });
+
+  it('preserves exact original or concurrent bytes and removes temporary files before publication', () => {
+    const injectedManifest = writeStableUpgradeProfile('production-injected-failure', {
+      fingerprint: 'a'.repeat(64),
+      version: '0.1.22',
+    });
+    const before = readFileSync(injectedManifest, 'utf8');
+    expect(() => upgradeLineageStableProfileRuntime(
+      injectedManifest,
+      stablePackageRuntime('0.1.23', 'b'.repeat(64)),
+      true,
+      { beforePublish: () => { throw new Error('injected pre-publication failure'); } },
+    )).toThrow('injected pre-publication failure');
+    expect(readFileSync(injectedManifest, 'utf8')).toBe(before);
+    expect(readdirSync(dirname(injectedManifest))).not.toContainEqual(expect.stringContaining('.profile.runtime-upgrade-'));
+
+    const postPublishManifest = writeStableUpgradeProfile('production-post-publish-failure', {
+      fingerprint: 'c'.repeat(64),
+      version: '0.1.22',
+    });
+    const postPublishBefore = readFileSync(postPublishManifest, 'utf8');
+    expect(() => upgradeLineageStableProfileRuntime(
+      postPublishManifest,
+      stablePackageRuntime('0.1.23', 'd'.repeat(64)),
+      true,
+      { afterPublish: () => { throw new Error('injected post-publication failure'); } },
+    )).toThrow('injected post-publication failure');
+    expect(readFileSync(postPublishManifest, 'utf8')).toBe(postPublishBefore);
+    expect(readdirSync(dirname(postPublishManifest))).not.toContainEqual(expect.stringContaining('.profile.runtime-upgrade-'));
+
+    const concurrentManifest = writeStableUpgradeProfile('production-concurrent-change', {
+      fingerprint: 'a'.repeat(64),
+      version: '0.1.22',
+    });
+    let concurrentBytes = '';
+    expect(() => upgradeLineageStableProfileRuntime(
+      concurrentManifest,
+      stablePackageRuntime('0.1.23', 'b'.repeat(64)),
+      true,
+      {
+        beforePublish: () => {
+          const concurrent = JSON.parse(readFileSync(concurrentManifest, 'utf8')) as Record<string, unknown>;
+          concurrent.concurrent_note = 'other-writer';
+          concurrentBytes = `${JSON.stringify(concurrent, null, 2)}\n`;
+          writeFileSync(concurrentManifest, concurrentBytes);
+          chmodSync(concurrentManifest, 0o600);
+        },
+      },
+    )).toThrow('changed while stable runtime upgrade was being prepared');
+    expect(readFileSync(concurrentManifest, 'utf8')).toBe(concurrentBytes);
+    expect(readdirSync(dirname(concurrentManifest))).not.toContainEqual(expect.stringContaining('.profile.runtime-upgrade-'));
   });
 
   it('resolves distinct named profiles to distinct database and media roots', () => {
@@ -460,6 +670,58 @@ function writeProfile(
     ...(options.requiredMigrations ? { required_schema_migrations: options.requiredMigrations } : {}),
   }, null, 2)}\n`);
   return manifest;
+}
+
+function writeStableUpgradeProfile(
+  profileId: string,
+  runtime: { fingerprint: string; gitSha?: string; version?: string },
+): string {
+  const manifest = writeProfile(profileId, 'production');
+  const payload = JSON.parse(readFileSync(manifest, 'utf8')) as { expected_runtime: Record<string, unknown> };
+  payload.expected_runtime = {
+    channel: 'stable',
+    code_fingerprint: runtime.fingerprint,
+    code_origin: 'package',
+    ...(runtime.gitSha ? { git_sha: runtime.gitSha } : {}),
+    ...(runtime.version ? { version: runtime.version } : {}),
+  };
+  writeFileSync(manifest, `${JSON.stringify(payload, null, 2)}\n`);
+  chmodSync(dirname(manifest), 0o700);
+  chmodSync(manifest, 0o600);
+  const profile = resolveLineageProfile(manifest);
+  bindDatabase(profile.database_path, profile.profile_id, profile.environment, profile.profile_fingerprint);
+  return manifest;
+}
+
+function stablePackageRuntime(version: string, fingerprint: string, gitSha?: string) {
+  const code = getLineageCodeIdentity('stable');
+  return {
+    channel: 'stable' as const,
+    code: {
+      ...code,
+      channel: 'stable' as const,
+      fingerprint,
+      git_sha: gitSha,
+      origin: 'package' as const,
+      package_version: version,
+      verified: true,
+    },
+    gitSha,
+    version,
+  };
+}
+
+function runtimeRepinTestInvariant(profile: ReturnType<typeof resolveLineageProfile>) {
+  return {
+    asset_root: profile.asset_root,
+    database_path: profile.database_path,
+    environment: profile.environment,
+    profile_fingerprint: profile.profile_fingerprint,
+    profile_id: profile.profile_id,
+    required_schema_migrations: profile.required_schema_migrations || [],
+    schema_version: profile.schema_version,
+    service_origin: profile.service_origin,
+  };
 }
 
 function bindDatabase(
