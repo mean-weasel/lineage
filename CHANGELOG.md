@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- Make missing Codex CLI failures explain how to restore `PATH`, and verify `npx` and Codex prerequisites explicitly in the public and hermetic plugin-install instructions.
+## 0.1.23
+
+- Make missing Codex CLI failures explain how to restore `PATH`, verify `npx` and Codex prerequisites explicitly, and gate releases on compatibility with the independently published plugin installer.
+- Add a reusable Lineage showcase cover and refine its presentation without browser text-selection artifacts.
+- Show absolute local paths in asset details while preserving safe relative paths in persisted lineage data.
+- Add the public documentation hub, freshness checks, CI routing, and GitHub Pages deployment workflow.
+- Refresh vulnerable transitive dependencies for `brace-expansion`, `postcss`, and `nanoid`.
 
 ## 0.1.22
 
