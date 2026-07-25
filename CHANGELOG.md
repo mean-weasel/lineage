@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.25
+
+- Keep tagged release provenance clean after documentation builds so verified stable installations accept the published package.
+
 ## 0.1.24
 
 - Add persistent per-canvas Social marks across the UI and CLI, including agent-readable local media context, claim enforcement, and safe cleanup when a node leaves its canvas.
