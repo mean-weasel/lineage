@@ -133,7 +133,7 @@ export function LineageDetailModal({
                 <div><dt>Review</dt><dd>{node.review_state}</dd></div>
                 <div><dt>Latest</dt><dd>{node.is_latest ? 'yes' : 'no'}</dd></div>
                 <div><dt>Next variation</dt><dd>{node.user_selected ? 'yes' : 'no'}</dd></div>
-                {node.local_path && <div><dt>Local path</dt><dd>{node.local_path}</dd></div>}
+                {(node.absolute_path || node.local_path) && <div><dt>Local path</dt><dd>{node.absolute_path || node.local_path}</dd></div>}
                 {node.s3_key && <div><dt>S3 key</dt><dd>{node.s3_key}</dd></div>}
                 {node.selection_note && <div><dt>Rationale</dt><dd>{node.selection_note}</dd></div>}
                 {node.review_notes && <div><dt>Notes</dt><dd>{node.review_notes}</dd></div>}

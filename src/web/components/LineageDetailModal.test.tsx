@@ -15,11 +15,12 @@ vi.mock('../api', () => ({
 }));
 
 const node = {
+  absolute_path: '/tmp/lineage-assets/vertical-poster.png',
   asset_id: 'local-node',
   campaign: 'Summer launch',
   channel: 'paid-social',
   is_latest: true,
-  local_path: '/tmp/vertical-poster.png',
+  local_path: 'vertical-poster.png',
   media_type: 'image',
   preview_url: '/api/assets/local-preview?project=demo-project&path=vertical-poster.png',
   project: 'demo-project',
@@ -69,9 +70,30 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('LineageDetailModal', () => {
+  it('shows the full local path in asset details', () => {
+    renderModal();
+
+    const localPathLabel = Array.from(container!.querySelectorAll('dt')).find(item => item.textContent === 'Local path');
+
+    expect(localPathLabel?.nextElementSibling?.textContent).toBe('/tmp/lineage-assets/vertical-poster.png');
+  });
+
+  it('copies the full local path from asset detail actions', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    renderModal();
+
+    await act(async () => {
+      button('Copy local path')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(writeText).toHaveBeenCalledWith('/tmp/lineage-assets/vertical-poster.png');
+  });
+
   it('starts dense node information collapsed by default', () => {
     renderModal();
 
