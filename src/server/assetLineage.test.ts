@@ -124,6 +124,7 @@ describe('asset lineage index', () => {
     expect(snapshot.latest).toEqual([files.childId]);
     expect(snapshot.selected).toEqual([files.childId]);
     expect(snapshot.nodes.find(node => node.asset_id === files.childId)).toMatchObject({
+      absolute_path: files.child,
       is_latest: true,
       user_selected: true,
     });

@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { EdgeSummaryValidationError, normalizeEdgeSummary, requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
@@ -48,6 +48,12 @@ function collectAssets(project: string, source: 'catalog' | 'local'): GrowthAsse
     assets.push(...listAssets(project, { source, page, pageSize: 100 }).assets);
   }
   return assets;
+}
+
+function absoluteLocalPath(localPath?: string): string | undefined {
+  if (!localPath) return undefined;
+  if (isAbsolute(localPath)) return localPath;
+  return resolve(repoRoot, '.asset-scratch', localPath);
 }
 
 function upsertProject(database: DatabaseSync, project: string): void {
@@ -580,6 +586,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     const lineageTasks = lineageTasksByNode.get(row.asset_id);
     return {
       ...node,
+      absolute_path: absoluteLocalPath(row.local_path),
       attempt_count: attempts.length,
       current_attempt: currentAttempt,
       is_latest: !childIds.has(row.asset_id),

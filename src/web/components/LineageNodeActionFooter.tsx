@@ -36,11 +36,12 @@ export function LineageNodeActionFooter({
   const previousLatest = latestIndex > 0 ? latestNodes[latestIndex - 1] : null;
   const nextLatest = latestIndex >= 0 && latestIndex < latestNodes.length - 1 ? latestNodes[latestIndex + 1] : null;
   const nextBaseLabel = node.user_selected ? 'Remove from next variation' : selectionFull ? 'Selection full' : 'Use for next variation';
+  const localPath = node.absolute_path || node.local_path;
 
   async function copyPath() {
-    const path = node.local_path || node.s3_key;
+    const path = localPath || node.s3_key;
     if (!path) return;
-    const label = node.local_path ? 'local path' : 'S3 key';
+    const label = localPath ? 'local path' : 'S3 key';
     try {
       await copyToClipboard(path);
       onToast('ok', `Copied ${label}`);
@@ -70,7 +71,7 @@ export function LineageNodeActionFooter({
           {previousLatest && <button onClick={() => onOpenNode(previousLatest.asset_id)} type="button">Previous latest</button>}
           {nextLatest && <button onClick={() => onOpenNode(nextLatest.asset_id)} type="button">Next latest</button>}
           {node.preview_url && <a href={node.preview_url} rel="noreferrer" target="_blank">Open preview</a>}
-          {(node.local_path || node.s3_key) && <button onClick={() => void copyPath()} type="button">Copy {node.local_path ? 'local path' : 'S3 key'}</button>}
+          {(localPath || node.s3_key) && <button onClick={() => void copyPath()} type="button">Copy {localPath ? 'local path' : 'S3 key'}</button>}
           <button aria-label={canRemoveFromLineage ? `Remove ${node.title} from lineage` : 'Root cannot be removed from lineage'} className="danger" disabled={!canRemoveFromLineage} onClick={() => onRemoveFromLineage(node)} type="button">
             {canRemoveFromLineage ? 'Remove from lineage' : 'Root cannot be removed'}
           </button>

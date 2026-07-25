@@ -263,6 +263,7 @@ export interface LineageNode {
   channel?: string;
   campaign?: string;
   local_path?: string;
+  absolute_path?: string;
   s3_key?: string;
   checksum_sha256?: string;
   review_state: AssetReviewState;
