@@ -9,6 +9,7 @@ import { createReviewSet, selectCurrentAssets } from './assetSelections';
 import { indexLineageAssets, linkLineageAssets, updateSelectedAsset } from './assetLineage';
 import { createLineageWorkspace } from './assetLineageWorkspaces';
 import { resolveContentAgentHandoff } from './contentAgentIntent';
+import { markAssetSocial } from './assetSocialMarks';
 import { setContentTarget } from './contentTargets';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-content-agent-intent');
@@ -132,6 +133,46 @@ describe('content agent natural-language intent resolver', () => {
         type: 'lineage_workspace',
       },
     });
+  });
+
+  it('resolves current social marks as a read-only canvas asset selection', () => {
+    const { childId, rootId } = seedLineageWorkspace();
+    markAssetSocial(defaultProject, {
+      asset: childId,
+      confirmWrite: true,
+      markedBy: 'human:owner',
+      notes: 'Prepare distinct LinkedIn and Instagram copy',
+      rootAssetId: rootId,
+    });
+
+    const handoff = resolveContentAgentHandoff('Which nodes in this canvas are marked for social for Demo?');
+
+    expect(handoff).toMatchObject({
+      context: {
+        related_assets: [childId],
+        selected_assets: [childId],
+      },
+      guardrails: {
+        do_not_modify: expect.arrayContaining(['external social platforms']),
+        requires_confirmation: true,
+        safe_to_start: true,
+        write_scope: [],
+      },
+      intent: { resolved: 'asset.selection.current', selection_mode: 'asset_selection' },
+      natural_language: { matched_intent: 'asset.selection.current' },
+      next_action: {
+        canonical_call: {
+          args: { project: defaultProject, root: rootId },
+          command: 'social list',
+          tool: 'lineage_cli',
+        },
+        commands: { list: expect.stringContaining(`social list --project '${defaultProject}' --root '${rootId}'`) },
+      },
+      status: 'ok',
+      target: null,
+    });
+    const commands = handoff.next_action?.commands;
+    expect(commands && 'list' in commands ? commands.list : undefined).toContain(`--profile '${process.env.LINEAGE_PROFILE_MANIFEST}' --json`);
   });
 
   it('prefers a ready active lineage workspace for generic selections prompts', () => {

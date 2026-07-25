@@ -17,6 +17,7 @@ type AssetNodeData = LineageNode & {
   onPreviewDismiss?: () => void;
   onToggleBranch?: (node: LineageNode) => void;
   onToggleReroll?: (node: LineageNode) => void;
+  onToggleSocial?: (node: LineageNode) => void;
   root: boolean;
   replayInteractive?: boolean;
   replayState?: 'entering' | 'future' | 'visible';
@@ -63,6 +64,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
             event.preventDefault();
             event.stopPropagation();
             data.onToggleReroll?.(data);
+            return;
+          }
+          if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 's') {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onToggleSocial?.(data);
             return;
           }
           if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'd') {
@@ -112,6 +119,7 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
             </span>
           ))}
           {data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll && <span className="reroll">re-roll</span>}
+          {data.social_mark?.active && <span className="social">social</span>}
         </div>
         <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
     </div>

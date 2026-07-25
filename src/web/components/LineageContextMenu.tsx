@@ -19,6 +19,7 @@ export function LineageContextMenu({
   onReview,
   onSelectNext,
   onMarkReroll,
+  onToggleSocial,
   position,
   selectedCount,
   selectionFull,
@@ -37,6 +38,7 @@ export function LineageContextMenu({
   onReview: (reviewState: AssetReviewState) => void;
   onSelectNext: () => void;
   onMarkReroll: () => void;
+  onToggleSocial: () => void;
   position: { x: number; y: number };
   selectedCount: number;
   selectionFull: boolean;
@@ -59,6 +61,9 @@ export function LineageContextMenu({
       {node.reroll_request?.status === 'pending'
         ? <button className="reroll-action" onClick={() => run(onClearReroll)} role="menuitem">Clear re-roll request</button>
         : <button className="reroll-action" onClick={() => run(onMarkReroll)} role="menuitem">Mark for re-roll</button>}
+      <button className="social-action" onClick={() => run(onToggleSocial)} role="menuitem">
+        {node.social_mark?.active ? 'Unmark from Social' : 'Mark for Social'}
+      </button>
       {claims.length > 0 && (
         <div className="lineage-context-claims" role="group" aria-label="Agent claim controls">
           <span>{claimLabel(claims)}</span>

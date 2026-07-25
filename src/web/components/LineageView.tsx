@@ -312,6 +312,15 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       confirmWrite: true,
     }, `Cleared re-roll request for ${node.asset_id}`);
   }
+  async function toggleSocial(node: LineageNode) {
+    if (!snapshot) return;
+    const active = node.social_mark?.active === true;
+    const suffix = active ? '/unmark' : '';
+    await mutateLineage(`/api/lineage/${snapshot.root_asset_id}/social-marks/${node.asset_id}${suffix}`, {
+      actor: 'human:canvas',
+      confirmWrite: true,
+    }, active ? `Unmarked ${node.asset_id} from Social` : `Marked ${node.asset_id} for Social`);
+  }
   async function openAttemptHistory(assetId: string) {
     if (!snapshot) return;
     try {
@@ -667,6 +676,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             onSelectedAsset={onSelectedAsset}
             onToggleBranch={node => node.user_selected ? clearNextVariation(node.asset_id) : selectNextBase(node)}
             onToggleReroll={node => node.reroll_request?.status === 'pending' ? clearReroll(node) : markReroll(node)}
+            onToggleSocial={toggleSocial}
             onViewportInteraction={markViewportInteraction}
             replayInteractive={!replaySnapshot || replayAtEnd}
             selectionFull={selectionFull}
@@ -707,7 +717,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             snapshot={snapshot}
           />
         )}
-        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onMarkReroll={() => void markReroll(menuNode)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
+        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onMarkReroll={() => void markReroll(menuNode)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} onToggleSocial={() => void toggleSocial(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
       </div>
       {historyNode && snapshot && (
         <LineageAttemptHistoryModal

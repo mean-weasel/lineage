@@ -58,6 +58,30 @@ describe('lineage inspector quick-action safety', () => {
       rerollTitle: 'Remove from the re-roll queue (R)',
     });
   });
+
+  it('exposes independent Social selected state and shortcut copy', () => {
+    expect(quickActionState(node(), false)).toMatchObject({
+      socialDisabled: false,
+      socialSelected: false,
+      socialTitle: 'Mark for Social (S)',
+    });
+    expect(quickActionState(node({
+      social_mark: {
+        active: true,
+        asset_id: 'local-node',
+        id: 'social-1',
+        marked_at: '2026-07-25T00:00:00.000Z',
+        marked_by: 'human:owner',
+        project_id: 'demo-project',
+        root_asset_id: 'root',
+        updated_at: '2026-07-25T00:00:00.000Z',
+      },
+    }), false)).toMatchObject({
+      socialDisabled: false,
+      socialSelected: true,
+      socialTitle: 'Unmark from Social (S)',
+    });
+  });
 });
 
 describe('lineage canvas empty-state truthfulness', () => {

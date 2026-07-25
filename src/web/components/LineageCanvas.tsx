@@ -52,6 +52,7 @@ export function LineageCanvas({
   onSelectedAsset,
   onToggleBranch,
   onToggleReroll,
+  onToggleSocial,
   onViewportInteraction,
   replayInteractive,
   selectionFull,
@@ -79,6 +80,7 @@ export function LineageCanvas({
   onSelectedAsset: (assetId: string) => void;
   onToggleBranch: (node: LineageNode) => Promise<void> | void;
   onToggleReroll: (node: LineageNode) => Promise<void> | void;
+  onToggleSocial: (node: LineageNode) => Promise<void> | void;
   onViewportInteraction: () => void;
   replayInteractive: boolean;
   selectionFull: boolean;
@@ -140,19 +142,20 @@ export function LineageCanvas({
     dismissPreview();
     onNodeActionMenu(assetId, x, y);
   }, [dismissPreview, onNodeActionMenu]);
-  const runQuickAction = useCallback(async (action: 'branch' | 'reroll', node: LineageNode) => {
+  const runQuickAction = useCallback(async (action: 'branch' | 'reroll' | 'social', node: LineageNode) => {
     const actionId = `${action}:${node.asset_id}`;
     if (pendingActionRef.current) return;
     pendingActionRef.current = true;
     setPendingAction(actionId);
     try {
       if (action === 'branch') await onToggleBranch(node);
-      else await onToggleReroll(node);
+      else if (action === 'reroll') await onToggleReroll(node);
+      else await onToggleSocial(node);
     } finally {
       pendingActionRef.current = false;
       setPendingAction(null);
     }
-  }, [onToggleBranch, onToggleReroll]);
+  }, [onToggleBranch, onToggleReroll, onToggleSocial]);
   const interactiveNodes = useMemo(() => flowNodes.map(node => ({
     ...node,
     data: {
@@ -169,6 +172,10 @@ export function LineageCanvas({
       onToggleReroll: (target: LineageNode) => {
         if (quickActionState(target, selectionFull).rerollDisabled) return;
         void runQuickAction('reroll', target);
+      },
+      onToggleSocial: (target: LineageNode) => {
+        if (quickActionState(target, selectionFull).socialDisabled) return;
+        void runQuickAction('social', target);
       },
     },
   })), [changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory, runQuickAction, selectionFull]);
@@ -228,6 +235,10 @@ export function LineageCanvas({
               event.preventDefault();
               void runQuickAction('reroll', previewNode);
             }
+            if (key === 's' && !actionState.socialDisabled) {
+              event.preventDefault();
+              void runQuickAction('social', previewNode);
+            }
             if (key === 'd') {
               event.preventDefault();
               openDetail(previewNode.asset_id);
@@ -276,6 +287,17 @@ export function LineageCanvas({
               type="button"
             >
               <kbd>R</kbd><span>{actionState.rerollSelected ? 'Re-roll queued' : 'Re-roll'}</span>
+            </button>
+            <button
+              aria-keyshortcuts="S"
+              aria-pressed={actionState.socialSelected}
+              className={`social ${actionState.socialSelected ? 'selected' : ''}`}
+              disabled={actionState.socialDisabled || Boolean(pendingAction)}
+              onClick={() => void runQuickAction('social', previewNode)}
+              title={actionState.socialTitle}
+              type="button"
+            >
+              <kbd>S</kbd><span>{actionState.socialSelected ? 'Social marked' : 'Social'}</span>
             </button>
             <button aria-keyshortcuts="D" onClick={() => openDetail(previewNode.asset_id)} type="button"><kbd>D</kbd><span>Details</span></button>
           </div>

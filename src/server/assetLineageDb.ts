@@ -116,6 +116,21 @@ export function lineageDb(): DatabaseSync {
       where status = 'pending';
     create index if not exists asset_reroll_requests_root_status
       on asset_reroll_requests(project_id, root_asset_id, status, created_at);
+    create table if not exists asset_social_marks (
+      id text primary key,
+      project_id text not null references projects(id),
+      root_asset_id text not null references assets(id),
+      asset_id text not null references assets(id),
+      notes text,
+      marked_by text not null,
+      marked_at text not null,
+      unmarked_by text,
+      unmarked_at text,
+      updated_at text not null,
+      unique(project_id, root_asset_id, asset_id)
+    );
+    create index if not exists asset_social_marks_root_active
+      on asset_social_marks(project_id, root_asset_id, unmarked_at, marked_at);
     create table if not exists asset_reviews (
       asset_id text primary key references assets(id),
       review_state text not null check (review_state in ('unreviewed', 'approved', 'needs_revision', 'rejected', 'ignored')),

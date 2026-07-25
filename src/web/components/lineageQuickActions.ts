@@ -4,6 +4,7 @@ export function quickActionState(node: LineageNode, selectionFull: boolean) {
   const branchLocked = taskIsLocked(node.lineage_tasks?.iterate);
   const rerollLocked = taskIsLocked(node.lineage_tasks?.reroll);
   const rerollSelected = node.reroll_request?.status === 'pending';
+  const socialSelected = node.social_mark?.active === true;
   return {
     branchDisabled: branchLocked || (!node.user_selected && selectionFull),
     branchLocked,
@@ -18,6 +19,9 @@ export function quickActionState(node: LineageNode, selectionFull: boolean) {
     rerollTitle: rerollLocked
       ? 'An agent is working on this re-roll. Manage it in the task queue.'
       : rerollSelected ? 'Remove from the re-roll queue (R)' : 'Add to the re-roll queue (R)',
+    socialDisabled: false,
+    socialSelected,
+    socialTitle: socialSelected ? 'Unmark from Social (S)' : 'Mark for Social (S)',
   };
 }
 

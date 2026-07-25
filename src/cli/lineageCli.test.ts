@@ -10,7 +10,7 @@ import { acquireProfileWriterLease, type ProfileWriterLease } from '../server/pr
 import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import { parseRegistryPackageMetadata } from './lineage-channel';
-import { formatAgentGraphDigest, formatLineageHelp, lineageServiceIdentityErrors, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand, runLineageRuntimeCommand } from './lineageCli';
+import { formatAgentGraphDigest, formatLineageHelp, lineageCliCanDelegateMutation, lineageCliRequiresWriterLease, lineageServiceIdentityErrors, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand, runLineageRuntimeCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
@@ -88,6 +88,9 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>"');
     expect(help).toContain('lineage generate image plan --prompt <text> --from-lineage-selection');
     expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
+    expect(help).toContain('lineage social list --project <project> --root <asset-id>');
+    expect(help).toContain('lineage social mark --project <project> --root <asset-id> --asset <asset-id-or-exact-title> --confirm-write');
+    expect(help).toContain('lineage social unmark --project <project> --root <asset-id> --asset <asset-id-or-exact-title> --confirm-write');
     expect(help).toContain('lineage db info [--db <path>] [--json]');
     expect(help).toContain('lineage runtime doctor [--json]');
     expect(help).toContain('lineage start --profile <id-or-manifest> [--open] [--json]');
@@ -760,6 +763,85 @@ describe('lineage CLI handoff commands', () => {
       '--json',
     ]) as { requests?: Array<{ node_asset_id: string }> };
     expect(finalList.requests).toEqual([]);
+  });
+
+  it('marks, lists, and unmarks social candidates from the packaged CLI contract', () => {
+    seedCliDb();
+
+    expect(() => runLineageDataCommand('social', [
+      'list',
+      '--root', fixtureRootAssetId,
+      '--json',
+    ])).toThrow('lineage social list requires --project');
+
+    const dryRun = runLineageDataCommand('social', [
+      'mark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--asset', fixtureRootAssetId,
+      '--actor', 'agent:cli',
+      '--notes', 'Prepare channel copy',
+      '--json',
+    ]) as { active: boolean; dryRun?: boolean };
+    expect(dryRun).toMatchObject({ active: true, dryRun: true, ok: true });
+
+    const empty = runLineageDataCommand('social', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { marks: unknown[] };
+    expect(empty.marks).toEqual([]);
+
+    runLineageDataCommand('social', [
+      'mark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--asset', fixtureRootAssetId,
+      '--actor', 'agent:cli',
+      '--notes', 'Prepare channel copy',
+      '--confirm-write',
+      '--json',
+    ]);
+    const listed = runLineageDataCommand('social', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { marks: Array<{ asset_id: string; marked_by: string; notes?: string }> };
+    expect(listed.marks).toEqual([
+      expect.objectContaining({
+        asset_id: fixtureRootAssetId,
+        marked_by: 'agent:cli',
+        notes: 'Prepare channel copy',
+      }),
+    ]);
+
+    runLineageDataCommand('social', [
+      'unmark',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--asset', fixtureRootAssetId,
+      '--actor', 'agent:cli',
+      '--confirm-write',
+      '--json',
+    ]);
+    const finalList = runLineageDataCommand('social', [
+      'list',
+      '--project', defaultProject,
+      '--root', fixtureRootAssetId,
+      '--json',
+    ]) as { marks: unknown[] };
+    expect(finalList.marks).toEqual([]);
+  });
+
+  it('treats only social mark and unmark as managed writer mutations', () => {
+    expect(lineageCliRequiresWriterLease('social', ['list'])).toBe(false);
+    expect(lineageCliRequiresWriterLease('social', ['mark'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('social', ['unmark'])).toBe(true);
+    expect(lineageCliCanDelegateMutation('social', ['list'])).toBe(false);
+    expect(lineageCliCanDelegateMutation('social', ['mark'])).toBe(true);
+    expect(lineageCliCanDelegateMutation('social', ['unmark'])).toBe(true);
   });
 
   it('manages lineage task queue commands from the packaged CLI contract', () => {

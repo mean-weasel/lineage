@@ -100,6 +100,16 @@
   color: #753315;
 }
 
+.lineage-context-menu button.social-action {
+  color: #4051a3;
+}
+
+.lineage-context-menu button.social-action:hover,
+.lineage-context-menu button.social-action:focus-visible {
+  background: #eef0ff;
+  color: #30418f;
+}
+
 .lineage-context-menu button.danger:hover,
 .lineage-context-menu button.danger:focus-visible {
   background: #fff0f0;

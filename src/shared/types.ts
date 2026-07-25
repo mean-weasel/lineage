@@ -1,3 +1,5 @@
+import type { AssetSocialMark } from './socialMarkTypes';
+
 type AssetStatus = 'planned' | 'working' | 'approved' | 'published' | 'archived';
 export type AssetContentType = 'image' | 'video' | 'gif' | 'audio' | 'doc' | 'other';
 export type PlacementStatus = 'planned' | 'scheduled' | 'posted' | 'skipped';
@@ -276,6 +278,7 @@ export interface LineageNode {
   current_attempt?: LineageAttempt;
   lineage_tasks?: Partial<Record<LineageTaskType, LineageTask>>;
   reroll_request?: LineageRerollRequest;
+  social_mark?: AssetSocialMark;
 }
 
 export interface LineagePosition {

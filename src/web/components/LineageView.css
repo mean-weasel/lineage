@@ -1019,6 +1019,11 @@
   color: #8a4526;
 }
 
+.lineage-badges .social {
+  background: #e9edff;
+  color: #4051a3;
+}
+
 .lineage-badges .lineage-task-badge.pending {
   background: #e8f7ee;
   color: #1f6b3a;
@@ -1122,7 +1127,7 @@
 
 .lineage-hover-preview-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr auto;
   gap: 6px;
 }
 
@@ -1157,6 +1162,12 @@
   border-color: #d28f68;
   background: #fff0e6;
   color: #8a4526;
+}
+
+.lineage-hover-preview-actions button.social.selected {
+  border-color: #7285d2;
+  background: #e9edff;
+  color: #4051a3;
 }
 
 .lineage-hover-preview-actions button:disabled {
