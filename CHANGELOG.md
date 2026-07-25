@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.24
+
+- Add persistent per-canvas Social marks across the UI and CLI, including agent-readable local media context, claim enforcement, and safe cleanup when a node leaves its canvas.
+- Add an explicit, atomic stable-package upgrade path for stopped production profiles, with verified runtime authority, writer refusal, rollback, identity preservation, and a guarded Make workflow.
+
 ## 0.1.23
 
 - Make missing Codex CLI failures explain how to restore `PATH`, verify `npx` and Codex prerequisites explicitly, and gate releases on compatibility with the independently published plugin installer.
