@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,21 @@ for (const file of requiredBuildFiles) {
     console.error(`Missing build artifact: ${file}`);
     console.error('Run npm run build before npm run package:smoke.');
     process.exit(1);
+  }
+}
+
+const packagedIndex = readFileSync(join(root, 'dist', 'web', 'index.html'), 'utf8');
+const packagedAssetPaths = [...packagedIndex.matchAll(/(?:src|href)="([^"]*\/assets\/[^"]+)"/g)]
+  .map(match => match[1]);
+if (packagedAssetPaths.length === 0) {
+  throw new Error('Packaged web index does not reference any built assets');
+}
+for (const assetPath of packagedAssetPaths) {
+  if (!assetPath.startsWith('/assets/')) {
+    throw new Error(`Packaged web index references ${assetPath}; production assets must load from /assets/`);
+  }
+  if (!existsSync(join(root, 'dist', 'web', assetPath.slice(1)))) {
+    throw new Error(`Packaged web index references missing asset ${assetPath}`);
   }
 }
 
