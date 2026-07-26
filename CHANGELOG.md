@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.26
+
+- Prevent GitHub Pages asset paths from contaminating the npm package, restore stable app rendering, and reject mismatched production asset URLs during package smoke verification.
+
 ## 0.1.25
 
 - Keep tagged release provenance clean after documentation builds so verified stable installations accept the published package.
