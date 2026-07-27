@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T008
+active_task: T007
 
 tasks:
   - id: T001
@@ -599,7 +599,7 @@ tasks:
   - id: T007
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Run fresh repository gates and an identity-gated checkout walkthrough that exercises the complete two-way bridge and failure oracle."
     inputs:
@@ -624,7 +624,7 @@ tasks:
   - id: T008
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Close the integrated-review gaps: exact target-map keys plus complete custom-dimension and discovery/count controls in the canvas."
     inputs:
@@ -668,8 +668,34 @@ tasks:
       - "The work requires files outside allowed_files."
       - "A new tracked or untracked user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
-
+    receipt:
+      result: done
+      changed_files:
+        - src/shared/generationTargetMap.ts
+        - src/shared/generationTargetMap.test.ts
+        - src/cli/lineageCli.test.ts
+        - src/web/components/OutputTargetPreferencesDialog.tsx
+        - src/web/components/OutputTargetPreferencesDialog.css
+        - src/web/components/OutputTargetPreferencesDialog.test.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageGenerationSheet.css
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - e2e/output-target-locks.e2e.ts
+      commands:
+        - cmd: "npm test -- src/shared/generationTargetMap.test.ts src/cli/lineageCli.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Target-map JSON now fails closed on unknown root, source, and kind-specific keys while preserving documented and legacy behavior. Canvas defaults and branch planning support rehydrated custom dimensions, per-source overrides, search, lifecycle/replacement warnings, source defaults, and advanced group counts; submission remains the exact canonical preview map. Independent PM reruns confirmed 4 focused files and 51 tests, TypeScript, lint, exact scope, and named-plus-custom persisted-job browser proof."
+      deviations: []
+      remaining_blockers: []
+      verification_attempts: 1
   - id: T999
     type: judge
     assignee: Judge

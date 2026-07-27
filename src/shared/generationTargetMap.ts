@@ -107,7 +107,32 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function exactRecord(value: unknown, allowedKeys: readonly string[], label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new OutputTargetResolutionError('invalid_target_map', `${label} must be an object`);
+  }
+  const unknownKeys = Object.keys(value).filter(key => !allowedKeys.includes(key));
+  if (unknownKeys.length > 0) {
+    throw new OutputTargetResolutionError('invalid_target_map', `${label} contains unknown field${unknownKeys.length === 1 ? '' : 's'}: ${unknownKeys.sort().join(', ')}`);
+  }
+  return value as Record<string, unknown>;
+}
+
 function canonicalTarget(target: GenerationTarget): GenerationTarget {
+  if (!target || typeof target !== 'object' || Array.isArray(target)) {
+    throw new OutputTargetResolutionError('invalid_target_map', 'Output target must be an object');
+  }
+  const targetRecord = target as unknown as Record<string, unknown>;
+  const kind = targetRecord.kind;
+  if (kind === 'delivery_surface') {
+    exactRecord(target, ['kind', 'surface_id', 'surface_version', 'variant_count'], 'Delivery-surface target');
+  } else if (kind === 'custom') {
+    exactRecord(target, ['kind', 'width', 'height', 'variant_count'], 'Custom target');
+  } else if (kind === 'unlocked') {
+    exactRecord(target, ['kind', 'variant_count'], 'Unlocked target');
+  } else {
+    throw new OutputTargetResolutionError('invalid_target_map', 'Unknown output target kind');
+  }
   const variantCount = target.variant_count === undefined ? undefined : positiveInteger(target.variant_count, 'variant_count');
   if (target.kind === 'delivery_surface') {
     surfaceSnapshot(target.surface_id, positiveInteger(target.surface_version, 'surface_version'));
@@ -133,6 +158,7 @@ function targetKey(target: GenerationTarget): string {
 }
 
 function canonicalSource(source: GenerationSourceTargets): GenerationSourceTargets {
+  exactRecord(source, ['asset_id', 'default_variant_count', 'targets', 'separate_surface_ids'], 'Target-map source');
   if (!source.asset_id?.trim()) throw new OutputTargetResolutionError('invalid_target_map', 'Every target-map source requires asset_id');
   if (!Array.isArray(source.targets) || source.targets.length === 0) {
     throw new OutputTargetResolutionError('invalid_target_map', `Source ${source.asset_id} requires at least one target`);
@@ -169,6 +195,7 @@ export function canonicalizeGenerationTargetMap(
   input: GenerationTargetMap,
   expectedSourceAssetIds?: readonly string[],
 ): CanonicalGenerationTargetMap {
+  exactRecord(input, ['schema_version', 'sources'], 'Generation target map');
   if (input?.schema_version !== GENERATION_TARGET_MAP_SCHEMA || !Array.isArray(input.sources) || input.sources.length === 0) {
     throw new OutputTargetResolutionError('invalid_target_map', `Expected ${GENERATION_TARGET_MAP_SCHEMA} with at least one source`);
   }

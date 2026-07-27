@@ -54,6 +54,41 @@ test('canvas plans the same durable locked job with human defaults, grouping, an
         }],
       },
     });
+
+    await page.locator('.lineage-overflow summary').click();
+    await page.getByRole('button', { name: 'Output target defaults' }).click();
+    const customDefaults = page.getByRole('dialog', { name: 'Output target defaults' });
+    await customDefaults.getByLabel('Search platform or surface').fill('Story');
+    await expect(customDefaults.getByRole('checkbox', { name: /Instagram · Story/ })).toBeChecked();
+    await expect(customDefaults.getByRole('checkbox', { name: /Facebook · Story/ })).toBeChecked();
+    await customDefaults.getByRole('checkbox', { name: /Instagram · Story/ }).uncheck();
+    await customDefaults.getByRole('checkbox', { name: /Facebook · Story/ }).uncheck();
+    await customDefaults.getByRole('button', { name: 'Add custom size' }).click();
+    await customDefaults.getByLabel('Custom size 1 width').fill('1200');
+    await customDefaults.getByLabel('Custom size 1 height').fill('1500');
+    await customDefaults.getByRole('button', { name: 'Save human defaults' }).click();
+
+    await page.getByRole('button', { name: 'Plan outputs' }).click();
+    const customSheet = page.getByRole('dialog', { name: 'Plan next branch' });
+    await expect(customSheet.getByLabel(/custom size 1 width/)).toHaveValue('1200');
+    await expect(customSheet.getByLabel(/custom size 1 height/)).toHaveValue('1500');
+    await customSheet.getByLabel('Generation prompt').fill('Create an exact custom pin');
+    await customSheet.getByRole('button', { name: 'Resolve preview' }).click();
+    await expect(customSheet.getByText('1200 × 1500 px')).toBeVisible();
+    await expect(customSheet.getByText(/1 exact output/)).toBeVisible();
+    await customSheet.getByRole('button', { name: 'Create planned job' }).click();
+    await expect(page.locator('.lineage-badges .output-target.locked').first()).toContainText('locked 1200×1500');
+
+    const customJobsResponse = await request.get(`/api/generation/jobs?project=${project}&rootAssetId=${seeded.root_asset_id}&limit=10`);
+    const customJobs = await customJobsResponse.json() as { jobs: Array<{ target_plan?: { groups: Array<{ custom_geometry?: { height: number; width: number }; delivery_surfaces: unknown[] }> } }> };
+    expect(customJobs.jobs[0]).toMatchObject({
+      target_plan: {
+        groups: [{
+          custom_geometry: { width: 1200, height: 1500 },
+          delivery_surfaces: [],
+        }],
+      },
+    });
   } finally {
     if (seeded.workspace?.id) {
       await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}/archive`, {

@@ -703,6 +703,23 @@ describe('lineage CLI handoff commands', () => {
       '--count', '1',
       '--json',
     ])).toThrow('does not accept legacy --count');
+
+    const malformedTargetMap = join(cliScratchDir, 'malformed-target-map.json');
+    writeFileSync(malformedTargetMap, JSON.stringify({
+      schema_version: 'lineage.generation_target_map.v1',
+      sources: [{
+        asset_id: fixtureRootAssetId,
+        targets: [{ kind: 'custom', width: 1200, height: 1500, inferred_platform: 'Pinterest' }],
+      }],
+    }));
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Reject future-looking target fields.',
+      '--from-lineage-selection',
+      '--target-map', malformedTargetMap,
+      '--json',
+    ])).toThrow('Custom target contains unknown field: inferred_platform');
   });
 
   it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {

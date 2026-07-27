@@ -58,4 +58,48 @@ describe('generation target maps', () => {
     expect(plan.slots).toHaveLength(2);
     expect(plan.slots.every(slot => slot.output_spec === undefined)).toBe(true);
   });
+
+  it('rejects unknown root, source, and per-kind target fields before canonicalization', () => {
+    expect(() => canonicalizeGenerationTargetMap({
+      ...map([{ kind: 'unlocked' }]),
+      future_root: true,
+    } as GenerationTargetMap)).toThrow(/Generation target map contains unknown field: future_root/);
+    expect(() => canonicalizeGenerationTargetMap({
+      ...map([{ kind: 'unlocked' }]),
+      sources: [{ ...map([{ kind: 'unlocked' }]).sources[0], inferred: true }],
+    } as unknown as GenerationTargetMap)).toThrow(/Target-map source contains unknown field: inferred/);
+    expect(() => canonicalizeGenerationTargetMap(map([{
+      kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1, platform: 'Instagram',
+    } as GenerationTargetMap['sources'][number]['targets'][number]]))).toThrow(/Delivery-surface target contains unknown field: platform/);
+    expect(() => canonicalizeGenerationTargetMap(map([{
+      kind: 'custom', width: 1080, height: 1920, safe_zone: true,
+    } as GenerationTargetMap['sources'][number]['targets'][number]]))).toThrow(/Custom target contains unknown field: safe_zone/);
+    expect(() => canonicalizeGenerationTargetMap(map([{
+      kind: 'unlocked', width: 1080,
+    } as GenerationTargetMap['sources'][number]['targets'][number]]))).toThrow(/Unlocked target contains unknown field: width/);
+  });
+
+  it('accepts every documented v1 field and deterministically groups equal custom and named geometry', () => {
+    const plan = resolveGenerationTargetPlan('job-custom', {
+      schema_version: GENERATION_TARGET_MAP_SCHEMA,
+      sources: [{
+        asset_id: 'asset-a',
+        default_variant_count: 2,
+        separate_surface_ids: [],
+        targets: [
+          { kind: 'custom', width: 1080, height: 1920 },
+          { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+        ],
+      }],
+    }, ['asset-a']);
+    expect(plan.groups).toHaveLength(1);
+    expect(plan.groups[0]).toMatchObject({
+      width: 1080,
+      height: 1920,
+      variant_count: 2,
+      custom_geometry: { id: 'custom.static_image.1080x1920' },
+      delivery_surfaces: [expect.objectContaining({ id: 'instagram.story' })],
+    });
+    expect(plan.expected_output_count).toBe(2);
+  });
 });
