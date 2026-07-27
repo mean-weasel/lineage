@@ -47,18 +47,50 @@ split.
 3. For one source, plan with repeated destination/custom-dimension flags. For
    multiple sources, provide an explicit per-source target map.
 4. Inspect the exact dimensions, grouping, variant counts, and output total.
-5. Generate the requested outputs outside the Lineage server.
-6. Complete the output manifest without altering frozen target fields.
-7. Import the files with confirmation.
-8. Inspect the durable plan, output specifications, actual dimensions, and
+5. Run `generate image scaffold` for the persisted target-aware job. This
+   creates one no-clobber manifest under
+   `.asset-scratch/generation/<job-id>/` and reports every exact output path
+   and pixel size without creating placeholder images.
+6. Generate each image with an external tool, then copy it to its reported
+   `output-000`, `output-001`, and later destination only if that path does not
+   already exist.
+7. Add a distinct one- or two-word `edge_summary` to each manifest entry.
+   Scaffolding has already filled `file_path`; do not alter any other field.
+8. Import that unchanged manifest contract with confirmation.
+9. Inspect the durable plan, output specifications, actual dimensions, and
    import receipts in either the CLI or canvas.
+
+```bash
+lineage-stable generate image scaffold \
+  --profile team-production \
+  --project <project> \
+  --job-id <job-id> \
+  --format png \
+  --confirm-write \
+  --json
+
+# For every returned output: generate externally at its exact width and height,
+# then copy without overwriting the reserved destination.
+test ! -e "$OUTPUT_ABSOLUTE_PATH" &&
+  cp -- "$EXTERNALLY_GENERATED_FILE" "$OUTPUT_ABSOLUTE_PATH"
+
+# Set only short edge_summary values in the scaffolded manifest, then import it.
+lineage-stable generate image import \
+  --profile team-production \
+  --project <project> \
+  --job-id <job-id> \
+  --manifest .asset-scratch/generation/<job-id>/generation-output-manifest.json \
+  --confirm-write \
+  --json
+```
 
 ## Limitations and safety behavior
 
 Live generation and external services are disabled inside the Lineage server.
 Outputs must stay under the approved scratch root until import.
 
-Locked import supports PNG, JPEG, and WebP. Lineage reads media type and
+Scaffold filename formats are exactly `png`, `jpeg`, and `webp`; this choice
+does not call or select a provider. Locked import reads the actual media type and
 dimensions from file bytes and atomically rejects unsupported, corrupt,
 tampered, or wrong-size output. It does not automatically crop or resize.
 Safe-zone and composition notes are guidance rather than machine-enforced

@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
 
-active_task: T007
+active_task: T010
 
 tasks:
   - id: T001
@@ -547,7 +547,7 @@ tasks:
   - id: T007
     type: scout
     assignee: Scout
-    status: active
+    status: done
     reasoning_hint: low
     objective: "Map the current agent/operator, CLI handoff, image-generation tool, scratch-file, manifest, and import boundaries for a provider-neutral plan-to-generation workflow."
     inputs:
@@ -564,11 +564,61 @@ tasks:
       - "Boundary and failure-mode analysis"
       - "Candidate integration slices ranked by usefulness, reversibility, and proof strength"
       - "Recommended live oracle for generated files"
-    receipt: null
+    receipt:
+      result: done
+      summary: "The durable planning and strict import contracts already exist; the missing provider-neutral bridge is agent-side materialization. The strongest reversible slice is an agent/operator workflow that consumes handoff v3 and manifest v2, scaffolds deterministic scratch paths, invokes external generation per exact slot, fills only file paths and short summaries, and imports through the unchanged atomic contract."
+      workflow_map:
+        - "Identity-gate one launcher/profile/database/service."
+        - "Read selection/defaults and resolve platform ambiguity through a human surface choice."
+        - "Persist an explicit target plan and consume its handoff v3, resolved slots, expected count, and manifest v2 draft."
+        - "Generate externally per exact slot; no provider call enters the Lineage server."
+        - "Copy unique generated bitmaps beneath a job-scoped .asset-scratch path."
+        - "Fill only file_path and one/two-word edge_summary."
+        - "Import through exact manifest, scratch-confinement, decoded-pixel, and atomic persistence checks."
+        - "Inspect immutable output specs, receipts, visible child nodes, and canvas badges."
+      ranked_slices:
+        - rank: 1
+          slice: "Agent/operator bridge plus scratch-manifest scaffolding using existing handoff v3 and manifest v2"
+          usefulness: high
+          reversibility: high
+          proof_strength: high
+        - rank: 2
+          slice: "Skill/documentation-only manual recipe"
+          usefulness: medium-high
+          reversibility: "very high"
+          proof_strength: medium
+        - rank: 3
+          slice: "New CLI projection for per-slot work items and scratch destinations"
+          usefulness: high
+          reversibility: medium
+          proof_strength: high
+        - rank: 4
+          slice: "Provider-specific server adapter"
+          usefulness: rejected
+          reversibility: low
+          proof_strength: low
+      recommended_live_oracle:
+        - "Use an identity-gated dedicated non-production profile and synthetic selected parent."
+        - "Persist one locked custom 1024x1536 plan."
+        - "Generate an exact 1024x1536 bitmap externally into a job-scoped scratch directory."
+        - "Fill only file_path and edge_summary, then confirmed-import the manifest."
+        - "Require imported status, one visible child, decoded 1024x1536 dimensions, matching immutable spec/digest/checksum receipt, and locked canvas visibility."
+        - "Negative companion: wrong-sized output is atomically rejected with no child or persisted output."
+      judge_questions:
+        - "Choose skill/docs-only versus a local scaffolding command that writes deterministic scratch paths and a manifest without changing persistent schemas."
+        - "Choose exact custom geometry for the deterministic first oracle versus a named platform surface with provider-size compatibility risk."
+      evidence:
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - src/shared/generationTypes.ts
+        - src/shared/generationOutputManifest.ts
+        - src/shared/outputTargetTypes.ts
+        - src/server/generationReceipts.ts
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - "T004 released-runtime dogfood and T006 remediation receipts"
   - id: T008
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Choose and specify the smallest complete provider-neutral agent integration that materially reduces handoff friction."
     inputs:
@@ -584,13 +634,48 @@ tasks:
       - "Exact T009 objective, allowed_files, verify commands, and stop conditions"
       - "Protocol compatibility and rollout assessment"
       - "Live acceptance transcript"
-    receipt: null
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      summary: "Approve one additive provider-neutral vertical slice: generate image scaffold plus operator/public guidance. It consumes persisted handoff v3/manifest v2, creates deterministic no-clobber job-scoped scratch paths, preserves frozen fields, leaves generation external, and imports through the unchanged hard contract."
+      architecture:
+        syntax: "lineage generate image scaffold --job-id <job-id> [--format png|jpeg|webp] --confirm-write --profile <profile> --project <project> --json"
+        input: "One persisted planned target-aware generation-receipts-v3 job with handoff v3 and output manifest v2."
+        filesystem_effect: "Atomically create .asset-scratch/generation/<job-id>/generation-output-manifest.json and deterministic output-000.<ext> paths without creating placeholder images."
+        manifest_effect: "Copy stored manifest draft exactly and populate only file_path; leave edge_summary empty."
+        response: "Return job ID, manifest path, relative/absolute output paths, indexes, dimensions, groups, variants, and output-spec digests."
+        safety: "Named profile and confirmation required; safe job IDs/formats only; refuse non-v3, non-planned, missing-spec, existing, escaping, or partially colliding scaffolds; never overwrite."
+      first_oracle:
+        kind: custom
+        width: 1024
+        height: 1536
+        variant_count: 1
+        reason: "Native exact image-tool geometry proves the bridge without platform-size compatibility risk."
+      compatibility:
+        - "Additive CLI surface only; no existing command changes semantics."
+        - "No protocol, persistence, or database migration."
+        - "Legacy unlocked and reroll remain available but outside scaffold v1."
+        - "Import remains the sole persistent ingestion authority."
+        - "Rollback removes the additive command and guidance without invalidating jobs, manifests, assets, or databases."
+      user_facing_claim: "An agent can take a frozen target-aware plan, obtain deterministic destinations, generate externally, and import an exact-size locked child without reconstructing immutable manifest fields."
+      top_failure_modes:
+        - "Scaffolding mutates or recomputes frozen target fields."
+        - "Scratch paths escape the active profile root, collide, or overwrite prior work."
+        - "A wrong-size generated file is accepted or leaves partial lineage state."
+      evidence_required:
+        - "Manifest frozen-field equality and deterministic no-clobber path tests."
+        - "Exact-size byte-valid raster import with actual dimensions and digest."
+        - "Wrong-size raster rejection with unchanged job outputs and lineage node count."
+      blocked_tasks:
+        - "T010 until T009 passes."
+        - "T011 until T010 proves success and atomic mismatch rejection."
   - id: T009
     type: worker
     assignee: Worker
-    status: queued
+    status: done
     reasoning_hint: medium
-    objective: "Implement the provider-neutral agent plan-to-generation-to-manifest/import bridge selected by T008."
+    objective: "Add a provider-neutral generate image scaffold bridge for persisted target-aware jobs and teach the operator workflow to invoke external image generation, materialize each exact slot, fill only short edge summaries, and import through the unchanged manifest-v2 and decoded-pixel contract."
     inputs:
       - "T008 architecture and exact Worker package"
       - "Existing output-target and import contracts"
@@ -600,23 +685,95 @@ tasks:
       - "Generated output must pass byte-based type and exact-pixel validation."
       - "Preserve CLI/canvas parity and legacy compatibility."
     expected_output:
-      - "One coherent agent-facing workflow from request through imported locked node"
-      - "Machine-readable errors and retry guidance"
-      - "Focused protocol/operator/integration tests"
-      - "Passing exact verification from T008"
-    allowed_files: []
-    verify: []
+      - "CLI help, operator skill, integration guide, workflow guide, and CLI reference describe the same scaffold/generate/copy/summarize/import sequence."
+      - "Scaffolding accepts only a persisted planned target-aware v3 job and derives geometry and slot order only from stored manifest v2 and target plan."
+      - "The scaffold is deterministic, atomic, no-clobber, scratch-confined, and creates no placeholder image."
+      - "Only manifest file_path values change during scaffolding; the agent subsequently changes only short edge_summary values."
+      - "PNG, JPEG, and WebP paths are supported without provider assumptions."
+      - "Machine-readable output returns exact manifest/output paths, indexes, dimensions, groups, variants, and digests."
+      - "A focused exact-size import succeeds and a wrong-size import is atomically rejected with zero partial state."
+      - "Existing plan, inspect, import, unlocked, reroll, defaults, handoff, manifest, target-map, and database contracts remain unchanged."
+    allowed_files:
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md"
+      - "docs-site/src/content/docs/integrations/image-generation.md"
+      - "docs-site/src/content/docs/workflows/generate-import-variations.md"
+      - "docs-site/src/content/docs/reference/cli.md"
+      - "docs-site/docs-review.json"
+    verify:
+      - "npx vitest run --config vitest.config.ts src/cli/lineageCli.test.ts"
+      - "npm run docs:check"
+      - "npm run plugin:smoke"
+      - "npm run plugin:codex-smoke"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "npm run ci"
+      - "git diff --check"
     stop_if:
-      - "T008 has not installed exact allowed_files and verify commands."
-      - "The work requires files outside allowed_files."
-      - "Provider credentials or calls would enter the Lineage server."
-      - "The bridge can bypass frozen dimensions or atomic import."
+      - "Implementation requires changing generation handoff, output manifest, target map, output spec, persistence, or database schemas."
+      - "Implementation requires provider calls or credentials in Lineage server or CLI code."
+      - "Deterministic paths cannot be anchored to the active profile asset root or cannot be created atomically without overwrite."
+      - "The command would infer a named surface, mutate canvas defaults, create placeholder outputs, resize or crop files, or weaken exact-byte validation."
+      - "The slice requires legacy or unlocked jobs, rerolls, remote storage, transforms, publishing, or files outside allowed_files."
+      - "A new user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Agents can now scaffold a frozen target-aware job, generate externally, copy exact files, add only short summaries, and import unchanged. The additive command is profile-bound, deterministic, atomic, no-placeholder, no-clobber, and returns exact machine-readable slot paths and specifications."
+      changed_files:
+        - src/cli/lineageCli.ts
+        - src/cli/lineageCli.test.ts
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - docs-site/src/content/docs/workflows/generate-import-variations.md
+        - docs-site/src/content/docs/reference/cli.md
+        - docs-site/docs-review.json
+      commands:
+        - cmd: "npx vitest run --config vitest.config.ts src/cli/lineageCli.test.ts"
+          status: pass
+          result: "42 tests"
+        - cmd: "npm run docs:check"
+          status: pass
+          result: "31 pages validated and 32 built"
+        - cmd: "npm run plugin:smoke"
+          status: pass
+          result: "release smoke and 35 installer tests"
+        - cmd: "npm run plugin:codex-smoke"
+          status: pass
+          result: "isolated install, doctor, reinstall, cleanup, and rollback"
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+          result: "package and managed-service smoke"
+        - cmd: "npm run ci"
+          status: pass
+          result: "598 passed, 4 skipped, 14/14 E2E, runtime/package/plugin/audit green"
+        - cmd: "git diff --check"
+          status: pass
+      user_facing_claim: "A frozen target-aware job can be turned into deterministic external-generation destinations and an import-ready manifest without reconstructing or weakening immutable fields."
+      top_failure_modes:
+        - "Scaffolding drifts frozen fields."
+        - "Scratch paths escape, collide, overwrite, or create misleading placeholder images."
+        - "Wrong-size bytes are accepted or leave partial persistent state."
+      evidence:
+        - "Frozen-field equality and no-clobber scaffold tests"
+        - "PNG/JPEG/WebP deterministic path and machine metadata coverage"
+        - "Exact byte-valid scaffold import"
+        - "Wrong-size atomic rejection with unchanged assets, edges, outputs, and specs"
+        - "Packaged operator skill, public docs, package smoke, plugin smoke, and full CI"
+      remaining_blockers: []
   - id: T010
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Run the integrated agent-generation oracle and prove request resolution, exact generation geometry, manifest handoff, atomic import, and canvas visibility."
     inputs:

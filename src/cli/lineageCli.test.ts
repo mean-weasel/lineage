@@ -3,7 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { defaultProject, repoRoot } from '../server/assetCore';
+import sharp from 'sharp';
+import { defaultProject, repoRoot, setLineageAssetRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
 import { createLineageWorkspace, lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { fileSha256 } from '../server/localReview';
@@ -16,6 +17,7 @@ import { parseRegistryPackageMetadata } from './lineage-channel';
 import { formatAgentGraphDigest, formatLineageHelp, lineageCliCanDelegateMutation, lineageCliRequiresWriterLease, lineageServiceIdentityErrors, printDataResult, resolveStartOptions, runLineageAgentCommand, runLineageDataCommand, runLineageDbCommand, runLineageRuntimeCommand } from './lineageCli';
 
 const originalEnv = { ...process.env };
+const cliPackageAssetRoot = repoRoot;
 const cliScratchDir = join(repoRoot, '.asset-scratch', 'vitest-cli');
 const cliDbFile = join(cliScratchDir, 'lineage-cli.sqlite');
 const fixtureRootAssetId = 'demo-meta-short-form-upload-demo-post-static';
@@ -27,15 +29,16 @@ afterEach(() => {
   cliTestLease?.release();
   cliTestLease = undefined;
   process.env = { ...originalEnv };
+  setLineageAssetRoot(cliPackageAssetRoot);
 });
 
-function seedCliDb() {
+function seedCliDb(assetRoot = cliPackageAssetRoot) {
   cliTestLease?.release();
   cliTestLease = undefined;
   rmSync(cliScratchDir, { force: true, recursive: true });
   mkdirSync(cliScratchDir, { recursive: true });
   const manifest: ResolvedLineageProfile = {
-    asset_root: repoRoot,
+    asset_root: assetRoot,
     database_path: cliDbFile,
     environment: 'development',
     expected_runtime: { channel: 'dev', code_fingerprint: cliCodeIdentity.fingerprint, code_origin: 'checkout' },
@@ -53,6 +56,7 @@ function seedCliDb() {
     .run(profile.profile_id, profile.environment, profile.profile_fingerprint, '2026-07-16T00:00:00.000Z');
   database.close();
   process.env.LINEAGE_DB = cliDbFile;
+  process.env.LINEAGE_ASSET_ROOT = profile.asset_root;
   process.env.LINEAGE_CHANNEL = 'dev';
   process.env.LINEAGE_PROFILE = profile.manifest_path;
   process.env.LINEAGE_PROFILE_ENVIRONMENT = profile.environment;
@@ -60,6 +64,8 @@ function seedCliDb() {
   process.env.LINEAGE_PROFILE_ID = profile.profile_id;
   process.env.LINEAGE_PROFILE_MANIFEST = profile.manifest_path;
   process.env.LINEAGE_PROFILE_SERVICE_ORIGIN = profile.service_origin;
+  mkdirSync(profile.asset_root, { recursive: true });
+  setLineageAssetRoot(profile.asset_root);
   cliTestLease = acquireProfileWriterLease(profile, 'dev', 'cli');
   indexLineageAssets(defaultProject);
 }
@@ -94,6 +100,7 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('lineage generate image plan --prompt <text> --from-lineage-selection');
     expect(help).toContain('lineage output-targets list --media image [--json]');
     expect(help).toContain('--target-map <json-file>');
+    expect(help).toContain('lineage generate image scaffold --job-id <job-id> [--format png|jpeg|webp] --confirm-write --profile <profile> --project <project> --json');
     expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
     expect(help).toContain('lineage social list --project <project> --root <asset-id>');
     expect(help).toContain('lineage social mark --project <project> --root <asset-id> --asset <asset-id-or-exact-title> --confirm-write');
@@ -774,6 +781,191 @@ describe('lineage CLI handoff commands', () => {
       '--target-map', malformedTargetMap,
       '--json',
     ])).toThrow('Custom target contains unknown field: inferred_platform');
+  });
+
+  it('scaffolds frozen target-aware slots without placeholders or clobbering', () => {
+    seedCliDb(join(cliScratchDir, 'scaffold-assets'));
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: fixtureRootAssetId,
+      title: 'CLI scaffold workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+    const planned = runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Create two frozen scaffold slots.',
+      '--from-lineage-selection',
+      '--custom-dimensions', '23x19',
+      '--variants-per-target', '2',
+      '--json',
+    ]) as { job: { handoff: { output_manifest: { outputs: Array<Record<string, unknown>> } }; id: string } };
+    const frozen = structuredClone(planned.job.handoff.output_manifest);
+    const scaffold = runLineageDataCommand('generate', [
+      'image', 'scaffold',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--format', 'webp',
+      '--confirm-write',
+      '--json',
+    ]) as {
+      manifest_path: string;
+      outputs: Array<{
+        absolute_path: string;
+        file_path: string;
+        height: number;
+        output_index: number;
+        output_spec_digest: string;
+        target_group_id: string;
+        variant_index: number;
+        width: number;
+      }>;
+    };
+
+    expect(scaffold.outputs).toEqual([
+      expect.objectContaining({ file_path: `.asset-scratch/generation/${planned.job.id}/output-000.webp`, height: 19, output_index: 0, variant_index: 0, width: 23 }),
+      expect.objectContaining({ file_path: `.asset-scratch/generation/${planned.job.id}/output-001.webp`, height: 19, output_index: 1, variant_index: 1, width: 23 }),
+    ]);
+    expect(scaffold.outputs.every(output => output.target_group_id && output.output_spec_digest.length === 64)).toBe(true);
+    expect(scaffold.outputs.every(output => !existsSync(output.absolute_path))).toBe(true);
+    const written = JSON.parse(readFileSync(scaffold.manifest_path, 'utf8')) as typeof frozen;
+    expect(written.outputs.map(output => ({ ...output, file_path: '' }))).toEqual(frozen.outputs);
+    expect(written.outputs.every(output => output.edge_summary === '')).toBe(true);
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'scaffold',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--format', 'webp',
+      '--confirm-write',
+      '--json',
+    ])).toThrow('Generation scaffold already exists');
+  });
+
+  it('imports an exact scaffold raster and atomically rejects a wrong-size scaffold batch', async () => {
+    seedCliDb(join(cliScratchDir, 'scaffold-import-assets'));
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: fixtureRootAssetId,
+      title: 'CLI scaffold import workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+    const plan = (prompt: string, variants: number) => runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', prompt,
+      '--from-lineage-selection',
+      '--custom-dimensions', '23x19',
+      '--variants-per-target', String(variants),
+      '--json',
+    ]) as { job: { id: string } };
+    const scaffold = (jobId: string) => runLineageDataCommand('generate', [
+      'image', 'scaffold',
+      '--project', defaultProject,
+      '--job-id', jobId,
+      '--format', 'png',
+      '--confirm-write',
+      '--json',
+    ]) as { manifest_path: string; outputs: Array<{ absolute_path: string }> };
+    const fillSummaries = (manifestPath: string) => {
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { outputs: Array<{ edge_summary: string }> };
+      manifest.outputs.forEach((output, index) => {
+        output.edge_summary = index === 0 ? 'Exact image' : 'Second image';
+      });
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    };
+
+    const exactPlan = plan('Import one exact scaffold raster.', 1);
+    const exactScaffold = scaffold(exactPlan.job.id);
+    await sharp({ create: { background: '#8a2be2', channels: 4, height: 19, width: 23 } })
+      .png()
+      .toFile(exactScaffold.outputs[0].absolute_path);
+    fillSummaries(exactScaffold.manifest_path);
+    const imported = runLineageDataCommand('generate', [
+      'image', 'import',
+      '--project', defaultProject,
+      '--job-id', exactPlan.job.id,
+      '--manifest', exactScaffold.manifest_path,
+      '--confirm-write',
+      '--json',
+    ]) as { imported: unknown[]; job: { status: string } };
+    expect(imported).toMatchObject({ job: { status: 'imported' } });
+    expect(imported.imported).toHaveLength(1);
+
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+    const wrongPlan = plan('Reject a mixed-size scaffold batch.', 2);
+    const wrongScaffold = scaffold(wrongPlan.job.id);
+    await sharp({ create: { background: '#173f5f', channels: 4, height: 19, width: 23 } })
+      .png()
+      .toFile(wrongScaffold.outputs[0].absolute_path);
+    await sharp({ create: { background: '#ed553b', channels: 4, height: 19, width: 24 } })
+      .png()
+      .toFile(wrongScaffold.outputs[1].absolute_path);
+    fillSummaries(wrongScaffold.manifest_path);
+    const rejectedAssetIds = wrongScaffold.outputs.map(output => `local-${fileSha256(output.absolute_path).slice(0, 12)}`);
+    const rejectedState = () => {
+      const database = new DatabaseSync(cliDbFile);
+      try {
+        return {
+          assets: (database.prepare('select count(*) as count from assets where id in (?, ?)').get(...rejectedAssetIds) as { count: number }).count,
+          edges: (database.prepare('select count(*) as count from asset_edges where child_asset_id in (?, ?)').get(...rejectedAssetIds) as { count: number }).count,
+          outputSpecs: (database.prepare('select count(*) as count from asset_output_specs where generation_job_id = ?').get(wrongPlan.job.id) as { count: number }).count,
+          outputs: (database.prepare('select count(*) as count from generation_job_outputs where job_id = ?').get(wrongPlan.job.id) as { count: number }).count,
+        };
+      } finally {
+        database.close();
+      }
+    };
+    const beforeRejectedImport = rejectedState();
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'import',
+      '--project', defaultProject,
+      '--job-id', wrongPlan.job.id,
+      '--manifest', wrongScaffold.manifest_path,
+      '--confirm-write',
+      '--json',
+    ])).toThrow(/requires 23x19 pixels, decoded 24x19/);
+    const rejected = runLineageDataCommand('generate', [
+      'image', 'inspect',
+      '--project', defaultProject,
+      '--job-id', wrongPlan.job.id,
+      '--json',
+    ]) as { job: { outputs: unknown[]; status: string } };
+    expect(rejected.job).toMatchObject({ outputs: [], status: 'planned' });
+    expect(rejectedState()).toEqual(beforeRejectedImport);
+    expect(beforeRejectedImport).toMatchObject({ outputSpecs: 0, outputs: 0 });
+  });
+
+  it('requires safe confirmed profile-bound scaffold arguments and supported formats', () => {
+    seedCliDb();
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'scaffold', '--project', defaultProject, '--job-id', '../escape', '--confirm-write',
+    ])).toThrow('safe identifier');
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'scaffold', '--project', defaultProject, '--job-id', 'safe-job', '--format', 'jpg', '--confirm-write',
+    ])).toThrow('--format must be png, jpeg, or webp');
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'scaffold', '--project', defaultProject, '--job-id', 'safe-job',
+    ])).toThrow('requires --confirm-write');
+    delete process.env.LINEAGE_PROFILE_ID;
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'scaffold', '--project', defaultProject, '--job-id', 'safe-job', '--confirm-write',
+    ])).toThrow('requires a named --profile');
   });
 
   it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {

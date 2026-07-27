@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { homedir, platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireEdgeSummary } from '../shared/edgeSummary';
@@ -18,7 +18,7 @@ import {
   transferAgentClaim,
   type AgentClaimScopeType,
 } from '../server/agentClaims';
-import { defaultProduct, packageRoot as lineagePackageRoot, setLineageAssetRoot } from '../server/assetCore';
+import { defaultProduct, packageRoot as lineagePackageRoot, repoRoot, setLineageAssetRoot } from '../server/assetCore';
 import {
   clearLineageRerollRequest,
   getLineageNextAsset,
@@ -289,6 +289,7 @@ Usage:
   ${config.binName} generate image plan --prompt <text> --from-lineage-selection (--destination <surface>|--custom-dimensions <width>x<height>)... [--separate-destination <surface>] [--variants-per-target <count>] [--project <project>] [--dry-run] [--db <path>] [--json]
   ${config.binName} generate image plan --prompt <text> --from-lineage-selection --target-map <json-file> [--project <project>] [--dry-run] [--db <path>] [--json]
   ${config.binName} generate image inspect --job-id <job-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} generate image scaffold --job-id <job-id> [--format png|jpeg|webp] --confirm-write --profile <profile> --project <project> --json
   ${config.binName} generate image import --job-id <job-id> --manifest <json-file> --confirm-write [--project <project>] [--db <path>] [--json]
   ${config.binName} generate image import --job-id <legacy-job-id> (--files <file,file>|--parent-files <parent=file;parent=file>) --confirm-write [--project <project>] [--db <path>] [--json]
   ${config.binName} reroll list --root <asset-id> [--project <project>] [--db <path>] [--json]
@@ -424,6 +425,167 @@ function positionalArgs(args: string[]): string[] {
   return values;
 }
 
+type GenerationScaffoldFormat = 'jpeg' | 'png' | 'webp';
+
+interface GenerationScaffoldOutput {
+  absolute_path: string;
+  file_path: string;
+  height: number;
+  output_index: number;
+  output_spec_digest: string;
+  target_group_id: string;
+  variant_index: number;
+  width: number;
+}
+
+interface GenerationScaffoldResponse {
+  ok: true;
+  command: 'generate image scaffold';
+  job_id: string;
+  manifest_path: string;
+  manifest_file_path: string;
+  outputs: GenerationScaffoldOutput[];
+  project: string;
+}
+
+function stableCliJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableCliJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableCliJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function isCliPathInside(child: string, parent: string): boolean {
+  const rel = relative(parent, child);
+  return Boolean(rel) && !rel.startsWith('..') && !rel.startsWith('/');
+}
+
+function generationScaffoldFormat(value: string | undefined): GenerationScaffoldFormat {
+  const format = value || 'png';
+  if (format === 'png' || format === 'jpeg' || format === 'webp') return format;
+  throw new Error('lineage generate image scaffold --format must be png, jpeg, or webp');
+}
+
+function safeGenerationScaffoldJobId(value: string | undefined): string {
+  if (!value) throw new Error('lineage generate image scaffold requires --job-id');
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(value) || value === '.' || value === '..') {
+    throw new Error('lineage generate image scaffold --job-id must be a safe identifier');
+  }
+  return value;
+}
+
+function scaffoldImageGeneration(
+  project: string,
+  args: string[],
+  confirmWrite: boolean,
+): GenerationScaffoldResponse {
+  if (!confirmWrite) throw new Error('Generation scaffold requires --confirm-write');
+  if (!process.env.LINEAGE_PROFILE_ID || process.env.LINEAGE_PROFILE_ID === 'legacy-unbound') {
+    throw new Error('Generation scaffold requires a named --profile');
+  }
+  if (!hasOption(args, '--project')) throw new Error('lineage generate image scaffold requires --project');
+  const jobId = safeGenerationScaffoldJobId(readOption(args, '--job-id'));
+  const format = generationScaffoldFormat(readOption(args, '--format'));
+  const { job } = inspectImageGeneration(project, jobId);
+  if (job.adapter_version !== 'generation-receipts-v3'
+    || job.source_mode !== 'lineage_selection'
+    || job.status !== 'planned'
+    || job.handoff.schema_version !== 'lineage.generation_handoff.v3'
+    || job.handoff.output_manifest?.schema_version !== 'lineage.generation_output_manifest.v2'
+    || !job.target_plan) {
+    throw new Error('Generation scaffold requires a persisted planned target-aware v3 image job');
+  }
+  const storedManifest = job.handoff.output_manifest;
+  if (storedManifest.job_id !== job.id
+    || storedManifest.outputs.length !== job.expected_output_count
+    || job.target_plan.expected_output_count !== job.expected_output_count
+    || job.target_plan.slots.length !== job.expected_output_count) {
+    throw new Error('Generation scaffold job manifest and target plan do not agree');
+  }
+
+  const scratchRoot = resolve(repoRoot, '.asset-scratch');
+  const generationRoot = resolve(scratchRoot, 'generation');
+  const scaffoldRoot = resolve(generationRoot, jobId);
+  if (!isCliPathInside(generationRoot, scratchRoot) || !isCliPathInside(scaffoldRoot, generationRoot)) {
+    throw new Error('Generation scaffold path escapes the active profile asset root');
+  }
+  if (existsSync(scaffoldRoot)) throw new Error(`Generation scaffold already exists: ${scaffoldRoot}`);
+
+  const outputs = storedManifest.outputs.map((entry, position): GenerationScaffoldOutput => {
+    const slot = job.target_plan?.slots[position];
+    if (!slot
+      || entry.output_index !== position
+      || slot.output_index !== position
+      || entry.file_path !== ''
+      || entry.edge_summary !== ''
+      || entry.parent_asset_id !== slot.parent_asset_id
+      || entry.target_group_id !== slot.group_id
+      || entry.variant_index !== slot.variant_index
+      || !entry.output_spec
+      || !slot.output_spec
+      || stableCliJson(entry.output_spec) !== stableCliJson(slot.output_spec)
+      || !entry.output_spec_digest) {
+      throw new Error(`Generation scaffold output ${position} does not match the stored target-aware manifest`);
+    }
+    const filename = `output-${String(position).padStart(3, '0')}.${format}`;
+    const absolutePath = resolve(scaffoldRoot, filename);
+    if (!isCliPathInside(absolutePath, scaffoldRoot)) throw new Error(`Generation scaffold output ${position} escapes its job directory`);
+    return {
+      absolute_path: absolutePath,
+      file_path: `.asset-scratch/generation/${jobId}/${filename}`,
+      height: entry.output_spec.height,
+      output_index: position,
+      output_spec_digest: entry.output_spec_digest,
+      target_group_id: entry.target_group_id,
+      variant_index: entry.variant_index,
+      width: entry.output_spec.width,
+    };
+  });
+  const manifest = {
+    ...structuredClone(storedManifest),
+    outputs: storedManifest.outputs.map((entry, index) => ({
+      ...structuredClone(entry),
+      file_path: outputs[index].file_path,
+    })),
+  };
+  const manifestPath = resolve(scaffoldRoot, 'generation-output-manifest.json');
+  const manifestFilePath = `.asset-scratch/generation/${jobId}/generation-output-manifest.json`;
+
+  mkdirSync(generationRoot, { recursive: true });
+  const realAssetRoot = realpathSync(repoRoot);
+  const realGenerationRoot = realpathSync(generationRoot);
+  if (!isCliPathInside(realGenerationRoot, realAssetRoot)) {
+    throw new Error('Generation scaffold scratch root escapes the active profile asset root');
+  }
+  if (existsSync(scaffoldRoot)) throw new Error(`Generation scaffold already exists: ${scaffoldRoot}`);
+  const temporaryRoot = mkdtempSync(resolve(generationRoot, `.scaffold-${jobId}-`));
+  try {
+    writeFileSync(
+      resolve(temporaryRoot, 'generation-output-manifest.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      { flag: 'wx' },
+    );
+    renameSync(temporaryRoot, scaffoldRoot);
+  } catch (error) {
+    rmSync(temporaryRoot, { force: true, recursive: true });
+    if (existsSync(scaffoldRoot)) throw new Error(`Generation scaffold already exists: ${scaffoldRoot}`, { cause: error });
+    throw error;
+  }
+  return {
+    ok: true,
+    command: 'generate image scaffold',
+    job_id: job.id,
+    manifest_path: manifestPath,
+    manifest_file_path: manifestFilePath,
+    outputs,
+    project,
+  };
+}
+
 function resolveDataCommandOptions(args: string[]): DataCommandOptions {
   configureCliAssetRoot(args);
   const positions = positionalArgs(args);
@@ -552,6 +714,9 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
       const jobId = readOption(args, '--job-id');
       if (!jobId) throw new Error('lineage generate image inspect requires --job-id');
       return inspectImageGeneration(options.project, jobId);
+    }
+    if (subcommand === 'scaffold') {
+      return scaffoldImageGeneration(options.project, args, options.confirmWrite);
     }
     if (subcommand === 'import') {
       const jobId = readOption(args, '--job-id');
@@ -1013,7 +1178,7 @@ export function lineageCliCanDelegateMutation(command: string, args: string[]): 
   const positions = positionalArgs(args);
   const subcommand = positions[0] || '';
   if (command === 'link-child') return true;
-  if (command === 'generate') return positions[0] === 'image' && ['plan', 'import'].includes(positions[1] || '');
+  if (command === 'generate') return positions[0] === 'image' && ['plan', 'scaffold', 'import'].includes(positions[1] || '');
   if (command === 'reroll') return ['mark', 'cancel', 'plan', 'import'].includes(subcommand);
   if (command === 'social') return ['mark', 'unmark'].includes(subcommand);
   if (command === 'tasks') return ['claim', 'start', 'comment', 'cancel', 'override', 'instructions'].includes(subcommand);

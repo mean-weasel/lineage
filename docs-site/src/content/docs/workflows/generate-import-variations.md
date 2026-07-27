@@ -24,12 +24,15 @@ a surface before planning.
    shared implicit platform choice.
 4. Inspect the plan's resolved dimensions, consolidated destinations, explicit
    splits, variant counts, and total output slots.
-5. Complete the handoff in Codex and write outputs under the approved scratch
-   root.
-6. Fill the generated output manifest's file paths and edge summaries without
-   changing its frozen source, geometry, destination, or output-spec identity.
-7. Import with explicit write confirmation.
-8. Verify the produced nodes, actual decoded dimensions, output specifications,
+5. Scaffold the persisted target-aware job. Choose `png`, `jpeg`, or `webp`;
+   the command creates only the job-scoped manifest and reports exact
+   destinations and dimensions.
+6. Generate each slot outside Lineage at its reported exact pixels and copy it
+   to the reported path without overwriting anything.
+7. Fill only each distinct one- or two-word `edge_summary`. The scaffold has
+   already filled only `file_path`; leave all frozen fields unchanged.
+8. Import the scaffolded manifest with explicit write confirmation.
+9. Verify the produced nodes, actual decoded dimensions, output specifications,
    and receipts.
 
 Delivery surfaces with identical dimensions consolidate into one creative by
@@ -50,5 +53,41 @@ same dimensions; request a child variation for a different geometry.
 Dry-run the plan when target grouping or output counts are uncertain. Never
 import files from an untrusted path, infer a surface from a platform name, or
 guess a multi-parent mapping.
+
+## Exact scaffold-to-import sequence
+
+After persisting and inspecting a locked plan, use this exact bridge:
+
+```bash
+lineage-stable generate image scaffold \
+  --profile team-production \
+  --project <project> \
+  --job-id <job-id> \
+  --format png \
+  --confirm-write \
+  --json
+
+# Repeat for every `.outputs[]` item returned above. The external generator must
+# emit the item's exact width and height; Lineage does not resize or crop it.
+test ! -e "$OUTPUT_ABSOLUTE_PATH" &&
+  cp -- "$EXTERNALLY_GENERATED_FILE" "$OUTPUT_ABSOLUTE_PATH"
+
+# Edit generation-output-manifest.json only to add short edge_summary values.
+lineage-stable generate image import \
+  --profile team-production \
+  --project <project> \
+  --job-id <job-id> \
+  --manifest .asset-scratch/generation/<job-id>/generation-output-manifest.json \
+  --confirm-write \
+  --json
+```
+
+The scaffold is deterministic and no-clobber: it refuses an existing or
+partially prepared job directory and never creates image placeholders. Its JSON
+returns the manifest path plus each output index, relative and absolute path,
+width, height, target group, variant, and output-spec digest. It accepts only a
+persisted, still-planned, target-aware v3 selection job. Unlocked and legacy
+jobs, re-rolls, remote storage, provider calls, transforms, and publishing are
+outside this command.
 
 See [Image generation](../integrations/image-generation).

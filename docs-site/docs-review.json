@@ -4,6 +4,7 @@
   "areas": [
     "workflows",
     "integrations",
-    "reference-cli"
+    "reference-cli",
+    "generation-scaffold"
   ]
 }
