@@ -1,5 +1,5 @@
 import type { DatabaseSync } from './assetLineageDb';
-import type { GenerationJob, GenerationJobInput } from '../shared/generationTypes';
+import type { GenerationAssetOutputSpec, GenerationJob, GenerationJobInput } from '../shared/generationTypes';
 import type { ResolvedGenerationTargetPlan } from '../shared/outputTargetTypes';
 
 export interface TargetAwareGenerationAggregate {
@@ -94,6 +94,56 @@ export function loadGenerationTargetPlan(
     slots,
     expected_output_count: slots.length,
   };
+}
+
+export function loadAssetOutputSpec(
+  database: DatabaseSync,
+  assetId: string,
+): GenerationAssetOutputSpec | undefined {
+  const row = database.prepare('select * from asset_output_specs where asset_id = ?').get(assetId) as Record<string, unknown> | undefined;
+  if (!row) return undefined;
+  return {
+    actual_height: Number(row.actual_height),
+    actual_width: Number(row.actual_width),
+    asset_id: String(row.asset_id),
+    created_at: String(row.created_at),
+    generation_job_id: String(row.generation_job_id),
+    output_index: Number(row.output_index),
+    output_spec: JSON.parse(String(row.output_spec_json)),
+    output_spec_digest: String(row.output_spec_digest),
+    target_group_id: String(row.target_group_id),
+    variant_index: Number(row.variant_index),
+  };
+}
+
+export function persistAssetOutputSpec(
+  database: DatabaseSync,
+  spec: GenerationAssetOutputSpec,
+): void {
+  const result = database.prepare(`
+    insert into asset_output_specs (
+      asset_id, generation_job_id, output_index, target_group_id, variant_index,
+      output_spec_json, output_spec_digest, actual_width, actual_height, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(asset_id) do nothing
+  `).run(
+    spec.asset_id,
+    spec.generation_job_id,
+    spec.output_index,
+    spec.target_group_id,
+    spec.variant_index,
+    JSON.stringify(spec.output_spec),
+    spec.output_spec_digest,
+    spec.actual_width,
+    spec.actual_height,
+    spec.created_at,
+  );
+  if (Number(result.changes) !== 1) {
+    const existing = loadAssetOutputSpec(database, spec.asset_id);
+    if (!existing || JSON.stringify(existing) !== JSON.stringify(spec)) {
+      throw new Error(`Asset ${spec.asset_id} already has a different immutable output specification`);
+    }
+  }
 }
 
 export function persistTargetAwareGenerationAggregate(

@@ -427,6 +427,20 @@ export function lineageDb(): DatabaseSync {
       unique(target_group_id, variant_index)
     );
     create index if not exists generation_output_slots_job on generation_output_slots(job_id, output_index);
+    create table if not exists asset_output_specs (
+      asset_id text primary key references assets(id),
+      generation_job_id text not null references generation_jobs(id),
+      output_index integer not null check (output_index >= 0),
+      target_group_id text not null references generation_target_groups(id),
+      variant_index integer not null check (variant_index >= 0),
+      output_spec_json text not null,
+      output_spec_digest text not null,
+      actual_width integer not null check (actual_width > 0),
+      actual_height integer not null check (actual_height > 0),
+      created_at text not null,
+      unique(generation_job_id, output_index)
+    );
+    create index if not exists asset_output_specs_job on asset_output_specs(generation_job_id, output_index);
     create table if not exists generation_target_defaults (
       project_id text not null references projects(id),
       root_asset_id text not null references assets(id),

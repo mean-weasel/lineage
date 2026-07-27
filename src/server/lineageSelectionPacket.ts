@@ -3,7 +3,8 @@ import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { listAssets, repoRoot, validateProject } from './assetCore';
 import { getLineageSnapshot } from './assetLineage';
-import { lineageDbPath } from './assetLineageDb';
+import { lineageDb, lineageDbPath } from './assetLineageDb';
+import { loadAssetOutputSpec } from './generationTargetPersistence';
 import { lineageWorkspaceId, listLineageWorkspaces } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
 import type {
@@ -121,6 +122,18 @@ function currentAttemptFor(node: LineageNode): LineageSelectionPacketAsset['curr
   };
 }
 
+function lockedDimensions(assetId: string): { height: number; width: number } | undefined {
+  const database = lineageDb();
+  try {
+    const outputSpec = loadAssetOutputSpec(database, assetId);
+    return outputSpec
+      ? { height: outputSpec.output_spec.height, width: outputSpec.output_spec.width }
+      : undefined;
+  } finally {
+    database.close();
+  }
+}
+
 function assetForNode(node: LineageNode, catalogAsset: GrowthAsset | undefined, warnings: string[]): LineageSelectionPacketAsset {
   const localReference = catalogAsset?.local?.absolute_path || node.current_attempt?.file_path || node.local_path || catalogAsset?.local?.relative_path;
   const absolutePath = catalogAsset?.local?.absolute_path || resolveLocalReference(localReference);
@@ -142,6 +155,7 @@ function assetForNode(node: LineageNode, catalogAsset: GrowthAsset | undefined, 
     channel: catalogAsset?.channel || node.channel,
     checksum_sha256: checksum,
     current_attempt: currentAttemptFor(node),
+    dimensions: lockedDimensions(node.asset_id),
     local: {
       absolute_path: absolutePath,
       content_type: catalogAsset?.local?.content_type,
@@ -219,6 +233,7 @@ export function lineageSelectionPacketV2IdentityProjection(packet: LineageSelect
         id: asset.current_attempt.id,
         source: asset.current_attempt.source,
       },
+      dimensions: asset.dimensions,
       media_type: asset.media_type,
       mime_type: asset.mime_type,
       position: item.position,
@@ -362,6 +377,7 @@ function assetForNodeV2(
     channel: visibleCatalogAsset?.channel || node.channel,
     checksum_sha256: currentAttempt.checksum_sha256,
     current_attempt: currentAttempt,
+    dimensions: lockedDimensions(node.asset_id),
     local: {
       absolute_path: absolutePath,
       content_type: mediaCatalogAsset?.local?.content_type,

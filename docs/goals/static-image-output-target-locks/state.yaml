@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T004
+active_task: T005
 
 tasks:
   - id: T001
@@ -339,7 +339,7 @@ tasks:
   - id: T004
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement decoded-media validation, all-or-nothing output import, selection-packet dimensions, and immutable reroll propagation."
     inputs:
@@ -394,12 +394,49 @@ tasks:
       - "A geometry change during reroll cannot be routed to a new child variation."
       - "A new tracked or untracked user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
-
+    receipt:
+      result: done
+      changed_files:
+        - package.json
+        - package-lock.json
+        - src/server/staticImageMetadata.ts
+        - src/server/staticImageMetadata.test.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+        - src/server/generationTargetPersistence.ts
+        - src/server/assetLineageDb.ts
+        - src/server/assetLineage.ts
+        - src/server/assetLineageTasks.ts
+        - src/server/lineageSelectionPacket.ts
+        - src/shared/generationTypes.ts
+        - src/shared/lineageSelectionPacketTypes.ts
+      commands:
+        - cmd: "npm test -- src/server/staticImageMetadata.test.ts src/shared/generationOutputManifest.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts src/server/assetLineage.test.ts src/server/assetLineageTasks.test.ts src/server/lineageSelectionPacket.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+        - cmd: "node --version"
+          status: pass
+        - cmd: "npm ls sharp --depth=0"
+          status: pass
+      summary: "Locked static-image imports and rerolls now preserve exact immutable pixels atomically. Decoder tests prove PNG/JPEG/WebP byte validation plus corruption, spoofing, unsupported-format, and dimension rejection. Preflight and forced late-failure tests prove zero partial assets, edges, outputs, specs, selections, tasks, or job changes. Persisted asset specs drive selection dimensions and inherited reroll locks; geometry changes produce child-variation plans. Independent PM reruns confirmed 7 files and 130 tests plus all required package gates."
+      deviations:
+        - "Added sharp@0.34.3 as the approved direct decoder dependency under Node v22.22.3."
+        - "The Worker's first package-smoke attempt lacked dist artifacts; after npm run build, the Worker and independent PM rerun both passed the exact gate."
+      remaining_blockers: []
+      verification_attempts: 2
   - id: T005
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Implement the canvas planning, defaults, per-branch overrides, status, and reroll UX over the same durable contracts."
     inputs:

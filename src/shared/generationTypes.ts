@@ -21,6 +21,19 @@ export interface GenerationJobOutput {
   imported_asset_id: string; parent_asset_id: string; imported_at: string; edge_summary?: string;
 }
 
+export interface GenerationAssetOutputSpec {
+  actual_height: number;
+  actual_width: number;
+  asset_id: string;
+  created_at: string;
+  generation_job_id: string;
+  output_index: number;
+  output_spec: NonNullable<ResolvedGenerationTargetPlan['slots'][number]['output_spec']>;
+  output_spec_digest: string;
+  target_group_id: string;
+  variant_index: number;
+}
+
 export interface GenerationJobReceipt {
   id: string; job_id: string; receipt_type: GenerationReceiptType;
   status: GenerationReceiptStatus; command: string; payload: unknown; created_at: string;

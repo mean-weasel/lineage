@@ -140,6 +140,10 @@ export interface LineageSelectionPacketV2IdentityProjection {
     campaign?: string;
     channel?: string;
     current_attempt: Pick<LineageSelectionPacketV2Attempt, 'asset_id' | 'attempt_index' | 'checksum_sha256' | 'id' | 'source'>;
+    dimensions?: {
+      height: number;
+      width: number;
+    };
     media_type?: string;
     mime_type?: string;
     position: number;

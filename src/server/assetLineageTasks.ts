@@ -538,6 +538,66 @@ export function cancelLineageIterateTasksForAssets(project: string, fields: {
     }));
 }
 
+export function cancelPendingLineageIterateTasksInTransaction(
+  database: DatabaseSync,
+  project: string,
+  rootAssetId: string,
+  actor = 'system',
+): void {
+  const rows = database.prepare(`
+    select * from lineage_tasks
+    where project_id = ? and root_asset_id = ? and task_type = 'iterate' and status = 'pending'
+    order by created_at
+  `).all(project, rootAssetId) as Row[];
+  for (const row of rows) {
+    const task = taskFromRow(row);
+    const timestamp = nowIso();
+    const result = database.prepare(`
+      update lineage_tasks
+      set status = 'cancelled', cancelled_at = ?, updated_at = ?
+      where id = ? and status = 'pending'
+    `).run(timestamp, timestamp, task.id);
+    assertChanged(result, `Only pending lineage task ${task.id} could be cancelled.`);
+    recordEvent(database, task.id, 'cancelled', actor, 'Lineage task cancelled.');
+  }
+}
+
+export function resolvePendingLineageRerollTaskInTransaction(database: DatabaseSync, project: string, fields: {
+  actor: string;
+  resolvedAssetId: string;
+  resolvedGenerationJobId: string;
+  rootAssetId: string;
+  targetAssetId: string;
+}): void {
+  const row = database.prepare(`
+    select * from lineage_tasks
+    where project_id = ? and root_asset_id = ? and target_asset_id = ? and task_type = 'reroll'
+      and status in ('pending', 'claimed', 'in_progress')
+    order by created_at desc limit 1
+  `).get(project, fields.rootAssetId, fields.targetAssetId) as Row | undefined;
+  if (!row) return;
+  const task = taskFromRow(row);
+  const timestamp = nowIso();
+  const result = database.prepare(`
+    update lineage_tasks
+    set status = 'resolved', resolved_at = ?, resolved_generation_job_id = ?,
+      resolved_asset_id = ?, updated_at = ?
+    where id = ? and status = ?
+  `).run(
+    timestamp,
+    fields.resolvedGenerationJobId,
+    fields.resolvedAssetId,
+    timestamp,
+    task.id,
+    task.status,
+  );
+  assertChanged(result, `Only ${task.status} lineage task ${task.id} could be resolved.`);
+  recordEvent(database, task.id, 'resolved', fields.actor, 'Lineage task resolved.', {
+    resolved_asset_id: fields.resolvedAssetId,
+    resolved_generation_job_id: fields.resolvedGenerationJobId,
+  });
+}
+
 export function resolveLineageTask(project: string, fields: {
   actor: string;
   confirmWrite: boolean;
