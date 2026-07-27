@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
 
-active_task: T011
+active_task: T012
 
 tasks:
   - id: T001
@@ -841,7 +841,7 @@ tasks:
   - id: T011
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Prepare the final release delta containing justified adoption polish and agent integration after the integrated oracle passes."
     inputs:
@@ -892,11 +892,59 @@ tasks:
       - "The post-0.1.27 product delta differs from the T006 and T009 receipts or includes unrelated work."
       - "The release requires files outside allowed_files."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Prepared the bounded stable 0.1.28 release delta: synchronized every root, lock, plugin, manifest compatibility, and docs-review version; added release notes for draft retention, complete large CLI JSON, and the provider-neutral generation scaffold. No tag, publication, GitHub Release, PR, push, merge, commit, or GoalBuddy-board mutation was performed."
+      changed_files:
+        - CHANGELOG.md
+        - docs-site/docs-review.json
+        - package-lock.json
+        - package.json
+        - plugins/lineage-codex-plugin/.codex-plugin/plugin.json
+        - plugins/lineage-codex-plugin/package.json
+      version_contract:
+        root: 0.1.28
+        lock: 0.1.28
+        lock_root: 0.1.28
+        plugin: 0.1.28
+        manifest: 0.1.28
+        lineage_compatibility: 0.1.28
+        docs_reviewed_for: 0.1.28
+        changelog_section: 0.1.28
+        prospective_immutable_tag: v0.1.28
+        npm_dist_tag: latest
+        github_prerelease: false
+      commands:
+        - command: "Remote main, v0.1.28 tag, npm version, GitHub Release, open PR, and merge-tree collision checks"
+          status: pass
+        - command: "GITHUB_REF_NAME=v0.1.28 node scripts/tag-release-plan.mjs; npm run release:policy:test; npm run docs:check"
+          status: pass
+        - command: "npm run plugin:smoke; npm run plugin:codex-smoke; npm run public:readiness; npm run package:smoke; npm run runtime:oracle; npm run e2e"
+          status: pass
+        - command: "npm run ci"
+          status: pass
+          result: "First attempt encountered transient EPERM on an ignored concurrently-created scratch fixture; immediate inspection proved the file readable and no source or release file changed."
+        - command: "npm run ci"
+          status: pass
+          result: "84/84 files, 598 passed, 4 skipped; 14/14 E2E; all release, docs, runtime, package, plugin, readiness, and audit gates passed."
+        - command: "git diff --check"
+          status: pass
+      user_facing_claim: "The adoption repairs and provider-neutral generation scaffold have an exact, reviewable stable 0.1.28 release delta whose version locks, public documentation review, changelog, package/plugin artifacts, runtime isolation, and browser workflows agree."
+      top_failure_modes:
+        - "A stale root, lockfile, plugin manifest, Lineage compatibility, or docs-review version could produce mismatched release artifacts."
+        - "An existing v0.1.28 tag, npm version, GitHub Release, or open release PR could collide with the immutable release."
+        - "The release-only delta could mask regressions in draft retention, large JSON flushing, scaffolding, package/plugin installation, runtime isolation, or browser workflows."
+      evidence:
+        - "All six version and compatibility locks plus docs review and changelog equal 0.1.28."
+        - "Remote Git, npm, and GitHub checks proved exact origin/main, no v0.1.28 collision, no open PR, and a clean merge."
+        - "Full CI passed 598 tests with 4 skipped, 14/14 E2E, all release/package/plugin/runtime gates, and zero-vulnerability audit."
+      remaining_blockers: []
+      verification_attempts: 2
+      harness: codex
   - id: T012
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Publish and verify the final adoption release when T011 proves a release delta is required."
     inputs:
