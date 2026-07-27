@@ -1,7 +1,8 @@
 import type { LineageNextResponse } from './types';
+import type { ResolvedGenerationTargetPlan } from './outputTargetTypes';
 
 export type GenerationProvider = 'codex-handoff';
-type GenerationAdapterVersion = 'generation-receipts-v1' | 'generation-receipts-v2';
+type GenerationAdapterVersion = 'generation-receipts-v1' | 'generation-receipts-v2' | 'generation-receipts-v3';
 type GenerationJobStatus = 'planned' | 'imported' | 'failed' | 'cancelled';
 type GenerationReceiptType = 'plan' | 'import' | 'error';
 type GenerationReceiptStatus = 'ok' | 'error';
@@ -51,6 +52,7 @@ export interface GenerationJob {
   source_mode: GenerationSourceMode; root_asset_id: string; prompt: string;
   expected_output_count: number; status: GenerationJobStatus; output_dir?: string;
   handoff: GenerationHandoffPacket; created_at: string; updated_at: string; imported_at?: string;
+  target_plan?: ResolvedGenerationTargetPlan;
   inputs: GenerationJobInput[]; outputs: GenerationJobOutput[]; receipts: GenerationJobReceipt[];
 }
 

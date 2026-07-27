@@ -9,6 +9,9 @@ import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
 import { lineageCliCommand } from './lineageRuntimeCommand';
 import { createGenerationOutputManifestDraft, parseGenerationOutputManifest, type GenerationOutputManifest } from '../shared/generationOutputManifest';
+import type { GenerationTargetMap } from '../shared/outputTargetTypes';
+import { planGenerationTargets } from './generationTargetPlanning';
+import { loadGenerationTargetPlan, persistTargetAwareGenerationAggregate } from './generationTargetPersistence';
 import type {
   GenerationHandoffPacket,
   GenerationImportResponse,
@@ -86,11 +89,25 @@ function buildHandoff(
   perBaseCount: number,
   next: LineageNextResponse,
   inputs: GenerationJobInput[],
+  targetOutputParents?: string[],
 ): GenerationHandoffPacket {
   const parent = next.next_asset;
   if (!parent) throw new GenerationReceiptError('Missing lineage next base');
-  const parents = parentMappings(next, perBaseCount);
-  const outputManifest = createGenerationOutputManifestDraft({ id, expected_output_count: count, inputs });
+  const parents = targetOutputParents
+    ? selectedParents(next).map(parent => ({
+      parent,
+      output_indexes: targetOutputParents.flatMap((assetId, index) => assetId === parent.asset_id ? [index] : []),
+    }))
+    : parentMappings(next, perBaseCount);
+  const outputManifest = targetOutputParents
+    ? {
+      schema_version: 'lineage.generation_output_manifest.v1' as const,
+      job_id: id,
+      outputs: targetOutputParents.map((parentAssetId, outputIndex) => ({
+        output_index: outputIndex, file_path: '' as const, parent_asset_id: parentAssetId, edge_summary: '' as const,
+      })),
+    }
+    : createGenerationOutputManifestDraft({ id, expected_output_count: count, inputs });
   const importCommand = lineageCliCommand(`generate image import --project ${quote(project)} --job-id ${quote(id)} --manifest ${quote('.asset-scratch/generation-output-manifest.json')} --confirm-write`);
   return {
     schema_version: 'lineage.generation_handoff.v2', provider, project, job_id: id, prompt, expected_output_count: count,
@@ -206,6 +223,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
   }));
   const outputs = (database.prepare('select * from generation_job_outputs where job_id = ? order by output_index').all(id) as Array<Record<string, unknown>>).map(outputFrom);
   const receipts = (database.prepare('select * from generation_job_receipts where job_id = ? order by created_at, id').all(id) as Array<Record<string, unknown>>).map(receiptFrom);
+  const targetPlan = loadGenerationTargetPlan(database, id);
   return {
     id: String(row.id),
     project_id: String(row.project_id),
@@ -221,6 +239,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     imported_at: typeof row.imported_at === 'string' ? row.imported_at : undefined,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
     inputs,
     outputs,
     receipts,
@@ -234,27 +253,44 @@ function insertReceipt(database: DatabaseSync, id: string, type: 'plan' | 'impor
   `).run(`${id}:receipt:${type}:${Date.now()}`, id, type, command, JSON.stringify(payload), nowIso());
 }
 
-export function planImageGeneration(project = defaultProject, fields: { prompt: string; count?: number; dryRun?: boolean; fromLineageSelection: boolean; perBaseCount?: number }): GenerationPlanResponse {
+export function planImageGeneration(project = defaultProject, fields: {
+  prompt: string;
+  count?: number;
+  dryRun?: boolean;
+  fromLineageSelection: boolean;
+  perBaseCount?: number;
+  targetMap?: GenerationTargetMap;
+}): GenerationPlanResponse {
   const prompt = fields.prompt.trim();
   if (!prompt) throw new GenerationReceiptError('Missing --prompt');
   if (!fields.fromLineageSelection) throw new GenerationReceiptError('Generation v1 requires --from-lineage-selection');
   const next = resolveLineageSelection(project);
   const parentCount = selectedParents(next).length;
-  if (parentCount > 1 && !positiveInteger(fields.perBaseCount)) throw new GenerationReceiptError('Multi-parent generation requires --per-base-count');
-  const perBaseCount = parentCount > 1 ? Number(fields.perBaseCount) : Number(fields.count ?? fields.perBaseCount);
-  const count = parentCount * perBaseCount;
-  if (!positiveInteger(perBaseCount)) throw new GenerationReceiptError('Generation count must be a positive integer');
-  if (fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
   const id = jobId();
   const inputs = inputsFrom(id, project, next);
-  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs);
-  const mappings = parentMappings(next, perBaseCount).map(mapping => ({ parent_asset_id: mapping.parent.asset_id, output_indexes: mapping.output_indexes }));
+  const targetPlan = fields.targetMap
+    ? planGenerationTargets({ jobId: id, sourceAssetIds: inputs.map(input => input.asset_id), targetMap: fields.targetMap })
+    : undefined;
+  if (targetPlan && fields.perBaseCount !== undefined) throw new GenerationReceiptError('Target-aware generation does not accept legacy --per-base-count');
+  if (!targetPlan && parentCount > 1 && !positiveInteger(fields.perBaseCount)) throw new GenerationReceiptError('Multi-parent generation requires --per-base-count');
+  const perBaseCount = targetPlan ? 1 : parentCount > 1 ? Number(fields.perBaseCount) : Number(fields.count ?? fields.perBaseCount);
+  const count = targetPlan?.expected_output_count ?? parentCount * perBaseCount;
+  if (!targetPlan && !positiveInteger(perBaseCount)) throw new GenerationReceiptError('Generation count must be a positive integer');
+  if (fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
+  const targetOutputParents = targetPlan?.slots.map(slot => slot.parent_asset_id);
+  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs, targetOutputParents);
+  const mappings = targetPlan
+    ? selectedParents(next).map(parent => ({
+      parent_asset_id: parent.asset_id,
+      output_indexes: targetPlan.slots.filter(slot => slot.parent_asset_id === parent.asset_id).map(slot => slot.output_index),
+    }))
+    : parentMappings(next, perBaseCount).map(mapping => ({ parent_asset_id: mapping.parent.asset_id, output_indexes: mapping.output_indexes }));
   const timestamp = nowIso();
   const preview: GenerationJob = {
     id,
     project_id: project,
     provider,
-    adapter_version: manifestAdapterVersion,
+    adapter_version: targetPlan ? 'generation-receipts-v3' : manifestAdapterVersion,
     source_mode: 'lineage_selection',
     root_asset_id: next.root_asset_id,
     prompt,
@@ -264,6 +300,7 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
     handoff,
     created_at: timestamp,
     updated_at: timestamp,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
     inputs,
     outputs: [],
     receipts: [{
@@ -272,7 +309,18 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
       receipt_type: 'plan',
       status: 'ok',
       command: 'generate image plan',
-      payload: { prompt, expected_output_count: count, per_base_count: parentCount > 1 ? perBaseCount : undefined, lineage: handoff.lineage, parent_mappings: mappings },
+      payload: {
+        prompt,
+        expected_output_count: count,
+        per_base_count: !targetPlan && parentCount > 1 ? perBaseCount : undefined,
+        lineage: handoff.lineage,
+        parent_mappings: mappings,
+        ...(targetPlan ? {
+          target_map_digest: targetPlan.digest_sha256,
+          target_groups: targetPlan.groups,
+          output_slots: targetPlan.slots,
+        } : {}),
+      },
       created_at: timestamp,
     }],
   };
@@ -280,6 +328,35 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
 
   const database = lineageDb();
   try {
+    if (targetPlan) {
+      persistTargetAwareGenerationAggregate(database, {
+        job: {
+          id,
+          project_id: project,
+          provider,
+          adapter_version: 'generation-receipts-v3',
+          source_mode: 'lineage_selection',
+          root_asset_id: next.root_asset_id,
+          prompt,
+          expected_output_count: count,
+          status: 'planned',
+          output_dir: '.asset-scratch',
+          handoff,
+          created_at: timestamp,
+          updated_at: timestamp,
+          inputs,
+        },
+        inputs,
+        plan: targetPlan,
+        receipt: {
+          id: `${id}:receipt:plan:${Date.now()}`,
+          command: 'generate image plan',
+          payload: preview.receipts[0].payload,
+          created_at: timestamp,
+        },
+      });
+      return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(database, project, id) };
+    }
     database.exec('BEGIN IMMEDIATE');
     try {
       database.prepare(`

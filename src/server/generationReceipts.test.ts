@@ -18,6 +18,7 @@ import {
 import { listImageGenerationJobs } from './generationReceiptJobs';
 import { fileSha256 } from './localReview';
 import type { GenerationJob } from '../shared/types';
+import { GENERATION_TARGET_MAP_SCHEMA } from '../shared/outputTargetTypes';
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
@@ -861,5 +862,40 @@ describe('generation receipts', () => {
     expect(inspected.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan']);
     expect(countRows('asset_edges', `where parent_asset_id = '${lineage.selectedId}' and child_asset_id = '${outputAssetId}'`)).toBe(0);
     expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(1);
+  });
+
+  it('persists an immutable target-aware plan with its aggregate receipt', () => {
+    const lineage = setupSelectedLineage('target-aware-plan');
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Create locked story variants.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{
+          asset_id: lineage.selectedId,
+          default_variant_count: 2,
+          targets: [
+            { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+            { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1 },
+          ],
+        }],
+      },
+    });
+    expect(plan.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      expected_output_count: 2,
+      target_plan: {
+        groups: [{ width: 1080, height: 1920, variant_count: 2 }],
+        slots: [{ output_index: 0 }, { output_index: 1 }],
+      },
+    });
+    expect(plan.job.receipts[0].payload).toMatchObject({
+      target_map_digest: plan.job.target_plan?.digest_sha256,
+    });
+    const inspected = inspectImageGeneration(defaultProject, plan.job.id).job;
+    expect(inspected.target_plan).toEqual(plan.job.target_plan);
+    expect(countRows('generation_target_maps', `where job_id = '${plan.job.id}'`)).toBe(1);
+    expect(countRows('generation_target_groups', `where job_id = '${plan.job.id}'`)).toBe(1);
+    expect(countRows('generation_output_slots', `where job_id = '${plan.job.id}'`)).toBe(2);
   });
 });

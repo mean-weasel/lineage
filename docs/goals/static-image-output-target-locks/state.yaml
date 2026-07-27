@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T002
+active_task: T003
 
 tasks:
   - id: T001
@@ -169,7 +169,7 @@ tasks:
   - id: T002
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement the durable output-target registry, geometry resolver, immutable job planning, and human-owned canvas-default backend contract."
     inputs:
@@ -219,12 +219,44 @@ tasks:
       - "Implementing this backend slice requires canvas component, CLI presentation, import-decoder, or publishing/provider files."
       - "A new tracked or untracked user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
-
+    receipt:
+      result: done
+      changed_files:
+        - src/shared/outputTargetTypes.ts
+        - src/shared/outputTargetRegistry.ts
+        - src/shared/outputTargetRegistry.test.ts
+        - src/shared/generationTargetMap.ts
+        - src/shared/generationTargetMap.test.ts
+        - src/shared/generationTypes.ts
+        - src/shared/types.ts
+        - src/server/generationTargetPlanning.ts
+        - src/server/generationTargetPlanning.test.ts
+        - src/server/generationTargetDefaults.ts
+        - src/server/generationTargetDefaults.test.ts
+        - src/server/generationTargetPersistence.ts
+        - src/server/generationTargetPersistence.test.ts
+        - src/server/assetLineageDb.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+      commands:
+        - cmd: "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Implemented the durable offline registry, canonical target-map hashing, geometry grouping and explicit splits, bounded custom sizes, structured ambiguity, exact multi-source mappings, unlocked compatibility, immutable groups/slots/spec snapshots, atomic aggregate persistence, and human-canvas-only scoped defaults. Independent PM reruns confirmed 6 focused files and 40 tests, TypeScript, lint, diff hygiene, and exact scope."
+      deviations:
+        - "Corrected one test to assert property absence for unlocked dimensions."
+        - "Replaced an empty marker interface with an equivalent lint-compliant type alias."
+      remaining_blockers: []
+      verification_attempts: 2
   - id: T003
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Implement the agent/CLI discovery and job-planning bridge plus the approved target-aware protocol versions."
     inputs:

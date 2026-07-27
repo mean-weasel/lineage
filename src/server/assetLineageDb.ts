@@ -387,6 +387,57 @@ export function lineageDb(): DatabaseSync {
       created_at text not null
     );
     create index if not exists generation_job_receipts_job on generation_job_receipts(job_id, created_at);
+    create table if not exists generation_target_maps (
+      job_id text primary key references generation_jobs(id) on delete cascade,
+      schema_version text not null check (schema_version = 'lineage.generation_target_map.v1'),
+      canonical_json text not null,
+      digest_sha256 text not null,
+      unique(job_id, digest_sha256)
+    );
+    create table if not exists generation_target_groups (
+      id text primary key,
+      job_id text not null references generation_jobs(id) on delete cascade,
+      parent_asset_id text not null references assets(id),
+      media_kind text check (media_kind is null or media_kind = 'static_image'),
+      width integer,
+      height integer,
+      geometry_json text,
+      delivery_surfaces_json text not null,
+      grouping_mode text not null check (grouping_mode in ('consolidated', 'explicit_split')),
+      variant_count integer not null check (variant_count > 0),
+      target_map_digest text not null,
+      guidance_json text not null,
+      unlocked integer not null check (unlocked in (0, 1)),
+      check (
+        (unlocked = 1 and media_kind is null and width is null and height is null and geometry_json is null)
+        or
+        (unlocked = 0 and media_kind = 'static_image' and width is not null and height is not null and geometry_json is not null)
+      )
+    );
+    create index if not exists generation_target_groups_job on generation_target_groups(job_id, id);
+    create table if not exists generation_output_slots (
+      id text primary key,
+      job_id text not null references generation_jobs(id) on delete cascade,
+      target_group_id text not null references generation_target_groups(id) on delete cascade,
+      parent_asset_id text not null references assets(id),
+      output_index integer not null check (output_index >= 0),
+      variant_index integer not null check (variant_index >= 0),
+      output_spec_json text,
+      unique(job_id, output_index),
+      unique(target_group_id, variant_index)
+    );
+    create index if not exists generation_output_slots_job on generation_output_slots(job_id, output_index);
+    create table if not exists generation_target_defaults (
+      project_id text not null references projects(id),
+      root_asset_id text not null references assets(id),
+      default_variant_count integer not null check (default_variant_count > 0),
+      targets_json text not null,
+      separate_surface_ids_json text not null,
+      provenance text not null check (provenance = 'human'),
+      created_at text not null,
+      updated_at text not null,
+      primary key(project_id, root_asset_id)
+    );
     create table if not exists adapter_settings (project_id text not null references projects(id), adapter_type text not null check (adapter_type in ('cloud', 'scheduler', 'image_generator')), provider text not null, enabled integer not null check (enabled in (0, 1)), secret_ref text, safe_config_json text not null, created_at text not null, updated_at text not null, primary key(project_id, adapter_type, provider)); create index if not exists adapter_settings_project_type on adapter_settings(project_id, adapter_type);
     create table if not exists lineage_tasks (
       id text primary key,
