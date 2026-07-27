@@ -1,0 +1,425 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Node next-output target locks"
+  slug: "node-next-output-target-locks"
+  kind: existing_plan
+  tranche: "Implement, release, and stable-package-verify the approved node next-output target-lock bridge for static-image variations."
+  status: active
+  oracle:
+    signal: "A live canvas/CLI/agent walkthrough proves every generated static-image variation consumes an immutable exact-pixel plan resolved from a node override or human canvas default."
+    cadence: "after each Worker package and at final audit"
+    final_proof: "Automated contract, CLI, and canvas tests plus a released stable-package walkthrough proving inheritance, override conflict refusal, immutable snapshots, child inheritance, exact import, and zero-partial-write rejection."
+  intake:
+    original_request: "Create a GoalBuddy prep board for durable node-level next-variation geometry that agents read before generation."
+    interpreted_outcome: "Before any static-image variation is generated, Lineage resolves persisted exact geometry from the source node or its human canvas default and snapshots it into an immutable job."
+    input_shape: existing_plan
+    audience: "Lineage users and agents creating static-image variations"
+    authority: approved
+    proof_type: demo
+    completion_proof: "The full bridge oracle passes in checkout verification and again against the released stable package from a fresh named production profile."
+    likely_misfire: "Ship node badges or geometry storage without making the agent read and atomically snapshot the same durable intent before provider generation."
+    blind_spots_considered:
+      - "Agent intent conflicts with a sticky node lock."
+      - "Node settings, canvas defaults, and immutable planned jobs have distinct lifecycles."
+      - "Each generated child inherits only its own produced geometry."
+      - "Multiple delivery surfaces may share one exact geometry."
+      - "Concurrent setting changes must fail closed without mutating older jobs."
+      - "Variation counts and creative splits remain job-time intent."
+    existing_plan_facts:
+      - "Approved design: docs/superpowers/specs/2026-07-27-node-next-output-target-locks-design.md"
+      - "Fresh worktree: /Users/neonwatty/Desktop/lineage/.worktrees/node-next-output-target-locks"
+      - "Branch codex/node-next-output-target-locks was created from freshly fetched origin/main commit 3881139d7932669565dabe967e2385fa6e67cf62."
+      - "Baseline npm test passed 598 tests with 4 intentional skips before board creation."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
+    command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
+
+active_task: T001
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Validate the approved design against current repository contracts and shape the largest safe atomic Worker packages without implementing."
+    inputs:
+      - "docs/superpowers/specs/2026-07-27-node-next-output-target-locks-design.md"
+      - "Existing static-image output-target implementation and verification receipts"
+      - "Current repository verification commands"
+    constraints:
+      - "Read-only."
+      - "Preserve every approved product decision and scope boundary."
+      - "Do not implement or edit product files."
+      - "Return exact allowed_files, verify commands, stop conditions, dependency order, and oracle coverage."
+    expected_output:
+      - "Validated implementation sequence"
+      - "Largest safe useful Worker packages"
+      - "Exact allowed_files, verify commands, and stop conditions"
+      - "Risks, compatibility constraints, and deferred scope"
+    receipt: null
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the durable backend vertical slice: versioned sticky node target settings, dynamic default resolution, compare-and-swap mutation, immutable job materialization and cancellation, and atomic per-child initialization."
+    inputs:
+      - "T001 validated implementation sequence"
+      - "docs/superpowers/specs/2026-07-27-node-next-output-target-locks-design.md"
+      - "Existing output-target registry, defaults, planning, persistence, generation receipts, and import atomicity contracts"
+    constraints:
+      - "Keep current asset output specifications separate from future next-output settings."
+      - "Preserve legacy jobs, defaults, manifests, target maps, and unlocked behavior."
+      - "Node settings contain targets and provenance only; counts and creative splits remain job-time intent."
+      - "All mutations use exact-key validation, canonical digests, revision checks, and atomic transactions."
+      - "Do not add provider calls or change canvas-default mutation authority."
+    expected_output:
+      - "Versioned node_next_output_target_settings persistence and compatibility migration"
+      - "Effective node override -> canvas default -> unresolved resolver"
+      - "Explicit conflict and stale-resolution failures"
+      - "Immutable planned-job source-setting snapshots and idempotent cancellation"
+      - "Atomic imported-child setting derived only from that child's output specification"
+      - "Focused contract, migration, concurrency, cancellation, and rollback tests"
+    allowed_files:
+      - "src/shared/outputTargetTypes.ts"
+      - "src/shared/generationTargetMap.ts"
+      - "src/shared/generationTypes.ts"
+      - "src/shared/*.test.ts"
+      - "src/server/assetLineageDb.ts"
+      - "src/server/generationTargetDefaults.ts"
+      - "src/server/generationTargetPlanning.ts"
+      - "src/server/generationTargetPersistence.ts"
+      - "src/server/generationTargetRoutes.ts"
+      - "src/server/generationReceipts.ts"
+      - "src/server/generationTarget*.test.ts"
+      - "src/server/generationReceipts*.test.ts"
+      - "src/server/nodeNextOutputTargets.ts"
+      - "src/server/nodeNextOutputTargets.test.ts"
+    verify:
+      - "npm test -- src/shared/generationTargetMap.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPersistence.test.ts src/server/nodeNextOutputTargets.test.ts src/server/generationReceipts.test.ts"
+      - "npm run check"
+    stop_if:
+      - "T001 changes the approved behavior or requires files outside allowed_files."
+      - "A migration would rewrite existing assets, jobs, defaults, or output specifications."
+      - "Atomic child initialization cannot share the existing import transaction without a larger reviewed boundary."
+      - "Verification fails twice for reasons not isolated to this Worker package."
+    receipt: null
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the native CLI and agent bridge: selection packet v3, effective node-target read/set/replace/clear commands, atomic plan-from-node-targets, complete JSON, and operator guidance."
+    inputs:
+      - "T001 validated implementation sequence"
+      - "T002 receipt and backend contracts"
+      - "Approved CLI commands and provider-neutral sequence in the design"
+    constraints:
+      - "Agents cannot mutate canvas defaults."
+      - "Platform-only ambiguity must ask for a surface."
+      - "A conflicting node lock requires a distinct explicit replacement operation."
+      - "Planning requires and rechecks the canonical selected-source resolution digest."
+      - "The agent must receive a persisted job before provider generation."
+      - "Legacy selection packets and existing CLI operations remain readable."
+    expected_output:
+      - "lineage.selection_packet.v3 with current geometry, effective next targets, origin, revisions, and resolution digest"
+      - "Complete JSON node get/set/replace/clear operations"
+      - "Plan from node targets with stale-resolution protection and job-time count"
+      - "Planned-job cancellation command and inspect parity"
+      - "Updated Lineage operator skill and public CLI guidance"
+      - "Focused CLI, selection, large-JSON, ambiguity, conflict, and compatibility tests"
+    allowed_files:
+      - "src/shared/lineageSelectionPacketTypes.ts"
+      - "src/shared/generationTypes.ts"
+      - "src/server/*SelectionPacket*"
+      - "src/server/generationTargetRoutes.ts"
+      - "src/server/generationReceipts.ts"
+      - "src/server/*.test.ts"
+      - "src/cli/outputTargetCli.ts"
+      - "src/cli/outputTargetCli.test.ts"
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "packages/lineage-plugin/**"
+      - "README.md"
+      - "docs-site/src/content/docs/**"
+    verify:
+      - "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/server/generationReceipts.test.ts"
+      - "npm run check"
+      - "npm run plugin:smoke"
+    stop_if:
+      - "T002 contracts are incomplete or contradict the approved command semantics."
+      - "The selected-source resolution digest cannot be made deterministic across CLI and canvas."
+      - "A new operation would bypass named-profile or writer-lease safety."
+      - "Verification fails twice for reasons not isolated to this Worker package."
+    receipt: null
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the canvas node next-output experience on the shared backend contract, including inherited/explicit/unresolved states, sticky multi-target editing, clear-to-default, immutable older-job visibility, and exact branch planning."
+    inputs:
+      - "T001 validated implementation sequence"
+      - "T002 backend receipt"
+      - "T003 CLI/agent receipt"
+      - "Approved canvas states and interaction rules"
+    constraints:
+      - "Do not create a second target-normalization or planning path."
+      - "Render current asset geometry separately from next-output intent."
+      - "Node edits survive rerenders and remain independent across selected sources."
+      - "Counts, prompts, and creative splits alter only the planned job."
+      - "Clear must restore the current canvas default immediately."
+      - "Older planned jobs remain immutable and visually distinguish their snapshot."
+    expected_output:
+      - "Compact inherited, node-lock, and unresolved node states"
+      - "Accessible node control for inspect, set, replace, clear, and cancel"
+      - "Multi-target and custom-geometry editing with explicit conflict handling"
+      - "Branch planner initialized from effective node targets"
+      - "Produced children displaying only their own inherited target"
+      - "Component and browser coverage for rerenders, multi-source independence, and cross-surface parity"
+    allowed_files:
+      - "src/web/api.ts"
+      - "src/web/components/LineageAssetNode.*"
+      - "src/web/components/LineageGenerationSheet.*"
+      - "src/web/components/OutputTargetPreferencesDialog.*"
+      - "src/web/components/*Target*"
+      - "src/web/components/*.test.tsx"
+      - "src/web/**/*.css"
+      - "src/server/generationTargetRoutes.ts"
+      - "src/server/generationTargetRoutes.test.ts"
+      - "e2e/output-target-locks.e2e.ts"
+      - "e2e/fixtures/**"
+    verify:
+      - "npm test -- src/web/components/LineageAssetNode.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/OutputTargetPreferencesDialog.test.tsx"
+      - "npm run check"
+      - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+    stop_if:
+      - "The shared backend cannot express one of the approved UX states without product-contract changes."
+      - "The implementation would mutate canvas defaults through an agent-accessible route."
+      - "Required UI ownership extends outside allowed_files without T001 or PM revision."
+      - "Browser verification fails twice for reasons not isolated to this Worker package."
+    receipt: null
+  - id: T005
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Review the integrated backend, CLI/agent, and canvas implementation against every approved decision before live proof."
+    inputs:
+      - "T001-T004 receipts"
+      - "Approved design and current diff"
+      - "Focused test results"
+    constraints:
+      - "Read-only."
+      - "Reject surface-level parity without canonical digest parity."
+      - "Reject hidden bypasses through legacy planning, target-map flags, API routes, rerolls, or imports."
+      - "Require compatibility and atomicity evidence, not only happy paths."
+    expected_output:
+      - "ready_for_oracle | remediation_required"
+      - "Decision matrix for every approved product rule"
+      - "Top realistic failure modes and evidence"
+      - "Exact remediation Worker task if rejected"
+    receipt: null
+  - id: T006
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Run the identity-gated checkout full bridge oracle through canvas, CLI, and a real provider-neutral agent generation/import loop."
+    inputs:
+      - "T005 ready_for_oracle receipt"
+      - "Required Live Proof in goal.md"
+      - "Repository five-step runtime channel gate"
+    constraints:
+      - "Use checkout-only npm run lineage:dev -- with a fresh named development profile."
+      - "Run runtime doctor, profile doctor, db info, managed status, and /api/runtime identity checks before operational writes."
+      - "Stop on any code/profile/database/service mismatch."
+      - "Use only synthetic or newly generated non-private static images."
+      - "Record exact commands, IDs, digests, dimensions, row counts, screenshots, and failure-state counts."
+      - "Do not fix defects during this task; create a bounded remediation Worker."
+    expected_output:
+      - "Checkout identity receipt"
+      - "Default inheritance and sticky multi-target node override proof"
+      - "Ambiguity, conflict, and stale-resolution rejection proof"
+      - "Immutable old-job and future-resolution divergence proof"
+      - "Exact import, child inheritance, cancellation, and zero-partial-state proof"
+      - "Canvas/CLI/agent canonical digest parity"
+      - "Remediation task or ready_for_release"
+    receipt: null
+  - id: T007
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Prepare the next stable release metadata and final public documentation for the verified feature without tagging, publishing, merging, or mutating external release state."
+    inputs:
+      - "T006 ready_for_release receipt"
+      - "Current package version and immutable release policy"
+      - "Approved design and verified user-facing behavior"
+    constraints:
+      - "Use the next unused stable SemVer consistently across every version lock."
+      - "Do not tag, publish, push, merge, or install into the user's real Codex profile."
+      - "Do not claim behavior not proven by T006."
+      - "Preserve package boundaries and plugin compatibility locks."
+    expected_output:
+      - "Consistent root, plugin, manifest, and lineage.version updates"
+      - "Changelog and public documentation matching shipped behavior"
+      - "Release-policy, public-readiness, package, and plugin proof"
+      - "Exact proposed annotated tag and release checklist"
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "docs-site/src/content/docs/**"
+      - "packages/lineage-plugin/package.json"
+      - "packages/lineage-plugin/.claude-plugin/plugin.json"
+      - "packages/lineage-plugin/.codex-plugin/plugin.json"
+      - "packages/lineage-plugin/lineage.version"
+      - "packages/lineage-plugin/**/SKILL.md"
+    verify:
+      - "npm run release:policy:test"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "npm run plugin:smoke"
+    stop_if:
+      - "The next stable version is ambiguous or already published/tagged."
+      - "A required version lock lies outside allowed_files."
+      - "T006 has unresolved defects or missing oracle evidence."
+      - "Verification fails twice for reasons not isolated to this Worker package."
+    receipt: null
+  - id: T008
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Run the full public gate and audit release readiness, package boundaries, scope, and oracle evidence before external publication."
+    inputs:
+      - "T001-T007 receipts"
+      - "Current clean diff and release metadata"
+      - "Approved design, charter, and release policy"
+    constraints:
+      - "Read-only except temporary verification outputs."
+      - "Run npm run ci as one uninterrupted gate."
+      - "Reject release on any goal-owned failure, private-data leak, version mismatch, missing proof, or scope expansion."
+      - "Do not push, merge, tag, or publish."
+    expected_output:
+      - "ready_for_pr | remediation_required"
+      - "Full CI and public-readiness conclusions"
+      - "Version-lock and package-boundary matrix"
+      - "Acceptance and top-failure-mode evidence matrix"
+      - "Exact external release sequence if ready"
+    receipt: null
+  - id: T009
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Commit and push the reviewed branch, create a ready pull request, monitor CI and review, merge only when green, then create the immutable annotated release tag and monitor the Release workflow."
+    inputs:
+      - "T008 ready_for_pr receipt"
+      - "Repository release policy"
+      - "GitHub origin and current branch identity"
+    constraints:
+      - "Reconfirm clean worktree, origin/main relationship, commit identity, and version locks before every external transition."
+      - "Do not bypass required review, branch protection, merge queue, or CI."
+      - "Tag only the reviewed commit already merged to GitHub main."
+      - "Use a new immutable annotated v<version> tag; never move or reuse a tag."
+      - "Require the tag-triggered Release workflow, npm latest, GitHub Release, plugin tarball, and checksum asset to agree."
+      - "If CI or review rejects, create a bounded remediation Worker and return to review."
+    expected_output:
+      - "Commit and pushed branch identities"
+      - "Ready PR URL and green required checks"
+      - "Merged GitHub main commit"
+      - "Annotated tag object and peeled commit"
+      - "Green Release workflow, npm version/dist-tag, and GitHub Release asset proof"
+    receipt: null
+  - id: T010
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Repeat the critical effective-read, immutable-plan, exact-import, child-inheritance, cancellation, and mismatch-rejection proof against the released stable package."
+    inputs:
+      - "T009 release receipt"
+      - "Stable-package portion of the Goal Oracle"
+      - "Repository five-step runtime channel gate"
+    constraints:
+      - "Use lineage-stable and a fresh named production profile."
+      - "Run runtime doctor first, then atomic profile init if needed, then runtime doctor, profile doctor, and db info before any other operational write."
+      - "Require code root/origin/fingerprint, channel, profile/environment/fingerprint, database identity, service origin, package version, tag, and release asset agreement."
+      - "Use only synthetic or newly generated non-private static images."
+      - "Do not modify source code during this task; create a remediation Worker on any defect."
+    expected_output:
+      - "Stable runtime/profile/database/service identity receipt"
+      - "Released effective-target and selection-packet proof"
+      - "Released immutable job and exact import proof"
+      - "Released per-child inheritance and cancellation proof"
+      - "Released wrong-size rejection with zero partial state"
+      - "Stable canvas/CLI/agent parity evidence"
+    receipt: null
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the released implementation and stable-package oracle satisfy the approved user outcome."
+    inputs:
+      - "All completed task receipts"
+      - "Full verification results"
+      - "Stable-package walkthrough evidence"
+      - "Current diff and release identity"
+    constraints:
+      - "Read-only."
+      - "Reject completion while any required Worker task is queued, active, blocked without exhaustion, or missing proof."
+      - "Map every approved design decision and top failure mode to direct evidence."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Acceptance-criteria evidence matrix"
+      - "Missing evidence and next task if incomplete"
+    receipt: null
+
+checks:
+  dirty_fingerprint: "Product baseline 8d1227c3cf1686a433f4ee73a14539deb5a44303; later changes are committed GoalBuddy control files only"
+  last_verification:
+    result: pass
+    task: null
+    commands:
+      - "npm test — 84 files passed; 598 tests passed, 4 skipped"
+      - "npm run docs:validate — clean"
