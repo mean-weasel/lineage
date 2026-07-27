@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T002
+active_task: T003
 
 tasks:
   - id: T001
@@ -146,7 +146,7 @@ tasks:
   - id: T002
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement the durable backend vertical slice: versioned sticky node target settings, dynamic default resolution, compare-and-swap mutation, immutable job materialization and cancellation, and atomic per-child initialization."
     inputs:
@@ -192,11 +192,37 @@ tasks:
       - "A migration would rewrite existing assets, jobs, defaults, or output specifications."
       - "Atomic child initialization cannot share the existing import transaction without a larger reviewed boundary."
       - "Verification fails twice for reasons not isolated to this Worker package."
-    receipt: null
+    receipt:
+      result: done
+      changed_files:
+        - src/server/assetLineageDb.ts
+        - src/server/generationReceipts.test.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationTargetPersistence.test.ts
+        - src/server/generationTargetPersistence.ts
+        - src/server/generationTargetRoutes.ts
+        - src/server/nodeNextOutputTargets.test.ts
+        - src/server/nodeNextOutputTargets.ts
+        - src/shared/generationTypes.ts
+        - src/shared/outputTargetTypes.ts
+        - src/shared/types.ts
+      commands:
+        - cmd: "npm test -- src/shared/generationTargetMap.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetPersistence.test.ts src/server/generationTargetRoutes.test.ts src/server/nodeNextOutputTargets.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added schema-v1 sticky node target settings with exact provenance, atomic CAS, dynamic human-default inheritance, frozen geometry metadata, per-source resolution digests, immutable job snapshots, locked-from-node planning, idempotent cancellation, cancellation/import race guards, and transactional per-child initialization. Focused proof covers shared geometry consolidation, multi-source independence, stale refusal, historical snapshot stability, exact imports, cancellation, and zero-partial-write rollback while legacy receipt tests remain green."
+      deviations:
+        - "The dedicated GoalBuddy Worker timed out without edits; PM completed the bounded fallback package."
+      remaining_blockers: []
+      verification_attempts: 1
+      stopped_because: null
   - id: T003
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Implement the native CLI and agent bridge: selection packet v3, effective node-target read/set/replace/clear commands, atomic plan-from-node-targets, complete JSON, and operator guidance."
     inputs:

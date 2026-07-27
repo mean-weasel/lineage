@@ -10,12 +10,19 @@ import { lineageDb } from './assetLineageDb';
 import { listLineageTasks } from './assetLineageTasks';
 import { createLineageWorkspace } from './assetLineageWorkspaces';
 import {
+  cancelImageGeneration,
   importImageGenerationOutputs,
   importImageRerollOutput,
   inspectImageGeneration,
   planImageGeneration,
   planImageReroll,
 } from './generationReceipts';
+import {
+  nodeTargetResolutionsDigest,
+  readNodeNextOutputTargetSetting,
+  resolveEffectiveNodeNextOutputTargets,
+  writeNodeNextOutputTargetSetting,
+} from './nodeNextOutputTargets';
 import { listImageGenerationJobs } from './generationReceiptJobs';
 import { getLineageSelectionPacket } from './lineageSelectionPacket';
 import { fileSha256 } from './localReview';
@@ -340,6 +347,232 @@ describe('generation receipts', () => {
       ]));
     } finally {
       database.close();
+    }
+  });
+
+  it('materializes immutable node-target resolutions and rejects stale planning', () => {
+    const lineage = setupSelectedLineage('node-target-snapshot');
+    const database = lineageDb();
+    let expectedDigest: string;
+    try {
+      writeNodeNextOutputTargetSetting(database, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.selectedId,
+        expectedRevision: null,
+        targets: [
+          { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+          { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1 },
+        ],
+        provenance: { actor: 'agent', origin: 'cli' },
+      });
+      const effective = resolveEffectiveNodeNextOutputTargets(
+        database,
+        defaultProject,
+        lineage.rootId,
+        lineage.selectedId,
+      );
+      expectedDigest = nodeTargetResolutionsDigest([{
+        parent_asset_id: lineage.selectedId,
+        resolution_digest_sha256: effective.resolution_digest_sha256,
+      }]);
+    } finally {
+      database.close();
+    }
+
+    const plan = planImageGeneration(defaultProject, {
+      prompt: 'Create one locked vertical variation.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+      expectedTargetResolutionDigest: expectedDigest,
+    });
+    expect(plan.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      source_target_resolutions: [{
+        parent_asset_id: lineage.selectedId,
+        origin: 'node_override',
+        setting_revision: 1,
+        resolved_targets: [{
+          width: 1080,
+          height: 1920,
+          delivery_surfaces: [{ id: 'facebook.story' }, { id: 'instagram.story' }],
+        }],
+      }],
+      target_plan: {
+        expected_output_count: 1,
+        slots: [{ output_spec: { width: 1080, height: 1920 } }],
+      },
+    });
+
+    const replaceDatabase = lineageDb();
+    try {
+      writeNodeNextOutputTargetSetting(replaceDatabase, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.selectedId,
+        expectedRevision: 1,
+        targets: [{ kind: 'custom', width: 1200, height: 628 }],
+        provenance: { actor: 'human', origin: 'canvas' },
+      });
+    } finally {
+      replaceDatabase.close();
+    }
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job.source_target_resolutions).toEqual(
+      plan.job.source_target_resolutions,
+    );
+    expect(() => planImageGeneration(defaultProject, {
+      prompt: 'Do not plan against a stale target lock.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+      expectedTargetResolutionDigest: expectedDigest,
+    })).toThrow(/target resolution changed/i);
+  });
+
+  it('refuses locked-from-node planning while any selected source is unresolved', () => {
+    const lineage = setupSelectedLineage('node-target-unresolved');
+    expect(() => planImageGeneration(defaultProject, {
+      prompt: 'Do not silently fall back to unlocked generation.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+    })).toThrow(new RegExp(`Node ${lineage.selectedId} has no resolvable next-output targets`));
+    expect(countRows('generation_jobs')).toBe(0);
+  });
+
+  it('resolves every selected source independently before a multi-source job is persisted', () => {
+    const lineage = setupSelectedLineage('node-target-multi-source');
+    updateSelectedAsset(defaultProject, {
+      assetIds: [lineage.selectedId, lineage.otherId],
+      confirmWrite: true,
+      mode: 'replace',
+      rootAssetId: lineage.rootId,
+    });
+    const database = lineageDb();
+    try {
+      writeNodeNextOutputTargetSetting(database, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.selectedId,
+        expectedRevision: null,
+        targets: [{ kind: 'custom', width: 1200, height: 628 }],
+        provenance: { actor: 'agent', origin: 'cli' },
+      });
+      writeNodeNextOutputTargetSetting(database, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.otherId,
+        expectedRevision: null,
+        targets: [{ kind: 'delivery_surface', surface_id: 'instagram.feed_portrait', surface_version: 1 }],
+        provenance: { actor: 'human', origin: 'canvas' },
+      });
+    } finally {
+      database.close();
+    }
+    const plan = planImageGeneration(defaultProject, {
+      prompt: 'Respect each selected source geometry.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+      variantsPerTarget: 2,
+    });
+    expect(plan.job.source_target_resolutions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parent_asset_id: lineage.selectedId,
+        resolved_targets: [expect.objectContaining({ width: 1200, height: 628 })],
+      }),
+      expect.objectContaining({
+        parent_asset_id: lineage.otherId,
+        resolved_targets: [expect.objectContaining({ width: 1080, height: 1440 })],
+      }),
+    ]));
+    expect(plan.job.target_plan?.slots).toHaveLength(4);
+    expect(plan.job.target_plan?.slots.filter(slot => slot.parent_asset_id === lineage.selectedId)).toHaveLength(2);
+    expect(plan.job.target_plan?.slots.filter(slot => slot.parent_asset_id === lineage.otherId)).toHaveLength(2);
+  });
+
+  it('cancels a planned locked job idempotently and permanently rejects import', async () => {
+    const lineage = setupSelectedLineage('node-target-cancel');
+    const database = lineageDb();
+    try {
+      writeNodeNextOutputTargetSetting(database, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.selectedId,
+        expectedRevision: null,
+        targets: [{ kind: 'custom', width: 32, height: 24 }],
+        provenance: { actor: 'agent', origin: 'cli' },
+      });
+    } finally {
+      database.close();
+    }
+    const plan = planImageGeneration(defaultProject, {
+      prompt: 'Plan a cancellable locked variation.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+    });
+    expect(cancelImageGeneration(defaultProject, { jobId: plan.job.id, confirmWrite: true }).job.status).toBe('cancelled');
+    expect(cancelImageGeneration(defaultProject, { jobId: plan.job.id, confirmWrite: true })).toMatchObject({
+      idempotent: true,
+      job: { status: 'cancelled' },
+    });
+    const output = await writeRaster('imports/cancelled-node-target.png', 32, 24);
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [output]),
+    })).toThrow(/not importable from status: cancelled/i);
+  });
+
+  it('atomically initializes each imported child with only its produced geometry', async () => {
+    const lineage = setupSelectedLineage('node-target-child');
+    const database = lineageDb();
+    try {
+      writeNodeNextOutputTargetSetting(database, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.selectedId,
+        expectedRevision: null,
+        targets: [
+          { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+          { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1 },
+          { kind: 'custom', width: 1200, height: 628 },
+        ],
+        provenance: { actor: 'human', origin: 'canvas' },
+      });
+    } finally {
+      database.close();
+    }
+    const plan = planImageGeneration(defaultProject, {
+      prompt: 'Create one output for each produced geometry.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+    });
+    expect(plan.job.expected_output_count).toBe(2);
+    const files = await Promise.all(plan.job.target_plan!.slots.map((slot, index) =>
+      writeRaster(
+        `imports/node-target-child-${index}.png`,
+        slot.output_spec!.width,
+        slot.output_spec!.height,
+      )));
+    const imported = importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, files),
+    });
+    const childDatabase = lineageDb();
+    try {
+      const children = imported.imported.map(output =>
+        readNodeNextOutputTargetSetting(childDatabase, defaultProject, lineage.rootId, output.imported_asset_id));
+      expect(children).toHaveLength(2);
+      expect(children.map(setting => setting?.resolved_targets.map(target => `${target.width}x${target.height}`))).toEqual([
+        ['1200x628'],
+        ['1080x1920'],
+      ]);
+      expect(children[0]?.resolved_targets[0].delivery_surfaces).toEqual([]);
+      expect(children[1]?.resolved_targets[0].delivery_surfaces.map(surface => surface.id)).toEqual([
+        'facebook.story',
+        'instagram.story',
+      ]);
+    } finally {
+      childDatabase.close();
     }
   });
 
@@ -1041,6 +1274,7 @@ describe('generation receipts', () => {
     expect(countRows('assets', `where id in ('${validId}', '${wrongId}')`)).toBe(0);
     expect(countRows('asset_edges', `where child_asset_id in ('${validId}', '${wrongId}')`)).toBe(0);
     expect(countRows('asset_output_specs', `where generation_job_id = '${plan.job.id}'`)).toBe(0);
+    expect(countRows('node_next_output_target_settings', `where node_asset_id in ('${validId}', '${wrongId}')`)).toBe(0);
     expect(getLineageSnapshot(defaultProject, lineage.rootId).selected).toEqual([lineage.selectedId]);
   });
 
@@ -1078,6 +1312,7 @@ describe('generation receipts', () => {
     expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(0);
     expect(countRows('asset_edges', `where child_asset_id = '${outputAssetId}'`)).toBe(0);
     expect(countRows('generation_job_outputs', `where job_id = '${plan.job.id}'`)).toBe(0);
+    expect(countRows('node_next_output_target_settings', `where node_asset_id = '${outputAssetId}'`)).toBe(0);
     expect(inspectImageGeneration(defaultProject, plan.job.id).job.status).toBe('planned');
   });
 

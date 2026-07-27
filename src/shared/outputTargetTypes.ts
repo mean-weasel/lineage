@@ -1,5 +1,6 @@
 export const OUTPUT_TARGET_REGISTRY_SCHEMA = 'lineage.output_target_registry.v1' as const;
 export const GENERATION_TARGET_MAP_SCHEMA = 'lineage.generation_target_map.v1' as const;
+export const NODE_NEXT_OUTPUT_TARGETS_SCHEMA = 'lineage.node_next_output_targets.v1' as const;
 
 type OutputTargetMediaKind = 'static_image';
 type OutputTargetLifecycle = 'active' | 'deprecated' | 'removed';
@@ -115,6 +116,63 @@ export interface ResolvedGenerationTargetPlan extends CanonicalGenerationTargetM
   groups: ResolvedTargetGroup[];
   slots: GenerationOutputSlot[];
   expected_output_count: number;
+}
+
+export type NodeNextOutputTarget =
+  | { kind: 'delivery_surface'; surface_id: string; surface_version: number }
+  | { kind: 'custom'; width: number; height: number };
+
+export interface ResolvedNodeNextOutputTarget {
+  media_kind: OutputTargetMediaKind;
+  width: number;
+  height: number;
+  geometry?: GeometryProfileSnapshot;
+  custom_geometry?: GeometryProfileSnapshot;
+  delivery_surfaces: DeliverySurfaceSnapshot[];
+}
+
+export type NodeNextOutputTargetOrigin = 'node_override' | 'derived_child' | 'canvas_default' | 'unresolved';
+
+export interface NodeNextOutputTargetSetting {
+  schema_version: typeof NODE_NEXT_OUTPUT_TARGETS_SCHEMA;
+  project_id: string;
+  root_asset_id: string;
+  node_asset_id: string;
+  revision: number;
+  targets: NodeNextOutputTarget[];
+  resolved_targets: ResolvedNodeNextOutputTarget[];
+  provenance: {
+    actor: 'human' | 'agent' | 'system';
+    origin: 'canvas' | 'cli' | 'derived_child';
+  };
+  digest_sha256: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EffectiveNodeNextOutputTargets {
+  schema_version: typeof NODE_NEXT_OUTPUT_TARGETS_SCHEMA;
+  project_id: string;
+  root_asset_id: string;
+  node_asset_id: string;
+  origin: NodeNextOutputTargetOrigin;
+  targets: NodeNextOutputTarget[];
+  resolved_targets: ResolvedNodeNextOutputTarget[];
+  setting_revision?: number;
+  setting_digest_sha256?: string;
+  canvas_default_digest_sha256?: string;
+  resolution_digest_sha256: string;
+}
+
+export interface GenerationJobSourceTargetResolution {
+  parent_asset_id: string;
+  origin: Exclude<NodeNextOutputTargetOrigin, 'unresolved'>;
+  setting_revision?: number;
+  setting_digest_sha256?: string;
+  canvas_default_digest_sha256?: string;
+  resolution_digest_sha256: string;
+  targets: NodeNextOutputTarget[];
+  resolved_targets: ResolvedNodeNextOutputTarget[];
 }
 
 export interface OutputTargetChoice {

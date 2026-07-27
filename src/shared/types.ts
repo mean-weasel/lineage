@@ -479,7 +479,8 @@ export interface LineageBriefResponse {
   };
   fetchedAt: string;
 }
-export type { GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider, GenerationSourceMode } from './generationTypes';
+export type { GenerationCancelResponse, GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider, GenerationSourceMode } from './generationTypes';
+export type { EffectiveNodeNextOutputTargets, GenerationJobSourceTargetResolution, NodeNextOutputTarget, NodeNextOutputTargetSetting, ResolvedNodeNextOutputTarget } from './outputTargetTypes';
 export type { LineageWorkspace, LineageWorkspaceActor, LineageWorkspaceFields, LineageWorkspaceSnapshot, LineageWorkspaceStatus, LineageWorkspaceUpdateFields } from './lineageWorkspaceTypes';
 
 type AgentClaimScopeType = 'lineage_workspace' | 'lineage_task' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';
