@@ -23,6 +23,12 @@ type AssetNodeData = LineageNode & {
   replayState?: 'entering' | 'future' | 'visible';
   sourcePosition: Position;
   targetPosition: Position;
+  generation_target?: {
+    destinations: string[];
+    dimensions?: string;
+    imported: boolean;
+    locked: boolean;
+  };
 } & Record<string, unknown>;
 export type AssetFlowNode = Node<AssetNodeData, 'assetNode'>;
 
@@ -120,6 +126,18 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
           ))}
           {data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll && <span className="reroll">re-roll</span>}
           {data.social_mark?.active && <span className="social">social</span>}
+          {data.generation_target && (
+            <span
+              className={`output-target ${data.generation_target.locked ? 'locked' : 'unlocked'}`}
+              title={[
+                data.generation_target.locked ? data.generation_target.dimensions : 'No pixel lock',
+                ...data.generation_target.destinations,
+                data.generation_target.imported ? 'imported' : 'planned',
+              ].filter(Boolean).join(' · ')}
+            >
+              {data.generation_target.locked ? `locked ${data.generation_target.dimensions}` : 'explicitly unlocked'}
+            </span>
+          )}
         </div>
         <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
     </div>

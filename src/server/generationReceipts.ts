@@ -1,14 +1,44 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { defaultProject, repoRoot } from './assetCore';
-import { getLineageNextAsset, getLineageSnapshot, indexLineageAssets, listLineageRerollRequests, recordLineageRerollAttempt } from './assetLineage';
+import {
+  getLineageNextAsset,
+  getLineageSnapshot,
+  indexImportedLineageAssetInTransaction,
+  indexLineageAssets,
+  listLineageRerollRequests,
+  recordLineageRerollAttempt,
+  recordLineageRerollAttemptInTransaction,
+} from './assetLineage';
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
-import { cancelLineageIterateTasksForAssets, listLineageTasks, resolveLineageTask } from './assetLineageTasks';
+import {
+  cancelLineageIterateTasksForAssets,
+  cancelPendingLineageIterateTasksInTransaction,
+  listLineageTasks,
+  resolvePendingLineageRerollTaskInTransaction,
+  resolveLineageTask,
+} from './assetLineageTasks';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
 import { lineageCliCommand } from './lineageRuntimeCommand';
-import { createGenerationOutputManifestDraft, parseGenerationOutputManifest, type GenerationOutputManifest } from '../shared/generationOutputManifest';
+import {
+  createGenerationOutputManifestDraft,
+  generationOutputSpecDigest,
+  parseGenerationOutputManifest,
+  type GenerationOutputManifest,
+} from '../shared/generationOutputManifest';
+import type { GenerationTargetMap } from '../shared/outputTargetTypes';
+import type { ResolvedGenerationTargetPlan } from '../shared/outputTargetTypes';
+import { generationTargetMapFromShorthand, type OutputTargetShorthand } from '../shared/generationTargetMap';
+import { planGenerationTargets } from './generationTargetPlanning';
+import {
+  loadAssetOutputSpec,
+  loadGenerationTargetPlan,
+  persistAssetOutputSpec,
+  persistTargetAwareGenerationAggregate,
+} from './generationTargetPersistence';
+import { readStaticImageMetadata, type StaticImageMetadata } from './staticImageMetadata';
 import type {
   GenerationHandoffPacket,
   GenerationImportResponse,
@@ -86,15 +116,28 @@ function buildHandoff(
   perBaseCount: number,
   next: LineageNextResponse,
   inputs: GenerationJobInput[],
+  targetOutputParents?: string[],
+  targetPlan?: NonNullable<GenerationJob['target_plan']>,
 ): GenerationHandoffPacket {
   const parent = next.next_asset;
   if (!parent) throw new GenerationReceiptError('Missing lineage next base');
-  const parents = parentMappings(next, perBaseCount);
-  const outputManifest = createGenerationOutputManifestDraft({ id, expected_output_count: count, inputs });
+  const parents = targetOutputParents
+    ? selectedParents(next).map(parent => ({
+      parent,
+      output_indexes: targetOutputParents.flatMap((assetId, index) => assetId === parent.asset_id ? [index] : []),
+    }))
+    : parentMappings(next, perBaseCount);
+  const outputManifest = createGenerationOutputManifestDraft({
+    id,
+    expected_output_count: count,
+    inputs,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
+  });
   const importCommand = lineageCliCommand(`generate image import --project ${quote(project)} --job-id ${quote(id)} --manifest ${quote('.asset-scratch/generation-output-manifest.json')} --confirm-write`);
   return {
-    schema_version: 'lineage.generation_handoff.v2', provider, project, job_id: id, prompt, expected_output_count: count,
-    per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,
+    schema_version: targetPlan ? 'lineage.generation_handoff.v3' : 'lineage.generation_handoff.v2',
+    provider, project, job_id: id, prompt, expected_output_count: count,
+    per_base_count: !targetPlan && next.selection_mode === 'multiple' ? perBaseCount : undefined,
     lineage: {
       root_asset_id: next.root_asset_id, parent_asset_id: parent.asset_id, selection_strategy: next.strategy,
       parent_title: parent.title, parent_local_path: parent.local_path, parent_s3_key: parent.s3_key,
@@ -112,14 +155,31 @@ function buildHandoff(
     ],
     import_command: importCommand,
     output_manifest: outputManifest,
+    ...(targetPlan ? {
+      target_resolution: {
+        map: targetPlan.map,
+        digest_sha256: targetPlan.digest_sha256,
+        groups: targetPlan.groups,
+        slots: targetPlan.slots,
+        expected_output_count: targetPlan.expected_output_count,
+      },
+    } : {}),
     guardrails: { live_generation: false, external_services: false, output_root: '.asset-scratch', confirm_write_required: true },
   };
 }
 
-function buildRerollHandoff(project: string, id: string, prompt: string, rootAssetId: string, target: { asset_id: string; title: string; local_path?: string; s3_key?: string }, request: LineageRerollRequest): GenerationHandoffPacket {
+function buildRerollHandoff(
+  project: string,
+  id: string,
+  prompt: string,
+  rootAssetId: string,
+  target: { asset_id: string; title: string; local_path?: string; s3_key?: string },
+  request: LineageRerollRequest,
+  targetPlan?: ResolvedGenerationTargetPlan,
+): GenerationHandoffPacket {
   const importCommand = lineageCliCommand(`reroll import --project ${quote(project)} --job-id ${quote(id)} --file <.asset-scratch-file> --confirm-write`);
   return {
-    schema_version: 'lineage.generation_handoff.v1',
+    schema_version: targetPlan ? 'lineage.generation_handoff.v3' : 'lineage.generation_handoff.v1',
     provider,
     project,
     job_id: id,
@@ -139,9 +199,75 @@ function buildRerollHandoff(project: string, id: string, prompt: string, rootAss
       'Do not call live provider APIs from the CLI or server.',
       'Import exactly one output with reroll import, not link-child or generate image import.',
       `Resolve re-roll request ${request.id}; do not create a visible lineage child edge.`,
+      ...(targetPlan?.slots[0]?.output_spec
+        ? [`The inherited output lock is immutable: ${targetPlan.slots[0].output_spec.width}x${targetPlan.slots[0].output_spec.height} pixels.`]
+        : []),
     ],
     import_command: importCommand,
+    ...(targetPlan ? {
+      target_resolution: {
+        map: targetPlan.map,
+        digest_sha256: targetPlan.digest_sha256,
+        groups: targetPlan.groups,
+        slots: targetPlan.slots,
+        expected_output_count: targetPlan.expected_output_count,
+      },
+    } : {}),
     guardrails: { live_generation: false, external_services: false, output_root: '.asset-scratch', confirm_write_required: true },
+  };
+}
+
+function inheritedRerollTargetPlan(
+  generationJobId: string,
+  targetAssetId: string,
+  inherited: NonNullable<ReturnType<typeof loadAssetOutputSpec>>,
+): ResolvedGenerationTargetPlan {
+  const sourceSpec = inherited.output_spec;
+  const targets: GenerationTargetMap['sources'][number]['targets'] = sourceSpec.delivery_surfaces.length > 0
+    ? sourceSpec.delivery_surfaces.map(surface => ({
+      kind: 'delivery_surface' as const,
+      surface_id: surface.id,
+      surface_version: surface.version,
+    }))
+    : [{ kind: 'custom', width: sourceSpec.width, height: sourceSpec.height }];
+  const map: GenerationTargetMap = {
+    schema_version: 'lineage.generation_target_map.v1',
+    sources: [{ asset_id: targetAssetId, default_variant_count: 1, targets }],
+  };
+  const canonicalJson = JSON.stringify(map);
+  const digest = createHash('sha256').update(canonicalJson).digest('hex');
+  const groupId = `${generationJobId}:target-group:inherited`;
+  const outputSpec = structuredClone(sourceSpec);
+  outputSpec.target_group_id = groupId;
+  outputSpec.variant_index = 0;
+  return {
+    canonical_json: canonicalJson,
+    digest_sha256: digest,
+    expected_output_count: 1,
+    groups: [{
+      id: groupId,
+      parent_asset_id: targetAssetId,
+      media_kind: 'static_image',
+      width: sourceSpec.width,
+      height: sourceSpec.height,
+      ...(sourceSpec.geometry ? { geometry: structuredClone(sourceSpec.geometry) } : {}),
+      ...(sourceSpec.custom_geometry ? { custom_geometry: structuredClone(sourceSpec.custom_geometry) } : {}),
+      delivery_surfaces: structuredClone(sourceSpec.delivery_surfaces),
+      grouping_mode: sourceSpec.grouping_mode,
+      variant_count: 1,
+      target_map_digest: digest,
+      guidance: sourceSpec.delivery_surfaces.flatMap(surface => surface.guidance),
+      unlocked: false,
+    }],
+    map,
+    slots: [{
+      id: `${generationJobId}:output-slot:0`,
+      group_id: groupId,
+      parent_asset_id: targetAssetId,
+      output_index: 0,
+      variant_index: 0,
+      output_spec: outputSpec,
+    }],
   };
 }
 
@@ -206,6 +332,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
   }));
   const outputs = (database.prepare('select * from generation_job_outputs where job_id = ? order by output_index').all(id) as Array<Record<string, unknown>>).map(outputFrom);
   const receipts = (database.prepare('select * from generation_job_receipts where job_id = ? order by created_at, id').all(id) as Array<Record<string, unknown>>).map(receiptFrom);
+  const targetPlan = loadGenerationTargetPlan(database, id);
   return {
     id: String(row.id),
     project_id: String(row.project_id),
@@ -221,6 +348,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     imported_at: typeof row.imported_at === 'string' ? row.imported_at : undefined,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
     inputs,
     outputs,
     receipts,
@@ -234,27 +362,57 @@ function insertReceipt(database: DatabaseSync, id: string, type: 'plan' | 'impor
   `).run(`${id}:receipt:${type}:${Date.now()}`, id, type, command, JSON.stringify(payload), nowIso());
 }
 
-export function planImageGeneration(project = defaultProject, fields: { prompt: string; count?: number; dryRun?: boolean; fromLineageSelection: boolean; perBaseCount?: number }): GenerationPlanResponse {
+export function planImageGeneration(project = defaultProject, fields: {
+  prompt: string;
+  count?: number;
+  dryRun?: boolean;
+  fromLineageSelection: boolean;
+  perBaseCount?: number;
+  targetMap?: GenerationTargetMap;
+  targetShorthand?: OutputTargetShorthand;
+}): GenerationPlanResponse {
   const prompt = fields.prompt.trim();
   if (!prompt) throw new GenerationReceiptError('Missing --prompt');
   if (!fields.fromLineageSelection) throw new GenerationReceiptError('Generation v1 requires --from-lineage-selection');
   const next = resolveLineageSelection(project);
   const parentCount = selectedParents(next).length;
-  if (parentCount > 1 && !positiveInteger(fields.perBaseCount)) throw new GenerationReceiptError('Multi-parent generation requires --per-base-count');
-  const perBaseCount = parentCount > 1 ? Number(fields.perBaseCount) : Number(fields.count ?? fields.perBaseCount);
-  const count = parentCount * perBaseCount;
-  if (!positiveInteger(perBaseCount)) throw new GenerationReceiptError('Generation count must be a positive integer');
-  if (fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
   const id = jobId();
   const inputs = inputsFrom(id, project, next);
-  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs);
-  const mappings = parentMappings(next, perBaseCount).map(mapping => ({ parent_asset_id: mapping.parent.asset_id, output_indexes: mapping.output_indexes }));
+  const shorthandRequested = fields.targetShorthand !== undefined;
+  if (fields.targetMap && shorthandRequested) {
+    throw new GenerationReceiptError('Use --target-map or destination/custom-dimension flags, not both');
+  }
+  if (shorthandRequested && inputs.length !== 1) {
+    throw new GenerationReceiptError('Target-aware multi-source generation requires --target-map with an explicit mapping for every selected source');
+  }
+  const targetMap = fields.targetMap ?? (shorthandRequested
+    ? generationTargetMapFromShorthand(inputs[0].asset_id, fields.targetShorthand ?? {})
+    : undefined);
+  const targetPlan = targetMap
+    ? planGenerationTargets({ jobId: id, sourceAssetIds: inputs.map(input => input.asset_id), targetMap })
+    : undefined;
+  if (targetPlan && (fields.count !== undefined || fields.perBaseCount !== undefined)) {
+    throw new GenerationReceiptError('Target-aware generation does not accept legacy --count or --per-base-count; use --variants-per-target or target-map variant_count');
+  }
+  if (!targetPlan && parentCount > 1 && !positiveInteger(fields.perBaseCount)) throw new GenerationReceiptError('Multi-parent generation requires --per-base-count');
+  const perBaseCount = targetPlan ? 1 : parentCount > 1 ? Number(fields.perBaseCount) : Number(fields.count ?? fields.perBaseCount);
+  const count = targetPlan?.expected_output_count ?? parentCount * perBaseCount;
+  if (!targetPlan && !positiveInteger(perBaseCount)) throw new GenerationReceiptError('Generation count must be a positive integer');
+  if (!targetPlan && fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
+  const targetOutputParents = targetPlan?.slots.map(slot => slot.parent_asset_id);
+  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs, targetOutputParents, targetPlan);
+  const mappings = targetPlan
+    ? selectedParents(next).map(parent => ({
+      parent_asset_id: parent.asset_id,
+      output_indexes: targetPlan.slots.filter(slot => slot.parent_asset_id === parent.asset_id).map(slot => slot.output_index),
+    }))
+    : parentMappings(next, perBaseCount).map(mapping => ({ parent_asset_id: mapping.parent.asset_id, output_indexes: mapping.output_indexes }));
   const timestamp = nowIso();
   const preview: GenerationJob = {
     id,
     project_id: project,
     provider,
-    adapter_version: manifestAdapterVersion,
+    adapter_version: targetPlan ? 'generation-receipts-v3' : manifestAdapterVersion,
     source_mode: 'lineage_selection',
     root_asset_id: next.root_asset_id,
     prompt,
@@ -264,6 +422,7 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
     handoff,
     created_at: timestamp,
     updated_at: timestamp,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
     inputs,
     outputs: [],
     receipts: [{
@@ -272,7 +431,18 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
       receipt_type: 'plan',
       status: 'ok',
       command: 'generate image plan',
-      payload: { prompt, expected_output_count: count, per_base_count: parentCount > 1 ? perBaseCount : undefined, lineage: handoff.lineage, parent_mappings: mappings },
+      payload: {
+        prompt,
+        expected_output_count: count,
+        per_base_count: !targetPlan && parentCount > 1 ? perBaseCount : undefined,
+        lineage: handoff.lineage,
+        parent_mappings: mappings,
+        ...(targetPlan ? {
+          target_map_digest: targetPlan.digest_sha256,
+          target_groups: targetPlan.groups,
+          output_slots: targetPlan.slots,
+        } : {}),
+      },
       created_at: timestamp,
     }],
   };
@@ -280,6 +450,35 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
 
   const database = lineageDb();
   try {
+    if (targetPlan) {
+      persistTargetAwareGenerationAggregate(database, {
+        job: {
+          id,
+          project_id: project,
+          provider,
+          adapter_version: 'generation-receipts-v3',
+          source_mode: 'lineage_selection',
+          root_asset_id: next.root_asset_id,
+          prompt,
+          expected_output_count: count,
+          status: 'planned',
+          output_dir: '.asset-scratch',
+          handoff,
+          created_at: timestamp,
+          updated_at: timestamp,
+          inputs,
+        },
+        inputs,
+        plan: targetPlan,
+        receipt: {
+          id: `${id}:receipt:plan:${Date.now()}`,
+          command: 'generate image plan',
+          payload: preview.receipts[0].payload,
+          created_at: timestamp,
+        },
+      });
+      return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(database, project, id) };
+    }
     database.exec('BEGIN IMMEDIATE');
     try {
       database.prepare(`
@@ -302,7 +501,13 @@ export function planImageGeneration(project = defaultProject, fields: { prompt: 
   }
 }
 
-export function planImageReroll(project = defaultProject, fields: { rootAssetId: string; targetAssetId: string; prompt: string; dryRun?: boolean }): GenerationPlanResponse {
+export function planImageReroll(project = defaultProject, fields: {
+  rootAssetId: string;
+  targetAssetId: string;
+  prompt: string;
+  dryRun?: boolean;
+  requestedDimensions?: { height: number; width: number };
+}): GenerationPlanResponse {
   const prompt = fields.prompt.trim();
   if (!prompt) throw new GenerationReceiptError('Missing --prompt');
   if (!fields.rootAssetId) throw new GenerationReceiptError('Missing --root');
@@ -314,7 +519,132 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
   if (!request) throw new GenerationReceiptError(`No pending re-roll request for ${fields.targetAssetId}`);
   const id = jobId();
   const timestamp = nowIso();
-  const handoff = buildRerollHandoff(project, id, prompt, snapshot.root_asset_id, target, request);
+  const specDatabase = lineageDb();
+  let inheritedSpec: ReturnType<typeof loadAssetOutputSpec>;
+  try {
+    inheritedSpec = loadAssetOutputSpec(specDatabase, target.asset_id);
+  } finally {
+    specDatabase.close();
+  }
+  if (
+    inheritedSpec
+    && fields.requestedDimensions
+    && (
+      fields.requestedDimensions.width !== inheritedSpec.output_spec.width
+      || fields.requestedDimensions.height !== inheritedSpec.output_spec.height
+    )
+  ) {
+    const variationMap: GenerationTargetMap = {
+      schema_version: 'lineage.generation_target_map.v1',
+      sources: [{
+        asset_id: target.asset_id,
+        targets: [{
+          kind: 'custom',
+          width: fields.requestedDimensions.width,
+          height: fields.requestedDimensions.height,
+        }],
+      }],
+    };
+    const variationPlan = planGenerationTargets({
+      jobId: id,
+      sourceAssetIds: [target.asset_id],
+      targetMap: variationMap,
+    });
+    if (!variationPlan) throw new GenerationReceiptError('Geometry-change variation requires a locked target plan');
+    const next: LineageNextResponse = {
+      project,
+      root_asset_id: snapshot.root_asset_id,
+      strategy: 'selected',
+      selection_mode: 'single',
+      recommended_action: 'evolve_variations',
+      reason: 'user_selected',
+      next_asset: target,
+      next_assets: [target],
+      latest: snapshot.latest,
+      selected: [target.asset_id],
+      selection: null,
+      selections: [],
+      candidates: snapshot.nodes,
+      warnings: ['Geometry changes create a child variation; the locked source node is unchanged.'],
+      fetchedAt: timestamp,
+    };
+    const variationInput = inputsFrom(id, project, next)[0];
+    const handoff = buildHandoff(project, id, prompt, 1, 1, next, [variationInput], [target.asset_id], variationPlan);
+    const preview: GenerationJob = {
+      id,
+      project_id: project,
+      provider,
+      adapter_version: 'generation-receipts-v3',
+      source_mode: 'lineage_selection',
+      root_asset_id: snapshot.root_asset_id,
+      prompt,
+      expected_output_count: 1,
+      status: 'planned',
+      output_dir: '.asset-scratch',
+      handoff,
+      created_at: timestamp,
+      updated_at: timestamp,
+      target_plan: variationPlan,
+      inputs: [variationInput],
+      outputs: [],
+      receipts: [{
+        id: `${id}:receipt:plan:preview`,
+        job_id: id,
+        receipt_type: 'plan',
+        status: 'ok',
+        command: 'generate image plan',
+        payload: {
+          geometry_change: {
+            from: {
+              height: inheritedSpec.output_spec.height,
+              width: inheritedSpec.output_spec.width,
+            },
+            representation: 'child_variation',
+            to: structuredClone(fields.requestedDimensions),
+          },
+          target_groups: variationPlan.groups,
+        },
+        created_at: timestamp,
+      }],
+    };
+    if (fields.dryRun) {
+      return { ok: true, command: 'generate image plan', project, dryRun: true, wouldWrite: true, job: preview };
+    }
+    const variationDatabase = lineageDb();
+    try {
+      persistTargetAwareGenerationAggregate(variationDatabase, {
+        job: {
+          id,
+          project_id: project,
+          provider,
+          adapter_version: 'generation-receipts-v3',
+          source_mode: 'lineage_selection',
+          root_asset_id: snapshot.root_asset_id,
+          prompt,
+          expected_output_count: 1,
+          status: 'planned',
+          output_dir: '.asset-scratch',
+          handoff,
+          created_at: timestamp,
+          updated_at: timestamp,
+          inputs: [variationInput],
+        },
+        inputs: [variationInput],
+        plan: variationPlan,
+        receipt: {
+          id: `${id}:receipt:plan:${Date.now()}`,
+          command: 'generate image plan',
+          payload: preview.receipts[0].payload,
+          created_at: timestamp,
+        },
+      });
+      return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(variationDatabase, project, id) };
+    } finally {
+      variationDatabase.close();
+    }
+  }
+  const targetPlan = inheritedSpec ? inheritedRerollTargetPlan(id, target.asset_id, inheritedSpec) : undefined;
+  const handoff = buildRerollHandoff(project, id, prompt, snapshot.root_asset_id, target, request, targetPlan);
   const input: GenerationJobInput = {
     id: `${id}:input:0`,
     job_id: id,
@@ -346,7 +676,7 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
     id,
     project_id: project,
     provider,
-    adapter_version: legacyAdapterVersion,
+    adapter_version: targetPlan ? 'generation-receipts-v3' : legacyAdapterVersion,
     source_mode: 'lineage_reroll',
     root_asset_id: snapshot.root_asset_id,
     prompt,
@@ -356,6 +686,7 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
     handoff,
     created_at: timestamp,
     updated_at: timestamp,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
     inputs: [input],
     outputs: [],
     receipts: [{
@@ -364,13 +695,51 @@ export function planImageReroll(project = defaultProject, fields: { rootAssetId:
       receipt_type: 'plan',
       status: 'ok',
       command: 'reroll plan',
-      payload: { prompt, expected_output_count: 1, lineage: handoff.lineage, reroll_request_id: request.id },
+      payload: {
+        prompt,
+        expected_output_count: 1,
+        lineage: handoff.lineage,
+        reroll_request_id: request.id,
+        ...(targetPlan ? {
+          inherited_output_spec_digest: inheritedSpec?.output_spec_digest,
+          target_groups: targetPlan.groups,
+        } : {}),
+      },
       created_at: timestamp,
     }],
   };
   if (fields.dryRun) return { ok: true, command: 'reroll plan', project, dryRun: true, wouldWrite: true, job: preview };
   const database = lineageDb();
   try {
+    if (targetPlan) {
+      persistTargetAwareGenerationAggregate(database, {
+        job: {
+          id,
+          project_id: project,
+          provider,
+          adapter_version: 'generation-receipts-v3',
+          source_mode: 'lineage_reroll',
+          root_asset_id: snapshot.root_asset_id,
+          prompt,
+          expected_output_count: 1,
+          status: 'planned',
+          output_dir: '.asset-scratch',
+          handoff,
+          created_at: timestamp,
+          updated_at: timestamp,
+          inputs: [input],
+        },
+        inputs: [input],
+        plan: targetPlan,
+        receipt: {
+          id: `${id}:receipt:plan:${Date.now()}`,
+          command: 'reroll plan',
+          payload: preview.receipts[0].payload,
+          created_at: timestamp,
+        },
+      });
+      return { ok: true, command: 'reroll plan', project, job: loadGenerationJob(database, project, id) };
+    }
     database.exec('BEGIN IMMEDIATE');
     try {
       database.prepare(`
@@ -461,7 +830,14 @@ function resolveScratchManifestPath(file: string): string {
   return relative(scratchRoot, candidate);
 }
 
-function resolveScratchFile(file: string): { relativePath: string; checksum: string; size: number; contentType: string; assetId: string } {
+function resolveScratchFile(file: string): {
+  absolutePath: string;
+  relativePath: string;
+  checksum: string;
+  size: number;
+  contentType: string;
+  assetId: string;
+} {
   const { candidate, scratchRoot } = scratchCandidate(file);
   if (!existsSync(candidate)) throw new GenerationReceiptError(`Missing import file: ${file}`, 404);
   const realScratchRoot = realpathSync(scratchRoot);
@@ -471,6 +847,7 @@ function resolveScratchFile(file: string): { relativePath: string; checksum: str
   if (!stats.isFile()) throw new GenerationReceiptError(`Import path is not a file: ${file}`);
   const checksum = fileSha256(candidate);
   return {
+    absolutePath: realCandidate,
     relativePath: relative(scratchRoot, candidate),
     checksum,
     size: stats.size,
@@ -495,12 +872,20 @@ function confirmManifestRetry(project: string, job: GenerationJob, manifest: Gen
   try {
     for (const expected of manifest.outputs) {
       const recorded = job.outputs.find(output => output.output_index === expected.output_index);
+      const current = resolveScratchFile(expected.file_path);
       if (
         !recorded
         || recorded.file_path !== expected.file_path
         || recorded.parent_asset_id !== expected.parent_asset_id
         || recorded.edge_summary !== expected.edge_summary
+        || recorded.checksum_sha256 !== current.checksum
+        || recorded.size_bytes !== current.size
       ) generationManifestConflict();
+      const slot = job.target_plan?.slots.find(candidate => candidate.output_index === expected.output_index);
+      if (slot?.output_spec) {
+        const metadata = readStaticImageMetadata(current.absolutePath);
+        if (metadata.width !== slot.output_spec.width || metadata.height !== slot.output_spec.height) generationManifestConflict();
+      }
       const edge = database.prepare(`
         select summary, summary_created_by, summary_updated_by, summary_updated_at
         from asset_edges
@@ -546,8 +931,8 @@ export function importImageGenerationOutputs(
 
   let manifest: GenerationOutputManifest | undefined;
   let parentFileRows: GenerationImportRow[];
-  let mappingStrategy: 'generation_output_manifest_v1' | 'explicit_parent_files' | 'ordered_per_base';
-  if (job.adapter_version === manifestAdapterVersion) {
+  let mappingStrategy: 'generation_output_manifest_v1' | 'generation_output_manifest_v2' | 'explicit_parent_files' | 'ordered_per_base';
+  if (job.adapter_version === manifestAdapterVersion || job.adapter_version === 'generation-receipts-v3') {
     if (!hasManifestInput) throw new GenerationReceiptError('New generation jobs require --manifest');
     manifest = parseGenerationOutputManifest(fields.manifest, job, { resolveFilePath: resolveScratchManifestPath });
     if (job.status === 'imported') return confirmManifestRetry(project, job, manifest);
@@ -557,7 +942,9 @@ export function importImageGenerationOutputs(
       file: output.file_path,
       parentAssetId: output.parent_asset_id,
     }));
-    mappingStrategy = 'generation_output_manifest_v1';
+    mappingStrategy = job.adapter_version === 'generation-receipts-v3'
+      ? 'generation_output_manifest_v2'
+      : 'generation_output_manifest_v1';
   } else if (job.adapter_version === legacyAdapterVersion) {
     if (hasManifestInput) throw new GenerationReceiptError('Already-planned legacy generation jobs require --files or --parent-files');
     if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
@@ -573,21 +960,67 @@ export function importImageGenerationOutputs(
   if (parentFileRows.length !== job.expected_output_count) {
     throw new GenerationReceiptError(`Output count mismatch: expected ${job.expected_output_count}, received ${parentFileRows.length}`);
   }
-  const resolved = parentFileRows.map(row => ({ ...resolveScratchFile(row.file), edgeSummary: row.edgeSummary, parentAssetId: row.parentAssetId }));
+  const resolved = parentFileRows.map((row, outputIndex) => {
+    const file = resolveScratchFile(row.file);
+    const slot = job.target_plan?.slots.find(candidate => candidate.output_index === outputIndex);
+    let metadata: StaticImageMetadata | undefined;
+    if (slot?.output_spec) {
+      try {
+        metadata = readStaticImageMetadata(file.absolutePath);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new GenerationReceiptError(
+          `Generation job ${job.id} output ${outputIndex} for parent ${row.parentAssetId} `
+          + `target group ${slot.group_id} must decode as PNG, JPEG, or WebP at `
+          + `${slot.output_spec.width}x${slot.output_spec.height}: ${detail}. Replace the file and retry the same import command.`,
+        );
+      }
+      if (metadata.width !== slot.output_spec.width || metadata.height !== slot.output_spec.height) {
+        const destinations = slot.output_spec.delivery_surfaces
+          .map(surface => `${surface.platform} ${surface.surface}`)
+          .join(', ') || 'custom dimensions';
+        throw new GenerationReceiptError(
+          `Generation job ${job.id} output ${outputIndex} for parent ${row.parentAssetId} `
+          + `target group ${slot.group_id} (${destinations}) requires `
+          + `${slot.output_spec.width}x${slot.output_spec.height} pixels, decoded `
+          + `${metadata.width}x${metadata.height}. Replace the file with the exact locked pixels and retry the same import command.`,
+        );
+      }
+    }
+    return {
+      ...file,
+      ...(metadata ? { contentType: metadata.contentType, metadata } : {}),
+      edgeSummary: row.edgeSummary,
+      parentAssetId: row.parentAssetId,
+      slot,
+    };
+  });
   const uniquePaths = new Set(resolved.map(file => file.relativePath));
   if (uniquePaths.size !== resolved.length) throw new GenerationReceiptError('Generation import files must be unique');
-  cancelLineageIterateTasksForAssets(project, {
-    actor: 'system',
-    confirmWrite: false,
-    rootAssetId: job.root_asset_id,
-  });
-  indexLineageAssets(project);
+  const targetAware = job.adapter_version === 'generation-receipts-v3';
+  if (!targetAware) {
+    cancelLineageIterateTasksForAssets(project, {
+      actor: 'system',
+      confirmWrite: false,
+      rootAssetId: job.root_asset_id,
+    });
+    indexLineageAssets(project);
+  }
   const writeDb = lineageDb();
   try {
     const timestamp = nowIso();
     writeDb.exec('BEGIN IMMEDIATE');
     try {
       for (const [index, file] of resolved.entries()) {
+        if (targetAware) {
+          indexImportedLineageAssetInTransaction(writeDb, project, {
+            assetId: file.assetId,
+            checksumSha256: file.checksum,
+            contentType: file.contentType,
+            relativePath: file.relativePath,
+            sizeBytes: file.size,
+          });
+        }
         const assetRow = writeDb.prepare('select id from assets where project_id = ? and id = ?').get(project, file.assetId);
         if (!assetRow) throw new GenerationReceiptError(`Indexed local asset was not found: ${file.relativePath}`);
         const outputId = `${fields.jobId}:output:${index}`;
@@ -628,6 +1061,22 @@ export function importImageGenerationOutputs(
             || edge.summary_updated_at.length === 0
           ) generationManifestConflict();
         }
+        if (targetAware && file.slot?.output_spec && file.metadata) {
+          const digest = generationOutputSpecDigest(file.slot.output_spec);
+          if (!digest) throw new GenerationReceiptError(`Generation output ${index} is missing its locked output specification digest`);
+          persistAssetOutputSpec(writeDb, {
+            actual_height: file.metadata.height,
+            actual_width: file.metadata.width,
+            asset_id: file.assetId,
+            created_at: timestamp,
+            generation_job_id: fields.jobId,
+            output_index: index,
+            output_spec: file.slot.output_spec,
+            output_spec_digest: digest,
+            target_group_id: file.slot.group_id,
+            variant_index: file.slot.variant_index,
+          });
+        }
       }
       writeDb.prepare(`
         update generation_jobs
@@ -641,21 +1090,28 @@ export function importImageGenerationOutputs(
           file_path: file.relativePath,
           imported_asset_id: file.assetId,
           parent_asset_id: file.parentAssetId,
+          ...(file.metadata ? {
+            actual_dimensions: { height: file.metadata.height, width: file.metadata.width },
+            output_spec_digest: generationOutputSpecDigest(file.slot?.output_spec),
+          } : {}),
           ...(file.edgeSummary ? { edge_summary: file.edgeSummary } : {}),
         })),
         selection_reset: { root_asset_id: job.root_asset_id, cleared: true },
       });
       writeDb.prepare('delete from asset_selections where project_id = ? and root_asset_id = ?').run(project, job.root_asset_id);
+      if (targetAware) cancelPendingLineageIterateTasksInTransaction(writeDb, project, job.root_asset_id);
       writeDb.exec('COMMIT');
     } catch (error) {
       writeDb.exec('ROLLBACK');
       throw error;
     }
-    cancelLineageIterateTasksForAssets(project, {
-      actor: 'system',
-      confirmWrite: true,
-      rootAssetId: job.root_asset_id,
-    });
+    if (!targetAware) {
+      cancelLineageIterateTasksForAssets(project, {
+        actor: 'system',
+        confirmWrite: true,
+        rootAssetId: job.root_asset_id,
+      });
+    }
     const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
     return { ok: true, command: 'generate image import', project, job: importedJob, imported: importedJob.outputs };
   } finally {
@@ -673,17 +1129,59 @@ export function importImageRerollOutput(project = defaultProject, fields: { jobI
   } finally {
     database.close();
   }
-  if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
   if (job.source_mode !== 'lineage_reroll') throw new GenerationReceiptError(`Generation job is not a re-roll job: ${job.source_mode}`);
   const target = job.inputs.filter(input => input.role === 'reroll_target');
   if (target.length !== 1) throw new GenerationReceiptError('Re-roll import requires exactly one reroll_target input');
   const resolved = resolveScratchFile(fields.file);
-  indexLineageAssets(project);
+  if (job.status === 'imported') {
+    const recorded = job.outputs[0];
+    if (
+      job.outputs.length === 1
+      && recorded?.file_path === resolved.relativePath
+      && recorded.checksum_sha256 === resolved.checksum
+      && recorded.parent_asset_id === target[0].asset_id
+    ) {
+      return { ok: true, command: 'reroll import', project, job, imported: job.outputs, idempotent: true };
+    }
+    generationManifestConflict();
+  }
+  if (job.status !== 'planned') throw new GenerationReceiptError(`Generation job is not importable from status: ${job.status}`);
+  const lockedSpec = job.target_plan?.slots[0]?.output_spec;
+  let metadata: StaticImageMetadata | undefined;
+  if (lockedSpec) {
+    try {
+      metadata = readStaticImageMetadata(resolved.absolutePath);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new GenerationReceiptError(
+        `Re-roll job ${job.id} for locked node ${target[0].asset_id} must decode as PNG, JPEG, or WebP `
+        + `at ${lockedSpec.width}x${lockedSpec.height}: ${detail}. Replace the file and retry the same import command.`,
+      );
+    }
+    if (metadata.width !== lockedSpec.width || metadata.height !== lockedSpec.height) {
+      throw new GenerationReceiptError(
+        `Re-roll job ${job.id} cannot mutate locked node ${target[0].asset_id} from `
+        + `${lockedSpec.width}x${lockedSpec.height} to ${metadata.width}x${metadata.height}. `
+        + 'Create a child variation for different geometry, or replace the file and retry this re-roll.',
+      );
+    }
+  }
+  const targetAware = Boolean(lockedSpec);
+  if (!targetAware) indexLineageAssets(project);
   const writeDb = lineageDb();
   try {
     const timestamp = nowIso();
     writeDb.exec('BEGIN IMMEDIATE');
     try {
+      if (targetAware) {
+        indexImportedLineageAssetInTransaction(writeDb, project, {
+          assetId: resolved.assetId,
+          checksumSha256: resolved.checksum,
+          contentType: metadata?.contentType || resolved.contentType,
+          relativePath: resolved.relativePath,
+          sizeBytes: resolved.size,
+        });
+      }
       const assetRow = writeDb.prepare('select id from assets where project_id = ? and id = ?').get(project, resolved.assetId);
       if (!assetRow) throw new GenerationReceiptError(`Indexed local asset was not found: ${resolved.relativePath}`);
       const outputId = `${fields.jobId}:output:0`;
@@ -698,31 +1196,55 @@ export function importImageRerollOutput(project = defaultProject, fields: { jobI
       insertReceipt(writeDb, fields.jobId, 'import', 'reroll import', {
         file: { output_index: 0, file_path: resolved.relativePath, imported_asset_id: resolved.assetId, parent_asset_id: target[0].asset_id },
         reroll: { root_asset_id: job.root_asset_id, node_asset_id: target[0].asset_id },
+        ...(metadata ? {
+          actual_dimensions: { height: metadata.height, width: metadata.width },
+          inherited_output_spec_digest: generationOutputSpecDigest(lockedSpec),
+        } : {}),
       });
+      if (targetAware) {
+        recordLineageRerollAttemptInTransaction(writeDb, project, {
+          rootAssetId: job.root_asset_id,
+          nodeAssetId: target[0].asset_id,
+          assetId: resolved.assetId,
+          prompt: job.prompt,
+          generationJobId: fields.jobId,
+          filePath: resolved.relativePath,
+          checksumSha256: resolved.checksum,
+        });
+        resolvePendingLineageRerollTaskInTransaction(writeDb, project, {
+          actor: 'agent',
+          resolvedAssetId: resolved.assetId,
+          resolvedGenerationJobId: fields.jobId,
+          rootAssetId: job.root_asset_id,
+          targetAssetId: target[0].asset_id,
+        });
+      }
       writeDb.exec('COMMIT');
     } catch (error) {
       writeDb.exec('ROLLBACK');
       throw error;
     }
-    recordLineageRerollAttempt(project, {
-      rootAssetId: job.root_asset_id,
-      nodeAssetId: target[0].asset_id,
-      assetId: resolved.assetId,
-      prompt: job.prompt,
-      generationJobId: fields.jobId,
-      filePath: resolved.relativePath,
-      checksumSha256: resolved.checksum,
-      confirmWrite: true,
-    });
-    const rerollTask = listLineageTasks(project, job.root_asset_id).tasks.find(task => task.task_type === 'reroll' && task.target_asset_id === target[0].asset_id);
-    if (rerollTask) {
-      resolveLineageTask(project, {
-        actor: 'agent',
+    if (!targetAware) {
+      recordLineageRerollAttempt(project, {
+        rootAssetId: job.root_asset_id,
+        nodeAssetId: target[0].asset_id,
+        assetId: resolved.assetId,
+        prompt: job.prompt,
+        generationJobId: fields.jobId,
+        filePath: resolved.relativePath,
+        checksumSha256: resolved.checksum,
         confirmWrite: true,
-        resolvedAssetId: resolved.assetId,
-        resolvedGenerationJobId: fields.jobId,
-        taskId: rerollTask.id,
       });
+      const rerollTask = listLineageTasks(project, job.root_asset_id).tasks.find(task => task.task_type === 'reroll' && task.target_asset_id === target[0].asset_id);
+      if (rerollTask) {
+        resolveLineageTask(project, {
+          actor: 'agent',
+          confirmWrite: true,
+          resolvedAssetId: resolved.assetId,
+          resolvedGenerationJobId: fields.jobId,
+          taskId: rerollTask.id,
+        });
+      }
     }
     const importedJob = loadGenerationJob(writeDb, project, fields.jobId);
     return { ok: true, command: 'reroll import', project, job: importedJob, imported: importedJob.outputs };

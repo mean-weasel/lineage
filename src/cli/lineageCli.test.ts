@@ -87,6 +87,8 @@ describe('lineage CLI start options', () => {
     expect(help).toContain('[--schema v2]');
     expect(help).toContain('lineage link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>"');
     expect(help).toContain('lineage generate image plan --prompt <text> --from-lineage-selection');
+    expect(help).toContain('lineage output-targets list --media image [--json]');
+    expect(help).toContain('--target-map <json-file>');
     expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
     expect(help).toContain('lineage social list --project <project> --root <asset-id>');
     expect(help).toContain('lineage social mark --project <project> --root <asset-id> --asset <asset-id-or-exact-title> --confirm-write');
@@ -632,6 +634,92 @@ describe('lineage CLI handoff commands', () => {
       '--files', outputFile,
       '--confirm-write',
     ])).toThrow('Use --manifest or legacy --files/--parent-files, not both');
+  });
+
+  it('discovers targets and persists a target-aware shorthand plan for canvas parity', () => {
+    seedCliDb();
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: fixtureRootAssetId,
+      title: 'CLI target-aware workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+
+    expect(runLineageDataCommand('output-targets', ['list', '--media', 'image', '--json'])).toMatchObject({
+      schema_version: 'lineage.output_target_registry.v1',
+    });
+    expect(runLineageDataCommand('output-targets', ['resolve', '--query', 'Instagram', '--json'])).toMatchObject({
+      status: 'ambiguous',
+      choices: expect.arrayContaining([expect.objectContaining({ surface_id: 'instagram.story', width: 1080, height: 1920 })]),
+    });
+    expect(runLineageDataCommand('output-targets', [
+      'defaults', '--project', defaultProject, '--root', fixtureRootAssetId, '--json',
+    ])).toMatchObject({ defaults: null, read_only: true });
+
+    const planned = runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Create locked CLI variants.',
+      '--from-lineage-selection',
+      '--destination', 'instagram.story',
+      '--destination', 'facebook.story',
+      '--separate-destination', 'facebook.story',
+      '--custom-dimensions', '1200x1500',
+      '--variants-per-target', '2',
+      '--json',
+    ]) as { job: { adapter_version: string; handoff: { schema_version: string; output_manifest?: { schema_version: string } }; id: string; target_plan?: { expected_output_count: number; groups: unknown[] } } };
+    expect(planned.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      handoff: {
+        schema_version: 'lineage.generation_handoff.v3',
+        output_manifest: { schema_version: 'lineage.generation_output_manifest.v2' },
+      },
+      target_plan: { expected_output_count: 6 },
+    });
+    const inspected = runLineageDataCommand('generate', [
+      'image', 'inspect', '--project', defaultProject, '--job-id', planned.job.id, '--json',
+    ]) as typeof planned;
+    expect(inspected.job.target_plan).toEqual(planned.job.target_plan);
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Reject ambiguous target.',
+      '--from-lineage-selection',
+      '--destination', 'Instagram',
+      '--json',
+    ])).toThrow('requires an explicit delivery surface');
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Reject legacy count.',
+      '--from-lineage-selection',
+      '--destination', 'instagram.story',
+      '--count', '1',
+      '--json',
+    ])).toThrow('does not accept legacy --count');
+
+    const malformedTargetMap = join(cliScratchDir, 'malformed-target-map.json');
+    writeFileSync(malformedTargetMap, JSON.stringify({
+      schema_version: 'lineage.generation_target_map.v1',
+      sources: [{
+        asset_id: fixtureRootAssetId,
+        targets: [{ kind: 'custom', width: 1200, height: 1500, inferred_platform: 'Pinterest' }],
+      }],
+    }));
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'Reject future-looking target fields.',
+      '--from-lineage-selection',
+      '--target-map', malformedTargetMap,
+      '--json',
+    ])).toThrow('Custom target contains unknown field: inferred_platform');
   });
 
   it('lists, plans, and imports re-roll targets from the packaged CLI contract', () => {

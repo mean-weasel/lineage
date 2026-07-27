@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { EdgeSummaryValidationError, normalizeEdgeSummary, requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
@@ -101,6 +101,47 @@ export function indexLineageAssets(project = defaultProject): LineageIndexSummar
   for (const asset of [...catalog, ...local]) upsertAsset(database, project, asset);
   database.close();
   return { catalog: catalog.length, local: local.length, total: catalog.length + local.length, database: lineageDbPath() };
+}
+
+export function indexImportedLineageAssetInTransaction(database: DatabaseSync, project: string, fields: {
+  assetId: string;
+  checksumSha256: string;
+  contentType: string;
+  relativePath: string;
+  sizeBytes: number;
+}): void {
+  const timestamp = nowIso();
+  database.prepare(`
+    insert into assets (
+      id, project_id, source, local_path, s3_key, checksum_sha256, media_type, title, status,
+      channel, campaign, audience, size_bytes, content_type, created_at, updated_at, last_seen_at
+    ) values (?, ?, 'local', ?, null, ?, 'image', ?, 'working', null, null, null, ?, ?, ?, ?, ?)
+    on conflict(id) do update set
+      local_path = excluded.local_path,
+      checksum_sha256 = excluded.checksum_sha256,
+      media_type = excluded.media_type,
+      title = excluded.title,
+      size_bytes = excluded.size_bytes,
+      content_type = excluded.content_type,
+      updated_at = excluded.updated_at,
+      last_seen_at = excluded.last_seen_at
+  `).run(
+    fields.assetId,
+    project,
+    fields.relativePath,
+    fields.checksumSha256,
+    basename(fields.relativePath),
+    fields.sizeBytes,
+    fields.contentType,
+    timestamp,
+    timestamp,
+    timestamp,
+  );
+  database.prepare(`
+    insert into asset_reviews (asset_id, review_state, updated_at)
+    values (?, 'unreviewed', ?)
+    on conflict(asset_id) do nothing
+  `).run(fields.assetId, timestamp);
 }
 
 function requireAsset(database: DatabaseSync, project: string, assetId: string): void {
@@ -917,28 +958,7 @@ export function recordLineageRerollAttempt(project: string, fields: {
     if (!fields.confirmWrite) return { ok: true, dryRun: true, attempt };
     database.exec('BEGIN IMMEDIATE');
     try {
-      database.prepare('update asset_attempts set is_current = 0 where project_id = ? and node_asset_id = ?').run(project, fields.nodeAssetId);
-      database.prepare(`
-        insert into asset_attempts (
-          id, project_id, node_asset_id, asset_id, attempt_index, source, prompt, generation_job_id,
-          file_path, checksum_sha256, created_at, promoted_at, is_current
-        ) values (?, ?, ?, ?, ?, 'reroll', ?, ?, ?, ?, ?, ?, 1)
-      `).run(
-        attempt.id, project, fields.nodeAssetId, fields.assetId, attempt.attempt_index, fields.prompt,
-        fields.generationJobId, fields.filePath, fields.checksumSha256, timestamp, timestamp
-      );
-      database.prepare(`
-        update asset_reroll_requests
-        set status = 'resolved', resolved_at = ?
-        where project_id = ? and root_asset_id = ? and node_asset_id = ? and status = 'pending'
-      `).run(timestamp, project, fields.rootAssetId, fields.nodeAssetId);
-      database.prepare(`
-        insert into asset_reviews (asset_id, review_state, reviewed_at, ignored_at, notes, updated_at)
-        values (?, 'unreviewed', ?, null, null, ?)
-        on conflict(asset_id) do update set
-          review_state = excluded.review_state, reviewed_at = excluded.reviewed_at,
-          ignored_at = excluded.ignored_at, updated_at = excluded.updated_at
-      `).run(fields.nodeAssetId, timestamp, timestamp);
+      recordLineageRerollAttemptInTransaction(database, project, fields, attempt);
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
@@ -948,6 +968,66 @@ export function recordLineageRerollAttempt(project: string, fields: {
   } finally {
     database.close();
   }
+}
+
+export function recordLineageRerollAttemptInTransaction(
+  database: DatabaseSync,
+  project: string,
+  fields: {
+    rootAssetId: string;
+    nodeAssetId: string;
+    assetId: string;
+    prompt: string;
+    generationJobId: string;
+    filePath: string;
+    checksumSha256: string;
+  },
+  preparedAttempt?: LineageAttempt,
+): LineageAttempt {
+  assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
+  requireAsset(database, project, fields.assetId);
+  assertAttemptAssetNotVisibleLineageNode(database, project, fields.rootAssetId, fields.assetId);
+  const timestamp = preparedAttempt?.created_at ?? nowIso();
+  const maxRow = database.prepare('select max(attempt_index) max_index from asset_attempts where project_id = ? and node_asset_id = ?').get(project, fields.nodeAssetId) as { max_index?: number | null };
+  const attemptIndex = preparedAttempt?.attempt_index ?? Number(maxRow.max_index || 1) + 1;
+  const attempt: LineageAttempt = preparedAttempt ?? {
+    id: `${project}:${fields.nodeAssetId}:attempt:${attemptIndex}`,
+    project_id: project,
+    node_asset_id: fields.nodeAssetId,
+    asset_id: fields.assetId,
+    attempt_index: attemptIndex,
+    source: 'reroll',
+    prompt: fields.prompt,
+    generation_job_id: fields.generationJobId,
+    file_path: fields.filePath,
+    checksum_sha256: fields.checksumSha256,
+    created_at: timestamp,
+    promoted_at: timestamp,
+    is_current: true,
+  };
+  database.prepare('update asset_attempts set is_current = 0 where project_id = ? and node_asset_id = ?').run(project, fields.nodeAssetId);
+  database.prepare(`
+    insert into asset_attempts (
+      id, project_id, node_asset_id, asset_id, attempt_index, source, prompt, generation_job_id,
+      file_path, checksum_sha256, created_at, promoted_at, is_current
+    ) values (?, ?, ?, ?, ?, 'reroll', ?, ?, ?, ?, ?, ?, 1)
+  `).run(
+    attempt.id, project, fields.nodeAssetId, fields.assetId, attempt.attempt_index, fields.prompt,
+    fields.generationJobId, fields.filePath, fields.checksumSha256, timestamp, timestamp,
+  );
+  database.prepare(`
+    update asset_reroll_requests
+    set status = 'resolved', resolved_at = ?
+    where project_id = ? and root_asset_id = ? and node_asset_id = ? and status = 'pending'
+  `).run(timestamp, project, fields.rootAssetId, fields.nodeAssetId);
+  database.prepare(`
+    insert into asset_reviews (asset_id, review_state, reviewed_at, ignored_at, notes, updated_at)
+    values (?, 'unreviewed', ?, null, null, ?)
+    on conflict(asset_id) do update set
+      review_state = excluded.review_state, reviewed_at = excluded.reviewed_at,
+      ignored_at = excluded.ignored_at, updated_at = excluded.updated_at
+  `).run(fields.nodeAssetId, timestamp, timestamp);
+  return attempt;
 }
 
 export function markLineageRerollRequest(project: string, fields: { rootAssetId: string; nodeAssetId: string; notes?: string; requestedBy?: 'agent' | 'human' | 'system'; confirmWrite: boolean }): LineageRerollRequestMutationResponse {

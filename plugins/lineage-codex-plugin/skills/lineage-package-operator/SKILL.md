@@ -130,7 +130,11 @@ lineage-stable inspect --profile "$LINEAGE_PROD_PROFILE" --project demo-project 
 lineage-stable agent claim --profile "$LINEAGE_PROD_PROFILE" --project demo-project --scope lineage_workspace --target <workspace-id> --agent-name "Codex task" --ttl 20m --json
 lineage-stable agent heartbeat --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 lineage-stable link-child --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --child <child-id> --summary "Cleaner type" --claim-token "$LINEAGE_CLAIM_TOKEN" --confirm-write --json
+lineage-stable output-targets list --profile "$LINEAGE_PROD_PROFILE" --media image --json
+lineage-stable output-targets resolve --profile "$LINEAGE_PROD_PROFILE" --query "Instagram Feed portrait" --json
+lineage-stable output-targets defaults --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --json
 lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create two variations" --from-lineage-selection --count 2 --json
+lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create locked variants" --from-lineage-selection --destination instagram.feed_portrait --destination instagram.story --variants-per-target 2 --json
 lineage-stable generate image import --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --manifest .asset-scratch/generation-output-manifest.json --confirm-write --json
 lineage-stable agent release --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
@@ -143,7 +147,13 @@ plan`, and `reroll import` for a new attempt on the same node. A new `generate
 image plan` response includes `job.handoff.output_manifest`; copy that draft to
 a JSON file, fill every output path and distinct one- or two-word edge summary,
 and import it with `--manifest`. Do not combine manifest input with legacy
-`--files` or `--parent-files`.
+`--files` or `--parent-files`. Discover output targets instead of memorizing
+platform sizes. A platform-only resolution is a clarification request, never
+permission to choose a surface. One-source target flags may use
+`--destination`, `--custom-dimensions`, `--separate-destination`, and
+`--variants-per-target`; multiple selected sources require `--target-map`.
+Target-aware plans reject legacy count flags. `output-targets defaults` is
+read-only: agents and CLI workflows must never mutate canvas defaults.
 
 Persistent writes require the profile writer lease and any operation-specific
 `--confirm-write`. Never replace `--profile` with a direct `--db` write.

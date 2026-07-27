@@ -1,7 +1,8 @@
 import type { LineageNextResponse } from './types';
+import type { ResolvedGenerationTargetPlan } from './outputTargetTypes';
 
 export type GenerationProvider = 'codex-handoff';
-type GenerationAdapterVersion = 'generation-receipts-v1' | 'generation-receipts-v2';
+type GenerationAdapterVersion = 'generation-receipts-v1' | 'generation-receipts-v2' | 'generation-receipts-v3';
 type GenerationJobStatus = 'planned' | 'imported' | 'failed' | 'cancelled';
 type GenerationReceiptType = 'plan' | 'import' | 'error';
 type GenerationReceiptStatus = 'ok' | 'error';
@@ -20,13 +21,26 @@ export interface GenerationJobOutput {
   imported_asset_id: string; parent_asset_id: string; imported_at: string; edge_summary?: string;
 }
 
+export interface GenerationAssetOutputSpec {
+  actual_height: number;
+  actual_width: number;
+  asset_id: string;
+  created_at: string;
+  generation_job_id: string;
+  output_index: number;
+  output_spec: NonNullable<ResolvedGenerationTargetPlan['slots'][number]['output_spec']>;
+  output_spec_digest: string;
+  target_group_id: string;
+  variant_index: number;
+}
+
 export interface GenerationJobReceipt {
   id: string; job_id: string; receipt_type: GenerationReceiptType;
   status: GenerationReceiptStatus; command: string; payload: unknown; created_at: string;
 }
 
 export interface GenerationHandoffPacket {
-  schema_version: 'lineage.generation_handoff.v1' | 'lineage.generation_handoff.v2';
+  schema_version: 'lineage.generation_handoff.v1' | 'lineage.generation_handoff.v2' | 'lineage.generation_handoff.v3';
   provider: GenerationProvider; project: string; job_id: string; prompt: string;
   expected_output_count: number; per_base_count?: number;
   lineage: {
@@ -36,10 +50,20 @@ export interface GenerationHandoffPacket {
   };
   instructions: string[]; import_command: string;
   output_manifest?: {
-    schema_version: 'lineage.generation_output_manifest.v1';
+    schema_version: 'lineage.generation_output_manifest.v1' | 'lineage.generation_output_manifest.v2';
     job_id: string;
-    outputs: Array<{ output_index: number; file_path: ''; parent_asset_id: string; edge_summary: '' }>;
+    outputs: Array<{
+      output_index: number;
+      file_path: '';
+      parent_asset_id: string;
+      edge_summary: '';
+      target_group_id?: string;
+      variant_index?: number;
+      output_spec?: ResolvedGenerationTargetPlan['slots'][number]['output_spec'] | null;
+      output_spec_digest?: string | null;
+    }>;
   };
+  target_resolution?: Pick<ResolvedGenerationTargetPlan, 'map' | 'digest_sha256' | 'groups' | 'slots' | 'expected_output_count'>;
   guardrails: {
     live_generation: false; external_services: false;
     output_root: '.asset-scratch'; confirm_write_required: true;
@@ -51,6 +75,7 @@ export interface GenerationJob {
   source_mode: GenerationSourceMode; root_asset_id: string; prompt: string;
   expected_output_count: number; status: GenerationJobStatus; output_dir?: string;
   handoff: GenerationHandoffPacket; created_at: string; updated_at: string; imported_at?: string;
+  target_plan?: ResolvedGenerationTargetPlan;
   inputs: GenerationJobInput[]; outputs: GenerationJobOutput[]; receipts: GenerationJobReceipt[];
 }
 

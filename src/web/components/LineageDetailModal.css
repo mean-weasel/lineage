@@ -468,3 +468,5 @@
     height: calc(100vh - 78px);
   }
 }
+.lineage-proof-targets{display:grid;gap:6px;margin-top:10px}.lineage-proof-targets>div{display:flex;flex-direction:column;border-left:4px solid #315f9a;padding:7px 10px;background:rgba(74,95,130,.08)}.lineage-proof-targets>div.unlocked{border-left-style:dashed;border-left-color:#8a6d3b}
+.lineage-reroll-target{display:grid;gap:10px}.lineage-reroll-target label{display:grid;gap:4px}.lineage-reroll-target fieldset{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lineage-reroll-target input[readonly]{font-weight:700;background:rgba(74,95,130,.1)}

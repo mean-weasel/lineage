@@ -1,0 +1,958 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Static image output target locks"
+  slug: "static-image-output-target-locks"
+  kind: existing_plan
+  tranche: "Validate the approved design, implement backend, CLI/protocol, import-integrity, and canvas vertical slices, then prove the complete bridge."
+  status: done
+  oracle:
+    signal: "A live checkout walkthrough and receipt-backed tests prove that agent, CLI, and canvas create the same locked static-image jobs and atomically reject every dimension mismatch."
+    cadence: "after each Worker package and at final audit"
+    final_proof: "Every approved behavior maps to passing focused tests, full repository gates, and an identity-gated browser/CLI walkthrough."
+  intake:
+    original_request: "Plan implementation using GoalBuddy prep as atomic, verifiable tasks with sharp, measurable acceptance criteria."
+    interpreted_outcome: "A GoalBuddy board carries the approved static-image output-target design through bounded implementation slices to end-to-end proof."
+    input_shape: existing_plan
+    audience: "Lineage users creating and importing static-image variants through agents, CLI, and canvas"
+    authority: approved
+    proof_type: demo
+    completion_proof: "The full oracle passes with no queued required work and a final Judge records full_outcome_complete: true."
+    likely_misfire: "Implementing labels, controls, or schemas without enforcing immutable pixels, atomic import, per-source mapping, and cross-surface parity."
+    blind_spots_considered:
+      - "Incorrect grouping can duplicate, collapse, or cross-apply source targets."
+      - "Validation can be bypassed by corrupt, renamed, animated, or partially imported media."
+      - "Mutable defaults, registry changes, or rerolls can silently alter frozen intent."
+      - "New target-aware behavior can accidentally break legacy unlocked jobs."
+      - "A passing file-level test can hide agent/CLI/canvas disagreement."
+    existing_plan_facts:
+      - "Approved design: docs/superpowers/specs/2026-07-27-static-image-output-target-locks-design.md"
+      - "Static images only; exact pixel dimensions are the v1 hard contract."
+      - "Ambiguous platform-only requests require a surface choice."
+      - "Geometry and delivery surfaces are separate; shared dimensions consolidate unless explicitly split."
+      - "Target-aware multi-source jobs require explicit per-source mapping."
+      - "Canvas defaults are explicit and human-managed; agents and CLI have read-only access."
+      - "Rerolls inherit locks; geometry changes create child variations."
+      - "Custom sizes are bounded to 16..16384 per side and 100000000 decoded pixels."
+      - "PNG, JPEG, and WebP are supported; other, corrupt, renamed, or tampered media fail closed."
+      - "All import inputs are prevalidated before any persistent write."
+      - "Existing unlocked jobs and protocols remain compatible."
+      - "All execution occurs in /Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks on codex/static-image-output-target-locks, created from freshly fetched GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
+    command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Validate the approved design against current repository reality and make every queued Worker card executable before implementation."
+    inputs:
+      - "docs/superpowers/specs/2026-07-27-static-image-output-target-locks-design.md"
+      - "docs/goals/static-image-output-target-locks/goal.md"
+      - "AGENTS.md"
+      - "package.json"
+      - "Current branch, worktree, implementation, tests, and protocol boundaries"
+    constraints:
+      - "Read-only; do not implement or edit the board."
+      - "Preserve every approved product decision unless direct repository evidence proves a conflict."
+      - "Prefer the largest safe useful vertical slices; do not split one behavior into type/helper/test microtasks."
+      - "Identify any overlap with user changes or other worktrees and fail closed on unsafe scope."
+      - "Prove the current root is /Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks, the branch is codex/static-image-output-target-locks, and GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257 is an ancestor before examining implementation."
+    expected_output:
+      - "A requirement-to-owner map covering every approved design behavior."
+      - "A recorded worktree, branch, origin URL, merge-base, and clean-start identity receipt."
+      - "Dependency order and repository-backed architecture notes."
+      - "Non-empty exact allowed_files for T002 through T005."
+      - "Executable focused verify commands for T002 through T005."
+      - "Per-task stop conditions for ambiguity, scope escape, migration risk, and repeated verification failure."
+      - "A board amendment receipt that the PM can apply without interpretation."
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "Checkout identity, clean implementation baseline, repository boundaries, dependency order, and sequential ownership are established. The branch is three documentation-only commits above the required origin/main base. T002-T005 now have exact scopes, verifiers, and stop conditions. Work must remain sequential because generation receipts, shared contracts, and persistence intentionally overlap. No product implementation or completion proof exists yet."
+      worker_package:
+        task_id: T002
+        objective: "Implement the complete backend vertical slice: immutable offline registry, canonical target-map parsing and grouping, additive persistence for frozen maps/groups/output specifications, atomic target-aware planning, and human-owned canvas defaults with read-only agent/CLI access while preserving legacy unlocked jobs."
+        allowed_files:
+          - src/shared/outputTargetTypes.ts
+          - src/shared/outputTargetRegistry.ts
+          - src/shared/outputTargetRegistry.test.ts
+          - src/shared/generationTargetMap.ts
+          - src/shared/generationTargetMap.test.ts
+          - src/shared/generationTypes.ts
+          - src/shared/types.ts
+          - src/server/generationTargetPlanning.ts
+          - src/server/generationTargetPlanning.test.ts
+          - src/server/generationTargetDefaults.ts
+          - src/server/generationTargetDefaults.test.ts
+          - src/server/generationTargetPersistence.ts
+          - src/server/generationTargetPersistence.test.ts
+          - src/server/assetLineageDb.ts
+          - src/server/generationReceipts.ts
+          - src/server/generationReceipts.test.ts
+        verify:
+          - "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts"
+          - "npm run check"
+          - "npm run lint"
+        stop_if:
+          - "Checkout identity no longer matches the T001 receipt."
+          - "A migration would change existing unlocked jobs."
+          - "Target-aware planning cannot commit all durable records in one transaction."
+          - "Defaults cannot enforce human-only mutation."
+          - "The slice needs files outside its exact scope."
+          - "User changes overlap an allowed file."
+          - "Focused verification fails twice for the same unexplained reason."
+      evidence:
+        - notes/T001-plan-validation.md
+        - "root=/Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks"
+        - "branch=codex/static-image-output-target-locks"
+        - "origin=git@github.com:mean-weasel/lineage.git"
+        - "origin_main_and_merge_base=eef358ba16f60619f6ba8104d3bed14ab8d58257"
+        - "product_implementation_delta=[]"
+      parallel_safety:
+        safe: false
+        reason: "T002-T005 form a strict dependency chain and intentionally overlap core generation contracts and persistence."
+      blocked_tasks:
+        - "T003 until T002 is verified."
+        - "T004 until T002 and T003 are verified."
+        - "T005 until T002 through T004 are verified."
+      missing_evidence:
+        - "Product implementation"
+        - "Focused and full repository verification"
+        - "Decoder/package smoke"
+        - "Browser workflow"
+        - "Identity-gated runtime walkthrough"
+        - "Integrated proof for grouping, atomicity, and immutable intent"
+      required_board_updates:
+        - "Corrected the documentation-only baseline description."
+        - "Installed exact T002-T005 allowed_files, verify commands, and stop_if conditions."
+        - "Activate T002 after recording this receipt."
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement the durable output-target registry, geometry resolver, immutable job planning, and human-owned canvas-default backend contract."
+    inputs:
+      - "Approved design"
+      - "T001 validated requirement and ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "No canvas component or CLI presentation work in this slice."
+      - "Do not persist a target-aware job until the entire request resolves and validates."
+      - "Agents and CLI may read but must be unable to mutate canvas defaults."
+      - "Preserve legacy unlocked job behavior."
+    expected_output:
+      - "Seed registry covers the approved Instagram, Facebook Story, LinkedIn, Pinterest, X, TikTok carousel, and Google Business surfaces."
+      - "Surface labels map to immutable geometry/version snapshots; shared dimensions consolidate by default and explicit split remains distinct."
+      - "Custom sizes accept both sides in 16..16384 only when decoded area is at most 100000000 pixels."
+      - "Platform-only ambiguity returns a structured surface-choice error and never guesses."
+      - "Target-aware multi-source requests require explicit per-source mapping; each source is locked or explicitly unlocked, never mixed."
+      - "Planned jobs persist frozen target maps/output specs and variant counts per resolved group, defaulting to one."
+      - "Canvas defaults are canvas-scoped, explicit, human-writable, agent/CLI-readable, and snapshotted rather than live-linked."
+      - "Focused positive, negative, immutability, authorization, and legacy-compatibility tests pass."
+    allowed_files:
+      - "src/shared/outputTargetTypes.ts"
+      - "src/shared/outputTargetRegistry.ts"
+      - "src/shared/outputTargetRegistry.test.ts"
+      - "src/shared/generationTargetMap.ts"
+      - "src/shared/generationTargetMap.test.ts"
+      - "src/shared/generationTypes.ts"
+      - "src/shared/types.ts"
+      - "src/server/generationTargetPlanning.ts"
+      - "src/server/generationTargetPlanning.test.ts"
+      - "src/server/generationTargetDefaults.ts"
+      - "src/server/generationTargetDefaults.test.ts"
+      - "src/server/generationTargetPersistence.ts"
+      - "src/server/generationTargetPersistence.test.ts"
+      - "src/server/assetLineageDb.ts"
+      - "src/server/generationReceipts.ts"
+      - "src/server/generationReceipts.test.ts"
+    verify:
+      - "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts"
+      - "npm run check"
+      - "npm run lint"
+    stop_if:
+      - "The worktree root, branch, GitHub origin, or origin/main ancestor no longer matches the T001 identity receipt."
+      - "Any migration would rewrite, reinterpret, lock, or change count behavior for an existing unlocked generation job."
+      - "The target-aware job, inputs, canonical target map, digest, groups, slots, and plan receipt cannot be committed in one SQLite transaction."
+      - "Canvas-default mutation cannot require explicit human provenance while remaining absent from agent/CLI mutation interfaces."
+      - "Implementing this backend slice requires canvas component, CLI presentation, import-decoder, or publishing/provider files."
+      - "A new tracked or untracked user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - src/shared/outputTargetTypes.ts
+        - src/shared/outputTargetRegistry.ts
+        - src/shared/outputTargetRegistry.test.ts
+        - src/shared/generationTargetMap.ts
+        - src/shared/generationTargetMap.test.ts
+        - src/shared/generationTypes.ts
+        - src/shared/types.ts
+        - src/server/generationTargetPlanning.ts
+        - src/server/generationTargetPlanning.test.ts
+        - src/server/generationTargetDefaults.ts
+        - src/server/generationTargetDefaults.test.ts
+        - src/server/generationTargetPersistence.ts
+        - src/server/generationTargetPersistence.test.ts
+        - src/server/assetLineageDb.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+      commands:
+        - cmd: "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Implemented the durable offline registry, canonical target-map hashing, geometry grouping and explicit splits, bounded custom sizes, structured ambiguity, exact multi-source mappings, unlocked compatibility, immutable groups/slots/spec snapshots, atomic aggregate persistence, and human-canvas-only scoped defaults. Independent PM reruns confirmed 6 focused files and 40 tests, TypeScript, lint, diff hygiene, and exact scope."
+      deviations:
+        - "Corrected one test to assert property absence for unlocked dimensions."
+        - "Replaced an empty marker interface with an equivalent lint-compliant type alias."
+      remaining_blockers: []
+      verification_attempts: 2
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement the agent/CLI discovery and job-planning bridge plus the approved target-aware protocol versions."
+    inputs:
+      - "T002 receipt and persisted contracts"
+      - "T001 validated CLI/protocol ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "No canvas component work in this slice."
+      - "Do not infer a surface from a platform name."
+      - "Do not expose any agent/CLI command that mutates canvas defaults."
+      - "Keep legacy unlocked receipt, handoff, manifest, and count paths compatible."
+    expected_output:
+      - "Agent and CLI can natively discover the versioned registry and exact dimensions in machine-readable JSON."
+      - "Agent and CLI can plan locked jobs from explicit surfaces, multiple platforms, per-source mappings, explicit splits, or custom dimensions."
+      - "Ambiguous platform requests fail with selectable surfaces; invalid multi-source or count combinations fail before persistence."
+      - "Target-aware jobs emit exactly generation-receipts-v3, lineage.generation_handoff.v3, lineage.generation_output_manifest.v2, lineage.generation_target_map.v1, lineage.output_spec.v1, and lineage.output_target_registry.v1."
+      - "Variant count defaults to one per resolved group; per-group overrides work; legacy count flags are rejected only for target-aware jobs."
+      - "CLI-created jobs expose enough durable state for the canvas to render the same resolved targets."
+      - "Focused CLI snapshots, protocol round trips, negative cases, and legacy regression tests pass."
+    allowed_files:
+      - "src/cli/outputTargetCli.ts"
+      - "src/cli/outputTargetCli.test.ts"
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "src/server/generationReceipts.ts"
+      - "src/server/generationReceipts.test.ts"
+      - "src/shared/generationTypes.ts"
+      - "src/shared/generationTargetMap.ts"
+      - "src/shared/generationTargetMap.test.ts"
+      - "src/shared/generationOutputManifest.ts"
+      - "src/shared/generationOutputManifest.test.ts"
+      - "src/shared/types.ts"
+      - "README.md"
+      - "plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md"
+    verify:
+      - "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/shared/generationTargetMap.test.ts src/shared/generationOutputManifest.test.ts src/server/generationReceipts.test.ts"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run plugin:smoke"
+    stop_if:
+      - "T002 is not done with passing focused verification and an additive persisted contract."
+      - "Any target-aware response emits a version other than generation-receipts-v3, lineage.generation_handoff.v3, lineage.generation_output_manifest.v2, lineage.generation_target_map.v1, lineage.output_spec.v1, or lineage.output_target_registry.v1."
+      - "A CLI or agent path can mutate canvas defaults."
+      - "A platform-only query is silently resolved, or multi-source shorthand can create a Cartesian target expansion."
+      - "Target-aware flags alter legacy unlocked planning, count, manifest, or import behavior."
+      - "A new tracked or untracked user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - README.md
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - src/cli/outputTargetCli.ts
+        - src/cli/outputTargetCli.test.ts
+        - src/cli/lineageCli.ts
+        - src/cli/lineageCli.test.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+        - src/shared/generationTypes.ts
+        - src/shared/generationTargetMap.ts
+        - src/shared/generationOutputManifest.ts
+        - src/shared/generationOutputManifest.test.ts
+      commands:
+        - cmd: "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/shared/generationTargetMap.test.ts src/shared/generationOutputManifest.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run plugin:smoke"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Implemented read-only registry/default discovery, structured ambiguity, one-source target shorthand, explicit multi-source maps, custom geometry, splits, group counts, durable CLI/canvas parity, and exact target-aware v3/v2/v1 protocols while retaining legacy behavior. Independent PM reruns confirmed 5 focused files and 80 tests, TypeScript, lint, plugin smoke with 35 installer tests, diff hygiene, and exact scope."
+      deviations:
+        - "Corrected two test assertions for canonical group ordering and partial array members without changing product behavior."
+        - "A transient attempted out-of-scope type edit was fully reverted; no out-of-scope diff survived."
+      remaining_blockers: []
+      verification_attempts: 3
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement decoded-media validation, all-or-nothing output import, selection-packet dimensions, and immutable reroll propagation."
+    inputs:
+      - "T002 and T003 receipts"
+      - "T001 validated import and lineage ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "No resizing, cropping, mismatch override, provider call, or publishing behavior."
+      - "Preflight the complete batch before file indexing, lineage edges, or database writes."
+      - "Validate decoded media rather than extension or declared metadata."
+    expected_output:
+      - "PNG, JPEG, and WebP with exact locked pixels import successfully."
+      - "Wrong width, wrong height, corrupt content, renamed formats, SVG, GIF, and video fail closed with actionable errors."
+      - "A batch containing any invalid item produces zero new assets, files, lineage edges, manifest rows, or partial job state."
+      - "Locked selection packets contain dimensions; legacy packets retain their warning behavior."
+      - "Rerolls inherit and cannot mutate the parent lock; a requested geometry change creates a child variation."
+      - "Registry/default changes after job creation do not alter frozen output specs."
+      - "Focused decoder, tamper, atomicity, selection-packet, reroll, and legacy tests pass."
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+      - "src/server/staticImageMetadata.ts"
+      - "src/server/staticImageMetadata.test.ts"
+      - "src/server/generationReceipts.ts"
+      - "src/server/generationReceipts.test.ts"
+      - "src/server/generationTargetPersistence.ts"
+      - "src/server/generationTargetPersistence.test.ts"
+      - "src/server/assetLineageDb.ts"
+      - "src/server/assetLineage.ts"
+      - "src/server/assetLineage.test.ts"
+      - "src/server/assetLineageTasks.ts"
+      - "src/server/assetLineageTasks.test.ts"
+      - "src/server/lineageSelectionPacket.ts"
+      - "src/server/lineageSelectionPacket.test.ts"
+      - "src/shared/generationTypes.ts"
+      - "src/shared/generationOutputManifest.ts"
+      - "src/shared/generationOutputManifest.test.ts"
+      - "src/shared/lineageSelectionPacketTypes.ts"
+      - "src/shared/types.ts"
+    verify:
+      - "npm test -- src/server/staticImageMetadata.test.ts src/shared/generationOutputManifest.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts src/server/assetLineage.test.ts src/server/assetLineageTasks.test.ts src/server/lineageSelectionPacket.test.ts"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+    stop_if:
+      - "T002 or T003 is not done with passing focused verification."
+      - "Byte-detected PNG, JPEG, and WebP validation cannot reject corrupt/truncated input and enforce the 100000000-pixel limit without transforming user media."
+      - "Adding sharp as a direct decoder dependency breaks supported Node 22 installation, public packaging, or package smoke; do not substitute a header-only validator without Judge review."
+      - "Any target-aware persistent side effect remains outside one SQLite transaction, including indexing, assets, edges, attempts, output specs, receipts, job status, selections, reroll requests, reviews, or task resolution."
+      - "A mismatched output can be accepted, resized, cropped, overridden, or represented as a mutation of the locked node."
+      - "A geometry change during reroll cannot be routed to a new child variation."
+      - "A new tracked or untracked user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - package.json
+        - package-lock.json
+        - src/server/staticImageMetadata.ts
+        - src/server/staticImageMetadata.test.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+        - src/server/generationTargetPersistence.ts
+        - src/server/assetLineageDb.ts
+        - src/server/assetLineage.ts
+        - src/server/assetLineageTasks.ts
+        - src/server/lineageSelectionPacket.ts
+        - src/shared/generationTypes.ts
+        - src/shared/lineageSelectionPacketTypes.ts
+      commands:
+        - cmd: "npm test -- src/server/staticImageMetadata.test.ts src/shared/generationOutputManifest.test.ts src/server/generationTargetPersistence.test.ts src/server/generationReceipts.test.ts src/server/assetLineage.test.ts src/server/assetLineageTasks.test.ts src/server/lineageSelectionPacket.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+        - cmd: "node --version"
+          status: pass
+        - cmd: "npm ls sharp --depth=0"
+          status: pass
+      summary: "Locked static-image imports and rerolls now preserve exact immutable pixels atomically. Decoder tests prove PNG/JPEG/WebP byte validation plus corruption, spoofing, unsupported-format, and dimension rejection. Preflight and forced late-failure tests prove zero partial assets, edges, outputs, specs, selections, tasks, or job changes. Persisted asset specs drive selection dimensions and inherited reroll locks; geometry changes produce child-variation plans. Independent PM reruns confirmed 7 files and 130 tests plus all required package gates."
+      deviations:
+        - "Added sharp@0.34.3 as the approved direct decoder dependency under Node v22.22.3."
+        - "The Worker's first package-smoke attempt lacked dist artifacts; after npm run build, the Worker and independent PM rerun both passed the exact gate."
+      remaining_blockers: []
+      verification_attempts: 2
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement the canvas planning, defaults, per-branch overrides, status, and reroll UX over the same durable contracts."
+    inputs:
+      - "T002 through T004 receipts"
+      - "T001 validated canvas ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "Canvas must create the same durable planned job as CLI; no parallel UI-only state model."
+      - "Defaults change only through explicit human settings."
+      - "Do not show safe-zone guidance as machine-enforced validation."
+    expected_output:
+      - "Canvas settings let a human explicitly set, change, and clear canvas-scoped defaults while showing that agents cannot change them."
+      - "Branch planning supports per-source target overrides, explicit unlocked sources, multi-platform selection, shared-geometry grouping, explicit split, and per-group counts."
+      - "The pre-submit summary shows exact dimensions and resolved groups; ambiguous or invalid states cannot submit."
+      - "Agent/CLI-created jobs appear in canvas with identical target mapping, lock status, source association, and import status."
+      - "Reroll controls display inherited dimensions as read-only; choosing different geometry creates a child variation."
+      - "Locked and explicitly unlocked states are visually distinct without implying safe zones are enforced."
+      - "Focused component/integration tests and the target-lock browser workflow pass."
+    allowed_files:
+      - "src/server/generationTargetRoutes.ts"
+      - "src/server/generationTargetRoutes.test.ts"
+      - "src/server.ts"
+      - "src/web/components/OutputTargetPreferencesDialog.tsx"
+      - "src/web/components/OutputTargetPreferencesDialog.css"
+      - "src/web/components/OutputTargetPreferencesDialog.test.tsx"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.css"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "src/web/components/LineageView.tsx"
+      - "src/web/components/LineageView.css"
+      - "src/web/components/LineageToolbar.tsx"
+      - "src/web/components/LineageToolbar.test.tsx"
+      - "src/web/components/LineageAssetNode.tsx"
+      - "src/web/components/LineageAssetNode.test.tsx"
+      - "src/web/components/LineageDetailModal.tsx"
+      - "src/web/components/LineageDetailModal.css"
+      - "src/web/components/LineageDetailModal.test.tsx"
+      - "src/web/App.test.ts"
+      - "e2e/output-target-locks.e2e.ts"
+    verify:
+      - "npm test -- src/server/generationTargetRoutes.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/LineageToolbar.test.tsx src/web/components/LineageAssetNode.test.tsx src/web/components/LineageDetailModal.test.tsx src/web/App.test.ts"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+    stop_if:
+      - "T002, T003, or T004 is not done with passing focused verification."
+      - "The canvas requires a second target-map, grouping, count, default, or reroll source of truth instead of the persisted backend operation."
+      - "A default can be saved without explicit human provenance or mutated through an agent/CLI route."
+      - "The visible pre-submit summary can differ from the exact submitted canonical target map or output count."
+      - "Ambiguous, incomplete, conflicting, mixed locked/unlocked, or invalid-count state can submit."
+      - "Safe-zone guidance is presented as machine-enforced validation."
+      - "A reroll can edit inherited dimensions instead of routing geometry change to a child variation."
+      - "A new tracked or untracked user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - src/server/generationTargetRoutes.ts
+        - src/server/generationTargetRoutes.test.ts
+        - src/server.ts
+        - src/web/components/OutputTargetPreferencesDialog.tsx
+        - src/web/components/OutputTargetPreferencesDialog.css
+        - src/web/components/OutputTargetPreferencesDialog.test.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageGenerationSheet.css
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - src/web/components/LineageView.tsx
+        - src/web/components/LineageView.css
+        - src/web/components/LineageToolbar.tsx
+        - src/web/components/LineageToolbar.test.tsx
+        - src/web/components/LineageAssetNode.tsx
+        - src/web/components/LineageAssetNode.test.tsx
+        - src/web/components/LineageDetailModal.tsx
+        - src/web/components/LineageDetailModal.css
+        - src/web/components/LineageDetailModal.test.tsx
+        - e2e/output-target-locks.e2e.ts
+      commands:
+        - cmd: "npm test -- src/server/generationTargetRoutes.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/LineageToolbar.test.tsx src/web/components/LineageAssetNode.test.tsx src/web/components/LineageDetailModal.test.tsx src/web/App.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Canvas now creates the same durable target-aware jobs as CLI, with human-only scoped defaults, per-source locked/unlocked mappings, geometry grouping/splits/counts, canonical preview-gated submission, receipt-derived badges and proof, and immutable reroll dimensions with child variations. Independent PM reruns confirmed 7 focused files and 36 tests, TypeScript, lint, exact scope, and the persisted-job browser workflow."
+      deviations:
+        - "The browser test required two locator/assertion corrections for labeled checkboxes and canonical destination ordering; product behavior was unchanged."
+      remaining_blockers: []
+      verification_attempts: 3
+  - id: T006
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Adversarially review the integrated implementation at the risk boundary and define any required remediation before live proof."
+    inputs:
+      - "T002 through T005 receipts"
+      - "Approved design"
+      - "Current diff and focused test results"
+    constraints:
+      - "Read-only; do not implement or mark the goal complete."
+      - "Audit the three primary failure modes: incorrect grouping, validation bypass/partial writes, and mutable frozen intent."
+      - "Create a concrete Worker follow-up when a required behavior is missing; do not hand-wave gaps into T007."
+    expected_output:
+      - "Requirement-by-requirement pass/fail matrix."
+      - "Top-three-failure-mode evidence assessment."
+      - "Compatibility and protocol-version assessment."
+      - "Proceed-to-live-proof decision or exact remediation Worker card."
+    receipt:
+      result: done
+      decision: rejected
+      full_outcome_complete: false
+      rationale: "The core registry, persistence, CLI/protocol, atomic import, immutable reroll, and named-surface canvas paths are directly supported by code and focused tests. Live proof is premature because the canvas omits first-class custom dimensions and approved discovery/count controls, while the target-map parser silently drops unknown JSON keys instead of enforcing exact schemas. These are concrete cross-surface and fail-closed gaps, not walkthrough concerns. T008 is the largest bounded remediation and must pass before T007."
+      worker_package:
+        task_id: T008
+        objective: "Close the integrated-review gaps: exact target-map keys plus complete custom-dimension and discovery/count controls in the canvas."
+        allowed_files:
+          - src/shared/generationTargetMap.ts
+          - src/shared/generationTargetMap.test.ts
+          - src/cli/lineageCli.test.ts
+          - src/web/components/OutputTargetPreferencesDialog.tsx
+          - src/web/components/OutputTargetPreferencesDialog.css
+          - src/web/components/OutputTargetPreferencesDialog.test.tsx
+          - src/web/components/LineageGenerationSheet.tsx
+          - src/web/components/LineageGenerationSheet.css
+          - src/web/components/LineageGenerationSheet.test.tsx
+          - e2e/output-target-locks.e2e.ts
+        verify:
+          - "npm test -- src/shared/generationTargetMap.test.ts src/cli/lineageCli.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx"
+          - "npm run check"
+          - "npm run lint"
+          - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+        stop_if:
+          - "Custom target state requires a second planner or grouping implementation in the UI."
+          - "The submitted target map can differ from the last backend-resolved preview."
+          - "A deprecated surface is silently substituted or selected without explicit user action."
+          - "Exact-key validation breaks documented v1 target-map fields or legacy target-free jobs."
+          - "The work requires files outside allowed_files."
+          - "User changes overlap an allowed file."
+          - "Verification fails twice for the same unexplained reason."
+      evidence:
+        - notes/T006-integrated-review.md
+        - src/shared/generationTargetMap.ts
+        - src/web/components/OutputTargetPreferencesDialog.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - "T002-T005 receipts and independent PM verification"
+      blocked_tasks:
+        - "T007 until T008 is done with passing focused and browser verification."
+      missing_evidence:
+        - "Canvas custom-dimension defaults and per-source planning."
+        - "Fail-closed exact-key target-map parsing."
+        - "Approved search/lifecycle/source-level count UX."
+        - "Full gates and identity-gated live oracle."
+      required_board_updates:
+        - "Added and activate T008."
+        - "Keep T007 queued until T008 passes."
+  - id: T007
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: high
+    objective: "Run fresh repository gates and an identity-gated checkout walkthrough that exercises the complete two-way bridge and failure oracle."
+    inputs:
+      - "T006 proceed decision"
+      - "All implementation receipts"
+      - "AGENTS.md runtime channel gate"
+    constraints:
+      - "Use checkout-only npm run lineage:dev -- with a dedicated development profile; never use stable or preview data."
+      - "Before any operational command, prove runtime doctor, profile doctor, and db info agree on code, profile, database, environment, and service identity."
+      - "Use the fresh-profile bootstrap exception only when necessary, then repeat the full gate."
+      - "Stop on any identity mismatch."
+      - "Use only synthetic non-private media and do not commit generated databases or fixtures containing private data."
+    expected_output:
+      - "npm run check, npm run lint, npm run ci, npm run e2e, npm run public:readiness, and npm run package:smoke pass freshly, or every failure is proven pre-existing and dispositioned by a new task."
+      - "CLI/agent and canvas create equivalent locked jobs whose persisted mappings and exact dimensions match."
+      - "A valid exact-size static image imports and becomes visible in both surfaces."
+      - "Wrong dimensions, corrupt/renamed content, unsupported formats, and one-invalid-item batches are rejected with zero partial state."
+      - "Multi-source overrides, shared-dimension consolidation, explicit split, count semantics, defaults authorization, reroll inheritance, and child variation behavior are demonstrated."
+      - "Screenshots, command output, and/or traces are linked in the receipt without private data."
+    receipt:
+      result: done
+      decision: proceed
+      full_outcome_complete: false
+      commands:
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run ci"
+          status: pass
+        - cmd: "npm run e2e"
+          status: pass
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "npm test -- src/server/staticImageMetadata.test.ts src/server/generationReceipts.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetDefaults.test.ts src/shared/generationTargetMap.test.ts --reporter=verbose"
+          status: pass
+        - cmd: "Checkout-only runtime doctor, profile doctor, db info, managed-service status, and live /api/runtime identity gate"
+          status: pass
+        - cmd: "Identity-gated live canvas/CLI planning, exact-size import, and wrong-dimension rejection walkthrough"
+          status: pass
+      summary: "Fresh full gates and an identity-gated checkout walkthrough prove the two-way bridge. Independently created canvas and CLI jobs persisted the same canonical digest, surfaces, one consolidated 1080x1920 group, and one slot; an exact decoded PNG imported and rendered in canvas, while a 1080x1919 PNG failed with zero outputs. Named tests cover byte-decoded PNG/JPEG/WebP, corrupt/spoof/unsupported rejection, atomic full-batch preflight and rollback, multi-source mappings, split/count semantics, defaults authorization, reroll inheritance, and child variations."
+      evidence:
+        - notes/T007-live-proof.md
+        - "canvas_job=gen-ms3amiou-6c4bd6e6"
+        - "cli_job=gen-ms3amzy6-d0e70494"
+        - "shared_digest=9193936a00d840c058528cbe2f4af2ddaad943ef47a45ae7ae8e3e0138f0da94"
+        - "wrong_dimension_job=gen-ms3aqecc-24a4ad5a status=planned outputs=0"
+        - ".asset-scratch/T007-canvas-locked-job.png (ignored synthetic evidence)"
+        - ".asset-scratch/T007-imported-fit-view.png (ignored synthetic evidence)"
+        - ".asset-scratch/T007-imported-detail.png (ignored synthetic evidence)"
+      deviations:
+        - "The first managed start encountered a different profile/service identity and failed closed; the service was stopped, the dedicated profile was repinned, and the complete gate was repeated before use."
+        - "The first exact-image import found no file in the profile-scoped scratch root and failed closed; placing the same synthetic file correctly allowed a safe retry."
+        - "Three prior full-CI attempts surfaced and dispositioned T009 unused-export hygiene, T010 browser-locator ambiguity, and T011 decoder dependency vulnerabilities; the final uninterrupted CI run passed."
+      remaining_blockers:
+        - "T999 final read-only completion audit."
+      verification_attempts: 4
+
+  - id: T008
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Close the integrated-review gaps: exact target-map keys plus complete custom-dimension and discovery/count controls in the canvas."
+    inputs:
+      - "T006 integrated review note and receipt"
+      - "Approved custom-target and canvas experience requirements"
+      - "Committed T002-T005 contracts"
+    constraints:
+      - "Keep the persisted planner and preview response as the sole source of truth."
+      - "Do not widen into provider calls, transforms, publishing, safe-zone validation, or default mutation through CLI/agent."
+      - "Preserve named-surface, unlocked, grouping, split, reroll, and legacy behavior."
+      - "Reject unknown JSON keys rather than silently normalizing them away."
+    expected_output:
+      - "Unknown root, source, and per-kind target-map fields fail before persistence with exact-key tests."
+      - "Canvas defaults can add, edit, remove, save, clear, and rehydrate bounded custom width/height targets alongside named surfaces."
+      - "Branch planning can independently override custom targets per source and submit the exact backend-previewed canonical map."
+      - "Equal custom geometries group deterministically with equal named geometries and conflicting counts remain blocked by the backend."
+      - "Preferred-target search filters by platform/surface and presents lifecycle/replacement information without auto-selecting deprecated targets."
+      - "Every source exposes a Variants per format default while advanced per-group counts remain editable and visible in output math."
+      - "Focused tests and browser coverage prove custom canvas planning and preserve the existing named-surface workflow."
+    allowed_files:
+      - "src/shared/generationTargetMap.ts"
+      - "src/shared/generationTargetMap.test.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "src/web/components/OutputTargetPreferencesDialog.tsx"
+      - "src/web/components/OutputTargetPreferencesDialog.css"
+      - "src/web/components/OutputTargetPreferencesDialog.test.tsx"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.css"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "e2e/output-target-locks.e2e.ts"
+    verify:
+      - "npm test -- src/shared/generationTargetMap.test.ts src/cli/lineageCli.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+    stop_if:
+      - "Custom target state requires a second planner or grouping implementation in the UI."
+      - "The submitted target map can differ from the last backend-resolved preview."
+      - "A deprecated surface is silently substituted or selected without explicit user action."
+      - "Exact-key validation breaks the documented v1 target-map fields or legacy target-free jobs."
+      - "The work requires files outside allowed_files."
+      - "A new tracked or untracked user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - src/shared/generationTargetMap.ts
+        - src/shared/generationTargetMap.test.ts
+        - src/cli/lineageCli.test.ts
+        - src/web/components/OutputTargetPreferencesDialog.tsx
+        - src/web/components/OutputTargetPreferencesDialog.css
+        - src/web/components/OutputTargetPreferencesDialog.test.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageGenerationSheet.css
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - e2e/output-target-locks.e2e.ts
+      commands:
+        - cmd: "npm test -- src/shared/generationTargetMap.test.ts src/cli/lineageCli.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Target-map JSON now fails closed on unknown root, source, and kind-specific keys while preserving documented and legacy behavior. Canvas defaults and branch planning support rehydrated custom dimensions, per-source overrides, search, lifecycle/replacement warnings, source defaults, and advanced group counts; submission remains the exact canonical preview map. Independent PM reruns confirmed 4 focused files and 51 tests, TypeScript, lint, exact scope, and named-plus-custom persisted-job browser proof."
+      deviations: []
+      remaining_blockers: []
+      verification_attempts: 1
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Restore the repository unused-export gate by making implementation-only output-target symbols private and removing unused compatibility re-exports without changing runtime behavior."
+    inputs:
+      - "Fresh T007 npm run ci failure at npm run knip"
+      - "Knip report listing seven runtime exports and twenty-one exported types"
+    constraints:
+      - "Do not suppress genuine dead code with broad knip ignore rules."
+      - "Preserve every reachable runtime behavior, CLI protocol, schema version, and persisted contract."
+      - "Keep types exported from their owning modules when they are imported across production modules."
+      - "Do not widen beyond symbols named by the fresh knip report."
+    expected_output:
+      - "npm run knip passes with no unused export or exported-type findings."
+      - "Focused output-target and generation/import tests remain green."
+      - "npm run check and npm run lint pass."
+      - "T007 is reactivated after the remediation receipt is recorded."
+    allowed_files:
+      - "src/server/generationTargetPersistence.ts"
+      - "src/server/generationTargetRoutes.ts"
+      - "src/server/staticImageMetadata.ts"
+      - "src/shared/generationOutputManifest.ts"
+      - "src/shared/outputTargetRegistry.ts"
+      - "src/shared/outputTargetTypes.ts"
+      - "src/shared/types.ts"
+    verify:
+      - "npm run knip"
+      - "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationOutputImport.test.ts src/server/generationReceipts.test.ts"
+      - "npm run check"
+      - "npm run lint"
+    stop_if:
+      - "A named symbol is consumed through a reachable package entrypoint."
+      - "Removing export visibility changes a generated declaration or documented external API."
+      - "The remediation requires files outside allowed_files."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - src/server/generationTargetPersistence.ts
+        - src/server/generationTargetRoutes.ts
+        - src/server/staticImageMetadata.ts
+        - src/shared/generationOutputManifest.ts
+        - src/shared/outputTargetRegistry.ts
+        - src/shared/outputTargetTypes.ts
+        - src/shared/types.ts
+      commands:
+        - cmd: "npm run knip"
+          status: pass
+        - cmd: "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationOutputImport.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Restored the repository unused-export gate without suppressions: seven implementation-only runtime symbols became module-private, internal manifest/type aliases stopped advertising unused API, and the unused aggregate output-target re-export block was removed. Runtime behavior and owning-module cross-imports are unchanged."
+      deviations:
+        - "The fresh T007 CI attempt stopped at knip after 594 passing tests and passing release/docs checks; T007 was reactivated for a complete rerun."
+      remaining_blockers: []
+      verification_attempts: 1
+  - id: T010
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: low
+    objective: "Restore the public browser smoke test by selecting the New lineage action by its accessible name now that the header contains two primary actions."
+    inputs:
+      - "Fresh T007 npm run ci Playwright strict-mode failure"
+      - "The output-target canvas adds a Plan outputs primary action alongside New lineage"
+    constraints:
+      - "Do not remove, hide, or weaken either product action."
+      - "Change only the ambiguous test locator."
+      - "Keep the assertion on the New lineage workflow intact."
+    expected_output:
+      - "The affected public-smoke test passes."
+      - "The output-target browser workflow still passes."
+      - "T007 is reactivated for a full fresh CI rerun."
+    allowed_files:
+      - "e2e/public-smoke.e2e.ts"
+    verify:
+      - "npm run e2e -- e2e/public-smoke.e2e.ts e2e/output-target-locks.e2e.ts"
+      - "git diff --check"
+    stop_if:
+      - "The accessible button name is not stable or unique."
+      - "The change requires product behavior or files outside allowed_files."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - e2e/public-smoke.e2e.ts
+      commands:
+        - cmd: "npm run e2e -- e2e/public-smoke.e2e.ts e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Scoped the existing New lineage smoke action to the header and selected it by exact accessible name, avoiding ambiguity with both the new Plan outputs action and the separate workbench New lineage action. All seven affected public-smoke and output-target browser tests pass."
+      deviations:
+        - "The first refinement to a page-wide exact accessible name still matched a second New lineage action; the second verification attempt correctly scoped the locator to the original header region."
+      remaining_blockers: []
+      verification_attempts: 2
+  - id: T011
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Upgrade the static-image decoder dependency to the patched sharp release and prove the byte-decoding, packaging, and dependency-audit contracts remain intact."
+    inputs:
+      - "Fresh T007 npm run ci audit failure"
+      - "High-severity libvips advisories inherited by sharp versions below 0.35.0"
+      - "npm audit fixed-release guidance for sharp 0.35.3"
+    constraints:
+      - "Upgrade only sharp and its lockfile-resolved transitive dependencies."
+      - "Do not weaken decoded-byte validation, format rejection, pixel limits, or atomic import behavior."
+      - "Keep the dependency pinned exactly."
+      - "Do not use npm audit fix --force."
+    expected_output:
+      - "package.json and package-lock.json pin sharp 0.35.3."
+      - "Focused static-image metadata and atomic import tests pass."
+      - "npm run package:smoke passes."
+      - "npm audit --audit-level=moderate reports zero vulnerabilities."
+      - "T007 is reactivated for a full fresh CI rerun."
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+    verify:
+      - "npm test -- src/server/staticImageMetadata.test.ts src/server/generationReceipts.test.ts src/server/generationReceiptsSelectionReset.test.ts"
+      - "npm run package:smoke"
+      - "npm audit --audit-level=moderate"
+      - "npm run check"
+      - "npm run lint"
+    stop_if:
+      - "The patched sharp release requires application code changes."
+      - "The install changes unrelated direct dependencies."
+      - "Decoded-byte, format, dimension, or atomicity tests regress."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - package.json
+        - package-lock.json
+      commands:
+        - cmd: "npm test -- src/server/staticImageMetadata.test.ts src/server/generationReceipts.test.ts src/server/generationReceiptsSelectionReset.test.ts"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "npm audit --audit-level=moderate"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Pinned sharp 0.35.3 exactly and accepted only its lockfile-resolved platform/libvips dependency changes. The patched decoder passes 41 metadata, import, atomicity, and selection-reset tests; package and managed-service smoke pass; npm audit reports zero vulnerabilities."
+      deviations:
+        - "The provisional generationOutputImport.test.ts path did not exist; the actual atomic import coverage is in generationReceipts.test.ts and generationReceiptsSelectionReset.test.ts, so the verify command was corrected before receipt."
+      remaining_blockers: []
+      verification_attempts: 1
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the complete implementation satisfies the original user outcome and live oracle."
+    inputs:
+      - "All done task receipts"
+      - "T007 fresh verification evidence"
+      - "Current diff"
+      - "Approved design and goal charter"
+    constraints:
+      - "Read-only; do not implement."
+      - "Reject completion if required Worker work is queued, active, blocked without disposition, or weakly proven."
+      - "Reject completion if any approved behavior lacks direct evidence."
+      - "State the user-facing claim, top three realistic failure modes, and evidence for each."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Acceptance-criterion-to-evidence map"
+      - "Missing evidence and exact next task when incomplete"
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      rationale: "Every approved behavior maps to direct code, focused-test, full-gate, and/or identity-gated live evidence. Independently created canvas and CLI jobs persisted the same canonical target digest and exact geometry; decoded-byte import accepted the exact PNG and rejected the wrong-size PNG with zero outputs. Grouping/source isolation, byte/type/tamper/atomicity defenses, immutable defaults/specifications/rerolls, legacy compatibility, and V1 scope boundaries are all explicitly proven. No required Worker work or evidence remains."
+      commands:
+        - cmd: "Goal/spec-to-receipt and implementation audit"
+          status: pass
+        - cmd: "GoalBuddy task-state and completion-invariant audit"
+          status: pass
+        - cmd: "git merge-base --is-ancestor eef358ba16f60619f6ba8104d3bed14ab8d58257 HEAD"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      evidence:
+        - notes/T999-final-audit.md
+        - notes/T007-live-proof.md
+        - notes/T006-integrated-review.md
+        - "T002-T005 and T008-T011 receipts"
+        - "Final uninterrupted npm run ci plus independent e2e, public-readiness, package-smoke, and focused test runs"
+        - "Identity-gated live canvas/CLI/import walkthrough"
+      missing_evidence: []
+      next_task: null
+
+checks:
+  dirty_fingerprint: "execution branch codex/static-image-output-target-locks starts from GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257 plus approved spec commit; product tree clean"
+  last_verification:
+    result: pass
+    task: T999
+    commands:
+      - "npm run check"
+      - "npm run lint"
+      - "npm run ci"
+      - "npm run e2e"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "Focused 50-test adversarial suite"
+      - "Identity-gated canvas/CLI/import walkthrough"
+      - "Final acceptance-to-evidence and GoalBuddy completion audit"

@@ -1273,3 +1273,4 @@
     grid-template-columns: 1fr;
   }
 }
+.lineage-badges .output-target.locked{background:#dbeafe;color:#17457d;border:1px solid #6ea0dc}.lineage-badges .output-target.unlocked{background:#fff7df;color:#74510d;border:1px dashed #b58a34}

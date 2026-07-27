@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { useLineageTestProfile } from '../test/lineageTestProfile';
 import { defaultProject, repoRoot } from './assetCore';
 import { getLineageAttempts, getLineageSnapshot, indexLineageAssets, linkLineageAssets, markLineageRerollRequest, updateSelectedAsset } from './assetLineage';
@@ -16,8 +17,10 @@ import {
   planImageReroll,
 } from './generationReceipts';
 import { listImageGenerationJobs } from './generationReceiptJobs';
+import { getLineageSelectionPacket } from './lineageSelectionPacket';
 import { fileSha256 } from './localReview';
 import type { GenerationJob } from '../shared/types';
+import { GENERATION_TARGET_MAP_SCHEMA } from '../shared/outputTargetTypes';
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
@@ -32,6 +35,20 @@ function writeScratch(relativePath: string, content: string): string {
   const file = join(scratchDir, relativePath);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, content);
+  return file;
+}
+
+async function writeRaster(
+  relativePath: string,
+  width: number,
+  height: number,
+  format: 'jpeg' | 'png' | 'webp' = 'png',
+): Promise<string> {
+  const file = join(scratchDir, relativePath);
+  mkdirSync(dirname(file), { recursive: true });
+  await sharp({
+    create: { background: '#23574a', channels: 4, height, width },
+  })[format]().toFile(file);
   return file;
 }
 
@@ -529,6 +546,45 @@ describe('generation receipts', () => {
     expect(imported.imported.map(output => output.edge_summary)).toEqual([undefined, undefined, undefined, undefined]);
   });
 
+  it('requires an explicit target map for multiple selected sources without partial persistence', () => {
+    const lineage = setupSelectedLineage('target-aware-multi-source');
+    updateSelectedAsset(defaultProject, {
+      assetIds: [lineage.selectedId, lineage.otherId],
+      confirmWrite: true,
+      mode: 'replace',
+      rootAssetId: lineage.rootId,
+    });
+    const jobsBefore = countRows('generation_jobs');
+    expect(() => planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Do not apply shorthand to every source.',
+      targetShorthand: { destinations: ['instagram.story'] },
+    })).toThrow('requires --target-map');
+    expect(countRows('generation_jobs')).toBe(jobsBefore);
+
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Create exact per-source target variants.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [
+          { asset_id: lineage.selectedId, targets: [{ kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 }] },
+          { asset_id: lineage.otherId, targets: [{ kind: 'custom', width: 1200, height: 1500, variant_count: 2 }] },
+        ],
+      },
+    });
+    expect(plan.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      expected_output_count: 3,
+      target_plan: {
+        groups: expect.arrayContaining([
+          expect.objectContaining({ parent_asset_id: lineage.selectedId, width: 1080, height: 1920, variant_count: 1 }),
+          expect.objectContaining({ parent_asset_id: lineage.otherId, width: 1200, height: 1500, variant_count: 2 }),
+        ]),
+      },
+    });
+  });
+
   it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
     const lineage = setupSelectedLineage('reroll');
     process.env.LINEAGE_CHANNEL = 'dev';
@@ -861,5 +917,280 @@ describe('generation receipts', () => {
     expect(inspected.receipts.map(receipt => receipt.receipt_type)).toEqual(['plan']);
     expect(countRows('asset_edges', `where parent_asset_id = '${lineage.selectedId}' and child_asset_id = '${outputAssetId}'`)).toBe(0);
     expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(1);
+  });
+
+  it('persists an immutable target-aware plan with its aggregate receipt', () => {
+    const lineage = setupSelectedLineage('target-aware-plan');
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Create locked story variants.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{
+          asset_id: lineage.selectedId,
+          default_variant_count: 2,
+          targets: [
+            { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+            { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1 },
+          ],
+        }],
+      },
+    });
+    expect(plan.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      expected_output_count: 2,
+      handoff: {
+        schema_version: 'lineage.generation_handoff.v3',
+        output_manifest: { schema_version: 'lineage.generation_output_manifest.v2' },
+        target_resolution: {
+          map: { schema_version: 'lineage.generation_target_map.v1' },
+          groups: [{ width: 1080, height: 1920, variant_count: 2 }],
+        },
+      },
+      target_plan: {
+        groups: [{ width: 1080, height: 1920, variant_count: 2 }],
+        slots: [{ output_index: 0 }, { output_index: 1 }],
+      },
+    });
+    expect(plan.job.receipts[0].payload).toMatchObject({
+      target_map_digest: plan.job.target_plan?.digest_sha256,
+    });
+    const inspected = inspectImageGeneration(defaultProject, plan.job.id).job;
+    expect(inspected.target_plan).toEqual(plan.job.target_plan);
+    expect(countRows('generation_target_maps', `where job_id = '${plan.job.id}'`)).toBe(1);
+    expect(countRows('generation_target_groups', `where job_id = '${plan.job.id}'`)).toBe(1);
+    expect(countRows('generation_output_slots', `where job_id = '${plan.job.id}'`)).toBe(2);
+    expect(plan.job.handoff.output_manifest?.outputs[0]).toMatchObject({
+      output_spec: { schema_version: 'lineage.output_spec.v1', width: 1080, height: 1920 },
+    });
+    expect(() => planImageGeneration(defaultProject, {
+      count: 2,
+      fromLineageSelection: true,
+      prompt: 'Do not accept a legacy count for a locked plan.',
+      targetMap: plan.job.target_plan?.map,
+      })).toThrow('does not accept legacy --count');
+  });
+
+  it('atomically imports byte-decoded PNG, JPEG, and WebP at exact locked pixels', async () => {
+    const lineage = setupSelectedLineage('locked-formats');
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Create exact locked raster formats.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{
+          asset_id: lineage.selectedId,
+          default_variant_count: 3,
+          targets: [{ kind: 'custom', width: 23, height: 19 }],
+        }],
+      },
+    });
+    const files = await Promise.all([
+      writeRaster('imports/locked-format-png.bin', 23, 19, 'png'),
+      writeRaster('imports/locked-format-jpeg.bin', 23, 19, 'jpeg'),
+      writeRaster('imports/locked-format-webp.bin', 23, 19, 'webp'),
+    ]);
+
+    const imported = importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, files),
+    });
+
+    expect(imported.imported).toHaveLength(3);
+    expect(countRows('asset_output_specs', `where generation_job_id = '${plan.job.id}'`)).toBe(3);
+    const database = lineageDb();
+    try {
+      const rows = database.prepare(`
+        select actual_width, actual_height, output_spec_json
+        from asset_output_specs where generation_job_id = ? order by output_index
+      `).all(plan.job.id) as Array<{ actual_height: number; actual_width: number; output_spec_json: string }>;
+      expect(rows.map(row => [row.actual_width, row.actual_height])).toEqual([[23, 19], [23, 19], [23, 19]]);
+      expect(rows.every(row => JSON.parse(row.output_spec_json).width === 23)).toBe(true);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('preflights the complete locked batch before every persistent effect', async () => {
+    const lineage = setupSelectedLineage('locked-atomic');
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Reject the whole batch if one file is wrong.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{
+          asset_id: lineage.selectedId,
+          default_variant_count: 2,
+          targets: [{ kind: 'custom', width: 23, height: 19 }],
+        }],
+      },
+    });
+    const valid = await writeRaster('imports/locked-atomic-valid.png', 23, 19);
+    const wrong = await writeRaster('imports/locked-atomic-wrong.png', 24, 19);
+    const validId = localId(valid);
+    const wrongId = localId(wrong);
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [valid, wrong]),
+    })).toThrow(/requires 23x19 pixels, decoded 24x19/);
+
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job).toMatchObject({ status: 'planned', outputs: [] });
+    expect(countRows('assets', `where id in ('${validId}', '${wrongId}')`)).toBe(0);
+    expect(countRows('asset_edges', `where child_asset_id in ('${validId}', '${wrongId}')`)).toBe(0);
+    expect(countRows('asset_output_specs', `where generation_job_id = '${plan.job.id}'`)).toBe(0);
+    expect(getLineageSnapshot(defaultProject, lineage.rootId).selected).toEqual([lineage.selectedId]);
+  });
+
+  it('rolls back target-aware indexing when a late persistent effect fails', async () => {
+    const lineage = setupSelectedLineage('locked-rollback');
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Prove the target-aware transaction rolls back.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{ asset_id: lineage.selectedId, targets: [{ kind: 'custom', width: 23, height: 19 }] }],
+      },
+    });
+    const output = await writeRaster('imports/locked-rollback.png', 23, 19);
+    const outputAssetId = localId(output);
+    const database = lineageDb();
+    try {
+      database.exec(`
+        create trigger locked_output_spec_abort
+        before insert on asset_output_specs
+        begin
+          select raise(abort, 'locked-output-spec abort');
+        end;
+      `);
+    } finally {
+      database.close();
+    }
+
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [output]),
+    })).toThrow('locked-output-spec abort');
+
+    expect(countRows('assets', `where id = '${outputAssetId}'`)).toBe(0);
+    expect(countRows('asset_edges', `where child_asset_id = '${outputAssetId}'`)).toBe(0);
+    expect(countRows('generation_job_outputs', `where job_id = '${plan.job.id}'`)).toBe(0);
+    expect(inspectImageGeneration(defaultProject, plan.job.id).job.status).toBe('planned');
+  });
+
+  it('keeps locked imports idempotent and rejects divergent retries', async () => {
+    const lineage = setupSelectedLineage('locked-retry');
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Import one locked output exactly once.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{ asset_id: lineage.selectedId, targets: [{ kind: 'custom', width: 23, height: 19 }] }],
+      },
+    });
+    const output = await writeRaster('imports/locked-retry.png', 23, 19);
+    const manifest = outputManifest(plan.job, [output], ['Exact lock']);
+    importImageGenerationOutputs(defaultProject, { confirmWrite: true, jobId: plan.job.id, manifest });
+
+    expect(importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest,
+    }).idempotent).toBe(true);
+
+    const divergent = await writeRaster('imports/locked-retry-divergent.png', 23, 19, 'webp');
+    expect(() => importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: plan.job.id,
+      manifest: outputManifest(plan.job, [divergent], ['Exact lock']),
+    })).toThrow(/already exists with different output/);
+  });
+
+  it('inherits immutable reroll locks and routes geometry changes to child variations', async () => {
+    const lineage = setupSelectedLineage('locked-reroll');
+    const originalPlan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Create the locked node.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [{ asset_id: lineage.selectedId, targets: [{ kind: 'custom', width: 23, height: 19 }] }],
+      },
+    });
+    const original = await writeRaster('imports/locked-reroll-original.png', 23, 19);
+    const imported = importImageGenerationOutputs(defaultProject, {
+      confirmWrite: true,
+      jobId: originalPlan.job.id,
+      manifest: outputManifest(originalPlan.job, [original]),
+    });
+    const lockedNodeId = imported.imported[0].imported_asset_id;
+    updateSelectedAsset(defaultProject, {
+      assetId: lockedNodeId,
+      confirmWrite: true,
+      rootAssetId: lineage.rootId,
+    });
+    const selectionPacket = getLineageSelectionPacket(defaultProject, { rootAssetId: lineage.rootId });
+    expect(selectionPacket.assets[0].dimensions).toEqual({ height: 19, width: 23 });
+    expect(selectionPacket.warnings).not.toContain('Image dimensions are unavailable for one or more selected assets.');
+    markLineageRerollRequest(defaultProject, {
+      confirmWrite: true,
+      nodeAssetId: lockedNodeId,
+      rootAssetId: lineage.rootId,
+    });
+
+    const reroll = planImageReroll(defaultProject, {
+      prompt: 'Try another treatment without changing geometry.',
+      rootAssetId: lineage.rootId,
+      targetAssetId: lockedNodeId,
+    });
+    expect(reroll.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      source_mode: 'lineage_reroll',
+      target_plan: { slots: [{ output_spec: { height: 19, width: 23 } }] },
+    });
+    const wrong = await writeRaster('imports/locked-reroll-wrong.png', 24, 19);
+    expect(() => importImageRerollOutput(defaultProject, {
+      confirmWrite: true,
+      file: wrong,
+      jobId: reroll.job.id,
+    })).toThrow(/cannot mutate locked node.*23x19 to 24x19/);
+    expect(inspectImageGeneration(defaultProject, reroll.job.id).job.status).toBe('planned');
+    expect(getLineageAttempts(defaultProject, lineage.rootId, lockedNodeId).attempts).toHaveLength(1);
+
+    const variation = planImageReroll(defaultProject, {
+      prompt: 'Create a wider child instead.',
+      requestedDimensions: { height: 19, width: 24 },
+      rootAssetId: lineage.rootId,
+      targetAssetId: lockedNodeId,
+    });
+    expect(variation).toMatchObject({
+      command: 'generate image plan',
+      job: {
+        source_mode: 'lineage_selection',
+        target_plan: { slots: [{ output_spec: { height: 19, width: 24 } }] },
+      },
+    });
+    const correct = await writeRaster('imports/locked-reroll-correct.webp', 23, 19, 'webp');
+    const rerolled = importImageRerollOutput(defaultProject, {
+      confirmWrite: true,
+      file: correct,
+      jobId: reroll.job.id,
+    });
+    expect(rerolled.job.status).toBe('imported');
+    expect(getLineageAttempts(defaultProject, lineage.rootId, lockedNodeId).attempts).toHaveLength(2);
+    expect(importImageRerollOutput(defaultProject, {
+      confirmWrite: true,
+      file: correct,
+      jobId: reroll.job.id,
+    }).idempotent).toBe(true);
+    const database = lineageDb();
+    try {
+      const frozen = database.prepare('select output_spec_json from asset_output_specs where asset_id = ?').get(lockedNodeId) as { output_spec_json: string };
+      expect(JSON.parse(frozen.output_spec_json)).toMatchObject({ height: 19, width: 23 });
+    } finally {
+      database.close();
+    }
   });
 });

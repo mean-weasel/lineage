@@ -22,6 +22,8 @@ type LineageToolbarProps = {
   onGraphDirection: (direction: LineageGraphDirection) => void;
   onIndexLocal: () => void;
   onNewLineage: () => void;
+  onOpenGeneration?: () => void;
+  onOpenOutputDefaults?: () => void;
   onRefreshLineage: () => void;
   onRefreshWorkspaces: () => void;
   onReplayGrowth: () => void;
@@ -58,6 +60,8 @@ export function LineageToolbar({
   onGraphDirection,
   onIndexLocal,
   onNewLineage,
+  onOpenGeneration,
+  onOpenOutputDefaults,
   onRefreshLineage,
   onRefreshWorkspaces,
   onReplayGrowth,
@@ -137,6 +141,7 @@ export function LineageToolbar({
           Replay growth
         </button>
         <button className="primary-button" onClick={onNewLineage} type="button">New lineage</button>
+        {onOpenGeneration && <button className="primary-button" disabled={!snapshot || snapshot.selected.length === 0} onClick={onOpenGeneration} type="button">Plan outputs</button>}
       </div>
       <details className="lineage-overflow" onToggle={event => onActionsOpenChange(event.currentTarget.open)} open={actionsOpen}>
         <summary onKeyDown={closeMenusOnEscape} tabIndex={0}>Actions</summary>
@@ -185,6 +190,7 @@ export function LineageToolbar({
           </button>
           <button disabled={!snapshot} onClick={() => runAndClose(onFitGraph)} type="button">Fit graph</button>
           <button disabled={!snapshot} onClick={() => runAndClose(onTidyGraph)} type="button">Tidy tree</button>
+          {onOpenOutputDefaults && <button disabled={!snapshot} onClick={() => runAndClose(onOpenOutputDefaults)} type="button">Output target defaults</button>}
           <button aria-controls="lineage-selection-panel" aria-expanded={sideOpen} disabled={!snapshot} onClick={() => runAndClose(onToggleNextPanel)} type="button">Manage selection</button>
           <button disabled={workspaceBusy || !activeWorkspace} onClick={() => runAndClose(onArchiveWorkspace)} type="button">Archive current lineage</button>
           <button disabled={loading || workspaceBusy} onClick={() => runAndClose(onIndexLocal)} type="button">Index local</button>
