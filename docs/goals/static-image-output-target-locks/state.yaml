@@ -696,6 +696,69 @@ tasks:
       deviations: []
       remaining_blockers: []
       verification_attempts: 1
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Restore the repository unused-export gate by making implementation-only output-target symbols private and removing unused compatibility re-exports without changing runtime behavior."
+    inputs:
+      - "Fresh T007 npm run ci failure at npm run knip"
+      - "Knip report listing seven runtime exports and twenty-one exported types"
+    constraints:
+      - "Do not suppress genuine dead code with broad knip ignore rules."
+      - "Preserve every reachable runtime behavior, CLI protocol, schema version, and persisted contract."
+      - "Keep types exported from their owning modules when they are imported across production modules."
+      - "Do not widen beyond symbols named by the fresh knip report."
+    expected_output:
+      - "npm run knip passes with no unused export or exported-type findings."
+      - "Focused output-target and generation/import tests remain green."
+      - "npm run check and npm run lint pass."
+      - "T007 is reactivated after the remediation receipt is recorded."
+    allowed_files:
+      - "src/server/generationTargetPersistence.ts"
+      - "src/server/generationTargetRoutes.ts"
+      - "src/server/staticImageMetadata.ts"
+      - "src/shared/generationOutputManifest.ts"
+      - "src/shared/outputTargetRegistry.ts"
+      - "src/shared/outputTargetTypes.ts"
+      - "src/shared/types.ts"
+    verify:
+      - "npm run knip"
+      - "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationOutputImport.test.ts src/server/generationReceipts.test.ts"
+      - "npm run check"
+      - "npm run lint"
+    stop_if:
+      - "A named symbol is consumed through a reachable package entrypoint."
+      - "Removing export visibility changes a generated declaration or documented external API."
+      - "The remediation requires files outside allowed_files."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - src/server/generationTargetPersistence.ts
+        - src/server/generationTargetRoutes.ts
+        - src/server/staticImageMetadata.ts
+        - src/shared/generationOutputManifest.ts
+        - src/shared/outputTargetRegistry.ts
+        - src/shared/outputTargetTypes.ts
+        - src/shared/types.ts
+      commands:
+        - cmd: "npm run knip"
+          status: pass
+        - cmd: "npm test -- src/shared/outputTargetRegistry.test.ts src/shared/generationTargetMap.test.ts src/server/generationTargetPlanning.test.ts src/server/generationOutputImport.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Restored the repository unused-export gate without suppressions: seven implementation-only runtime symbols became module-private, internal manifest/type aliases stopped advertising unused API, and the unused aggregate output-target re-export block was removed. Runtime behavior and owning-module cross-imports are unchanged."
+      deviations:
+        - "The fresh T007 CI attempt stopped at knip after 594 passing tests and passing release/docs checks; T007 was reactivated for a complete rerun."
+      remaining_blockers: []
+      verification_attempts: 1
   - id: T999
     type: judge
     assignee: Judge

@@ -1,8 +1,8 @@
 export const OUTPUT_TARGET_REGISTRY_SCHEMA = 'lineage.output_target_registry.v1' as const;
 export const GENERATION_TARGET_MAP_SCHEMA = 'lineage.generation_target_map.v1' as const;
 
-export type OutputTargetMediaKind = 'static_image';
-export type OutputTargetLifecycle = 'active' | 'deprecated' | 'removed';
+type OutputTargetMediaKind = 'static_image';
+type OutputTargetLifecycle = 'active' | 'deprecated' | 'removed';
 
 export interface GeometryProfileSnapshot {
   id: string;
@@ -73,7 +73,7 @@ export interface CanonicalGenerationTargetMap {
   digest_sha256: string;
 }
 
-export type TargetGroupingMode = 'consolidated' | 'explicit_split';
+type TargetGroupingMode = 'consolidated' | 'explicit_split';
 
 export interface ResolvedTargetGroup {
   id: string;

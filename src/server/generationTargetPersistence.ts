@@ -9,7 +9,7 @@ export interface TargetAwareGenerationAggregate {
   receipt: { id: string; command: string; payload: unknown; created_at: string };
 }
 
-export function persistGenerationTargetPlan(
+function persistGenerationTargetPlan(
   database: DatabaseSync,
   jobId: string,
   plan: ResolvedGenerationTargetPlan,

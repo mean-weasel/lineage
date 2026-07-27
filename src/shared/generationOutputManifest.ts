@@ -20,13 +20,13 @@ interface TargetAwareGenerationOutputManifestEntry extends LegacyGenerationOutpu
   output_spec_digest: string | null;
 }
 
-export interface LegacyGenerationOutputManifest {
+interface LegacyGenerationOutputManifest {
   schema_version: typeof generationOutputManifestSchemaVersion;
   job_id: string;
   outputs: LegacyGenerationOutputManifestEntry[];
 }
 
-export interface TargetAwareGenerationOutputManifest {
+interface TargetAwareGenerationOutputManifest {
   schema_version: typeof targetAwareGenerationOutputManifestSchemaVersion;
   job_id: string;
   outputs: TargetAwareGenerationOutputManifestEntry[];
@@ -48,13 +48,13 @@ interface TargetAwareGenerationOutputManifestDraftEntry extends LegacyGeneration
   output_spec_digest: string | null;
 }
 
-export interface LegacyGenerationOutputManifestDraft {
+interface LegacyGenerationOutputManifestDraft {
   schema_version: typeof generationOutputManifestSchemaVersion;
   job_id: string;
   outputs: LegacyGenerationOutputManifestDraftEntry[];
 }
 
-export interface TargetAwareGenerationOutputManifestDraft {
+interface TargetAwareGenerationOutputManifestDraft {
   schema_version: typeof targetAwareGenerationOutputManifestSchemaVersion;
   job_id: string;
   outputs: TargetAwareGenerationOutputManifestDraftEntry[];

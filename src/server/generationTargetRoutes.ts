@@ -12,7 +12,7 @@ import { planImageGeneration, planImageReroll } from './generationReceipts';
 type ProjectFrom = (input: { body?: Record<string, unknown>; query?: Record<string, unknown> }) => string;
 type AsyncRoute = (handler: (req: express.Request, res: express.Response) => Promise<void> | void) => express.RequestHandler;
 
-export function readCanvasTargetSettings(project: string, rootAssetId: string) {
+function readCanvasTargetSettings(project: string, rootAssetId: string) {
   const database = lineageDb();
   try {
     return {
@@ -32,7 +32,7 @@ export function readCanvasTargetSettings(project: string, rootAssetId: string) {
   }
 }
 
-export function saveCanvasTargetSettings(
+function saveCanvasTargetSettings(
   project: string,
   rootAssetId: string,
   mutation: Omit<CanvasDefaultsMutation, 'actor' | 'origin'>,
@@ -52,7 +52,7 @@ export function saveCanvasTargetSettings(
   }
 }
 
-export function clearCanvasTargetSettings(project: string, rootAssetId: string) {
+function clearCanvasTargetSettings(project: string, rootAssetId: string) {
   const database = lineageDb();
   try {
     database.prepare('delete from generation_target_defaults where project_id = ? and root_asset_id = ?')

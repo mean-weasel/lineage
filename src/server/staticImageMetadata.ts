@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
-export const STATIC_IMAGE_MAX_PIXELS = 100_000_000;
+const STATIC_IMAGE_MAX_PIXELS = 100_000_000;
 
-export type SupportedStaticImageFormat = 'jpeg' | 'png' | 'webp';
+type SupportedStaticImageFormat = 'jpeg' | 'png' | 'webp';
 
 export interface StaticImageMetadata {
   contentType: 'image/jpeg' | 'image/png' | 'image/webp';
@@ -12,7 +12,7 @@ export interface StaticImageMetadata {
   width: number;
 }
 
-export class StaticImageMetadataError extends Error {
+class StaticImageMetadataError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'StaticImageMetadataError';

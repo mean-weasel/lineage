@@ -68,7 +68,7 @@ function normalized(value: string): string {
   return value.trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ');
 }
 
-export function geometrySnapshot(id: string, version: number): GeometryProfileSnapshot {
+function geometrySnapshot(id: string, version: number): GeometryProfileSnapshot {
   const record = outputTargetRegistry.geometries.find(item => item.id === id && item.version === version);
   if (!record) throw new OutputTargetResolutionError('unknown_surface', `Unknown geometry profile ${id}@${version}`);
   return structuredClone(record);
