@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T006
+active_task: T008
 
 tasks:
   - id: T001
@@ -532,7 +532,7 @@ tasks:
   - id: T006
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Adversarially review the integrated implementation at the risk boundary and define any required remediation before live proof."
     inputs:
@@ -548,8 +548,54 @@ tasks:
       - "Top-three-failure-mode evidence assessment."
       - "Compatibility and protocol-version assessment."
       - "Proceed-to-live-proof decision or exact remediation Worker card."
-    receipt: null
-
+    receipt:
+      result: done
+      decision: rejected
+      full_outcome_complete: false
+      rationale: "The core registry, persistence, CLI/protocol, atomic import, immutable reroll, and named-surface canvas paths are directly supported by code and focused tests. Live proof is premature because the canvas omits first-class custom dimensions and approved discovery/count controls, while the target-map parser silently drops unknown JSON keys instead of enforcing exact schemas. These are concrete cross-surface and fail-closed gaps, not walkthrough concerns. T008 is the largest bounded remediation and must pass before T007."
+      worker_package:
+        task_id: T008
+        objective: "Close the integrated-review gaps: exact target-map keys plus complete custom-dimension and discovery/count controls in the canvas."
+        allowed_files:
+          - src/shared/generationTargetMap.ts
+          - src/shared/generationTargetMap.test.ts
+          - src/cli/lineageCli.test.ts
+          - src/web/components/OutputTargetPreferencesDialog.tsx
+          - src/web/components/OutputTargetPreferencesDialog.css
+          - src/web/components/OutputTargetPreferencesDialog.test.tsx
+          - src/web/components/LineageGenerationSheet.tsx
+          - src/web/components/LineageGenerationSheet.css
+          - src/web/components/LineageGenerationSheet.test.tsx
+          - e2e/output-target-locks.e2e.ts
+        verify:
+          - "npm test -- src/shared/generationTargetMap.test.ts src/cli/lineageCli.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx"
+          - "npm run check"
+          - "npm run lint"
+          - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+        stop_if:
+          - "Custom target state requires a second planner or grouping implementation in the UI."
+          - "The submitted target map can differ from the last backend-resolved preview."
+          - "A deprecated surface is silently substituted or selected without explicit user action."
+          - "Exact-key validation breaks documented v1 target-map fields or legacy target-free jobs."
+          - "The work requires files outside allowed_files."
+          - "User changes overlap an allowed file."
+          - "Verification fails twice for the same unexplained reason."
+      evidence:
+        - notes/T006-integrated-review.md
+        - src/shared/generationTargetMap.ts
+        - src/web/components/OutputTargetPreferencesDialog.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - "T002-T005 receipts and independent PM verification"
+      blocked_tasks:
+        - "T007 until T008 is done with passing focused and browser verification."
+      missing_evidence:
+        - "Canvas custom-dimension defaults and per-source planning."
+        - "Fail-closed exact-key target-map parsing."
+        - "Approved search/lifecycle/source-level count UX."
+        - "Full gates and identity-gated live oracle."
+      required_board_updates:
+        - "Added and activate T008."
+        - "Keep T007 queued until T008 passes."
   - id: T007
     type: pm
     assignee: PM
@@ -573,6 +619,55 @@ tasks:
       - "Wrong dimensions, corrupt/renamed content, unsupported formats, and one-invalid-item batches are rejected with zero partial state."
       - "Multi-source overrides, shared-dimension consolidation, explicit split, count semantics, defaults authorization, reroll inheritance, and child variation behavior are demonstrated."
       - "Screenshots, command output, and/or traces are linked in the receipt without private data."
+    receipt: null
+
+  - id: T008
+    type: worker
+    assignee: Worker
+    status: active
+    reasoning_hint: medium
+    objective: "Close the integrated-review gaps: exact target-map keys plus complete custom-dimension and discovery/count controls in the canvas."
+    inputs:
+      - "T006 integrated review note and receipt"
+      - "Approved custom-target and canvas experience requirements"
+      - "Committed T002-T005 contracts"
+    constraints:
+      - "Keep the persisted planner and preview response as the sole source of truth."
+      - "Do not widen into provider calls, transforms, publishing, safe-zone validation, or default mutation through CLI/agent."
+      - "Preserve named-surface, unlocked, grouping, split, reroll, and legacy behavior."
+      - "Reject unknown JSON keys rather than silently normalizing them away."
+    expected_output:
+      - "Unknown root, source, and per-kind target-map fields fail before persistence with exact-key tests."
+      - "Canvas defaults can add, edit, remove, save, clear, and rehydrate bounded custom width/height targets alongside named surfaces."
+      - "Branch planning can independently override custom targets per source and submit the exact backend-previewed canonical map."
+      - "Equal custom geometries group deterministically with equal named geometries and conflicting counts remain blocked by the backend."
+      - "Preferred-target search filters by platform/surface and presents lifecycle/replacement information without auto-selecting deprecated targets."
+      - "Every source exposes a Variants per format default while advanced per-group counts remain editable and visible in output math."
+      - "Focused tests and browser coverage prove custom canvas planning and preserve the existing named-surface workflow."
+    allowed_files:
+      - "src/shared/generationTargetMap.ts"
+      - "src/shared/generationTargetMap.test.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "src/web/components/OutputTargetPreferencesDialog.tsx"
+      - "src/web/components/OutputTargetPreferencesDialog.css"
+      - "src/web/components/OutputTargetPreferencesDialog.test.tsx"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.css"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "e2e/output-target-locks.e2e.ts"
+    verify:
+      - "npm test -- src/shared/generationTargetMap.test.ts src/cli/lineageCli.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+    stop_if:
+      - "Custom target state requires a second planner or grouping implementation in the UI."
+      - "The submitted target map can differ from the last backend-resolved preview."
+      - "A deprecated surface is silently substituted or selected without explicit user action."
+      - "Exact-key validation breaks the documented v1 target-map fields or legacy target-free jobs."
+      - "The work requires files outside allowed_files."
+      - "A new tracked or untracked user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
     receipt: null
 
   - id: T999
