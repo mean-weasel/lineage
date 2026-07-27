@@ -55,7 +55,7 @@ Validate the approved design against the current checkout, then implement the la
 - Target-aware contracts use the approved new versions: `generation-receipts-v3`, `lineage.generation_handoff.v3`, `lineage.generation_output_manifest.v2`, `lineage.generation_target_map.v1`, `lineage.output_spec.v1`, and `lineage.output_target_registry.v1`.
 - Do not add provider calls, Buffer publishing, social publishing, non-static generation, safe-zone machine validation, agent mutation of canvas defaults, ambiguous platform inference, or mismatch overrides.
 - Preserve user changes and obey the repository channel/profile/database identity gate before any operational app walkthrough.
-- Perform every implementation and verification task in the dedicated `/Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks` worktree on branch `codex/static-image-output-target-locks`, created directly from the freshly fetched GitHub `origin/main` commit `eef358ba16f60619f6ba8104d3bed14ab8d58257`. The only initial branch change is the approved design-spec commit.
+- Perform every implementation and verification task in the dedicated `/Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks` worktree on branch `codex/static-image-output-target-locks`, created directly from the freshly fetched GitHub `origin/main` commit `eef358ba16f60619f6ba8104d3bed14ab8d58257`. The clean implementation baseline is that commit plus three documentation-only commits containing the approved spec and GoalBuddy control files; no product implementation differs from `origin/main`.
 - Do not commit private media, credentials, private campaign data, presigned URLs, customer content, or local SQLite databases.
 
 ## Stop Rule
