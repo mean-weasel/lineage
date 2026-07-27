@@ -1,10 +1,11 @@
 {
-  "reviewedFor": "0.1.28",
+  "reviewedFor": "0.1.29",
   "result": "updated",
   "areas": [
     "workflows",
     "integrations",
     "reference-cli",
-    "generation-scaffold"
+    "generation-scaffold",
+    "node-next-output-target-locks"
   ]
 }

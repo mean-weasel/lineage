@@ -131,7 +131,7 @@ export interface ResolvedNodeNextOutputTarget {
   delivery_surfaces: DeliverySurfaceSnapshot[];
 }
 
-export type NodeNextOutputTargetOrigin = 'node_override' | 'derived_child' | 'canvas_default' | 'unresolved';
+type NodeNextOutputTargetOrigin = 'node_override' | 'derived_child' | 'canvas_default' | 'unresolved';
 
 export interface NodeNextOutputTargetSetting {
   schema_version: typeof NODE_NEXT_OUTPUT_TARGETS_SCHEMA;

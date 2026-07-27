@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GenerationJob } from '../../shared/generationTypes';
 import type { LineageNode } from '../../shared/types';
 import { LineageGenerationSheet } from './LineageGenerationSheet';
-import { selectedNodeTargetResolutionDigest, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargets';
+import { selectedNodeTargetResolutionDigest, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargetsModel';
 
 let container: HTMLDivElement;
 let root: Root;

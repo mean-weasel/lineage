@@ -19,7 +19,9 @@ import { LineageReplayControls } from './LineageReplayControls';
 import { LineageSidePanel } from './LineageSidePanel';
 import { LineageToolbar } from './LineageToolbar';
 import { LineageGenerationSheet } from './LineageGenerationSheet';
-import { loadNodeNextOutputTargets, NodeNextOutputTargetsEditor, nodeTargetStateLabel, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargets';
+import { decorateSnapshotWithGenerationTargets } from './LineageGenerationTargets';
+import { NodeNextOutputTargetsEditor } from './NodeNextOutputTargets';
+import { loadNodeNextOutputTargets, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargetsModel';
 import { OutputTargetPreferencesDialog } from './OutputTargetPreferencesDialog';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
@@ -265,6 +267,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
     }
     try {
       setWorkspaceProgress('indexing');
+      await nextBrowserPaint();
       await onAssetsChanged?.();
       const ready = await refresh({ rootAssetId: seeded.workspace?.root_asset_id || seeded.root_asset_id });
       if (!ready) setWorkspaceProgress('error');
@@ -822,44 +825,8 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   );
 }
 
-export function decorateSnapshotWithGenerationTargets(
-  snapshot: LineageSnapshot,
-  jobs: GenerationJob[],
-  nodeTargets: Record<string, NodeNextOutputTargetsResponse> = {},
-): LineageSnapshot {
-  return {
-    ...snapshot,
-    nodes: snapshot.nodes.map(node => {
-      const job = jobs.find(item =>
-        item.inputs.some(input => input.asset_id === node.asset_id)
-        || item.outputs.some(output => output.imported_asset_id === node.asset_id),
-      );
-      const plan = job?.target_plan;
-      const nextTarget = nodeTargets[node.asset_id];
-      const nextOutputTarget = nextTarget ? {
-        dimensions: nextTarget.effective.resolved_targets.map(target => `${target.width}×${target.height}`),
-        label: nodeTargetStateLabel(nextTarget.effective),
-        origin: nextTarget.effective.origin,
-      } : undefined;
-      if (!job || !plan) return nextOutputTarget ? { ...node, next_output_target: nextOutputTarget } : node;
-      const importedOutput = job.outputs.find(output => output.imported_asset_id === node.asset_id);
-      const slot = importedOutput ? plan.slots.find(item => item.output_index === importedOutput.output_index) : undefined;
-      const group = slot
-        ? plan.groups.find(item => item.id === slot.group_id)
-        : plan.groups.find(item => item.parent_asset_id === node.asset_id);
-      if (!group) return nextOutputTarget ? { ...node, next_output_target: nextOutputTarget } : node;
-      return {
-        ...node,
-        generation_target: {
-          destinations: group.delivery_surfaces.map(surface => `${surface.platform} ${surface.surface}`),
-          ...(group.unlocked ? {} : { dimensions: `${group.width}×${group.height}` }),
-          imported: Boolean(importedOutput),
-          locked: !group.unlocked,
-        },
-        ...(nextOutputTarget ? { next_output_target: nextOutputTarget } : {}),
-      };
-    }),
-  };
+function nextBrowserPaint(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 }
 
 function lineageWorkspaceClaims(claims: AgentClaimSummary[], project: string, rootAssetId: string): AgentClaimSummary[] {

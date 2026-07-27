@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GenerationJob, GenerationPlanResponse } from '../../shared/generationTypes';
 import type { LineageNode } from '../../shared/types';
 import { api } from '../api';
+import { NodeNextOutputTargetsEditor } from './NodeNextOutputTargets';
 import {
   loadNodeNextOutputTargets,
-  NodeNextOutputTargetsEditor,
   nodeTargetStateLabel,
   selectedNodeTargetResolutionDigest,
   type NodeNextOutputTargetsResponse,
-} from './NodeNextOutputTargets';
+} from './NodeNextOutputTargetsModel';
 import './LineageGenerationSheet.css';
 
 export function LineageGenerationSheet({ onClose, onPlanned, project, rootAssetId, sources }: {

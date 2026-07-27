@@ -2,7 +2,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NodeNextOutputTargetsEditor, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargets';
+import { NodeNextOutputTargetsEditor } from './NodeNextOutputTargets';
+import type { NodeNextOutputTargetsResponse } from './NodeNextOutputTargetsModel';
 
 let container: HTMLDivElement;
 let root: Root;

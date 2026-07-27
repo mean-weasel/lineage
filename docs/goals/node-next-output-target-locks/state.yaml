@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T006
+active_task: T009
 
 tasks:
   - id: T001
@@ -508,7 +508,7 @@ tasks:
   - id: T006
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Run the identity-gated checkout full bridge oracle through canvas, CLI, and a real provider-neutral agent generation/import loop."
     inputs:
@@ -530,11 +530,54 @@ tasks:
       - "Exact import, child inheritance, cancellation, and zero-partial-state proof"
       - "Canvas/CLI/agent canonical digest parity"
       - "Remediation task or ready_for_release"
-    receipt: null
+    receipt:
+      result: done
+      decision: ready_for_release
+      full_outcome_complete: false
+      summary: "The checkout-only full bridge oracle passed on a fresh named development profile. Canvas, CLI, and agent planning resolved the same canonical persisted source digest; immutable jobs preserved their original source snapshots after defaults and node settings changed; exact imports initialized each child only from its produced geometry; cancellation and wrong-size rejection left no partial state."
+      identity:
+        channel: dev
+        launcher: "npm run lineage:dev --"
+        profile: node-target-locks-oracle-20260727-c
+        service_origin: "http://lineage-dev.localhost:55298"
+        git_sha: c9d72fb57ce9954a98c26e9987a567d9a0fd855c
+        code_fingerprint: e96c5f1e9f919376771e7781e2d5f60ccf1d7730050bf5dc19930507a1d1a08b
+        source_fingerprint: a6d2f12b897e19926283268db0ac3bc70e52fd57c532c6c5c54143f38abb1877
+        profile_fingerprint: fd1b38d90f511afae3bc472b13d4bd345fbf9399835a83f4c9d843ba8ca8512a
+        service_instance: fbcd4db1-f6df-45ff-a9c8-6d0ddc395e21
+      evidence:
+        - "The five-step checkout gate passed runtime doctor, profile doctor, db info, managed status, and /api/runtime with matching dev/checkout code, profile, database, origin, and unique service identity."
+        - "Human canvas default resolved the root to Instagram Story 1080x1920. A CLI node override consolidated Instagram Story and Facebook Story at 1080x1920 plus Instagram Feed portrait at 1080x1440."
+        - "The sticky override had setting digest 58886d058f00173a1d1d4cb1971c129ec8df4dd59ce5d7f7c22191766fc5d0f3 and resolution digest 7530b8854d5c46fbb95a738b064fd5ec58b62f11649a2ba8626a51135b460870."
+        - "A conflicting second set failed on revision conflict. Platform-only query 'Instagram' failed as ambiguous and returned the three surface choices."
+        - "Selection packet v3 kept current_geometry separate from next_output_targets and returned selected-source resolution digest 36d392f2987ca87da43543f3b5b23f2cd74ded8aeae8e508a70a919f2399bea1."
+        - "Planned job gen-ms3v0g53-9659a98e froze three exact slots under target plan digest a3b799bb1d906536a06ce30cb948661cb4ecb347576886beb61fec84f2a2a3ad."
+        - "After the human default changed to 1200x628 and the node override changed to 1000x1500, re-planning with the old aggregate digest failed against current digest 259ad114434aaa4cbc984c3a66e966d07d763c4433725c1506b2faa5ae5303aa, while the old job retained its original 1080x1920 and 1080x1440 snapshots."
+        - "Exact synthetic PNG import created local-db2566bdd081 at 1080x1920, local-563fd5020503 at 1080x1440, and local-fcf6fa9d64de at 1080x1920. Each child's derived next-output setting contained only its own produced geometry and surfaces."
+        - "Cancelled job gen-ms3v1xax-4bbf57f7 rejected import and retained zero outputs."
+        - "Wrong-size job gen-ms3v2pyo-13ec5930 decoded 1079x1920 against required 1080x1920, rejected import, remained planned, and left assets, edges, attempts, output specs, outputs, receipts, and node settings counts byte-for-byte unchanged."
+        - "Canvas screenshot /tmp/lineage-node-target-locks-checkout-canvas.png shows separate locked current geometry and future-child target badges."
+        - "Planner screenshot /tmp/lineage-node-target-locks-checkout-planner.png shows source local-db2566bdd081 resolving produced-next 1080x1920 with Facebook Story and Instagram Story under digest 2db57b0c6bf0baf80ec6b19c7192fe11182c226d032c73953b85fed61897b271."
+        - "The exact isolated dev service was stopped; subsequent managed status failed because its receipt no longer existed."
+      top_failure_modes:
+        - mode: "A node/default mutation lands between resolution and persistence."
+          proof: "The transaction-bound planner and stale-digest live rejection prevent a job from being created from the obsolete aggregate digest."
+        - mode: "A job or child silently adopts newer geometry after planning."
+          proof: "The old job retained its frozen plan after both source settings changed, and each imported child inherited only its own frozen output spec."
+        - mode: "Cancellation or dimension mismatch leaves partial lineage state."
+          proof: "Cancelled import produced zero outputs, and the wrong-size import left all measured table counts unchanged."
+      commands:
+        - cmd: "npm run lineage:dev -- runtime doctor --profile node-target-locks-oracle-20260727-c --json; npm run lineage:dev -- profile doctor --profile node-target-locks-oracle-20260727-c --json; npm run lineage:dev -- db info --profile node-target-locks-oracle-20260727-c --json"
+          status: pass
+        - cmd: "make start-dev-bg/status-dev/stop-dev LINEAGE_DEV_PROFILE=node-target-locks-oracle-20260727-c plus GET /api/runtime"
+          status: pass
+        - cmd: "Live canvas, output-targets node/default, selection packet v3, generate image plan/scaffold/inspect/import/cancel, and SQLite before/after count walkthrough"
+          status: pass
+      remaining_blockers: []
   - id: T007
     type: worker
     assignee: Worker
-    status: queued
+    status: done
     reasoning_hint: medium
     objective: "Prepare the next stable release metadata and final public documentation for the verified feature without tagging, publishing, merging, or mutating external release state."
     inputs:
@@ -572,11 +615,51 @@ tasks:
       - "A required version lock lies outside allowed_files."
       - "T006 has unresolved defects or missing oracle evidence."
       - "Verification fails twice for reasons not isolated to this Worker package."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Prepared the verified feature as stable release 0.1.29. Root package, lockfile, plugin package, plugin manifest, plugin lineage.version compatibility lock, documentation review, and changelog now agree. Public readiness, package installation, managed-service packaging, plugin artifact/install, and release-policy gates all pass without external mutation."
+      chosen_version: 0.1.29
+      proposed_tag: v0.1.29
+      changed_files:
+        - package.json
+        - package-lock.json
+        - CHANGELOG.md
+        - docs-site/docs-review.json
+        - plugins/lineage-codex-plugin/package.json
+        - plugins/lineage-codex-plugin/.codex-plugin/plugin.json
+      commands:
+        - cmd: "git tag --list 'v*' --sort=-v:refname; git ls-remote --tags origin v0.1.29; gh release view/list; npm view @mean-weasel/lineage version dist-tags --json"
+          status: pass
+          note: "v0.1.28 was the latest local/remote/GitHub/npm stable version; v0.1.29 had no tag or GitHub release and was not published."
+        - cmd: "npm run release:policy:test"
+          status: pass
+          note: "17 tests passed."
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+          note: "Package and managed-service smoke passed."
+        - cmd: "npm run plugin:smoke"
+          status: pass
+          note: "Plugin release smoke passed for 0.1.29; installer suite passed 35 tests and syntax check."
+        - cmd: "git diff --check"
+          status: pass
+      release_checklist:
+        - "Run integrated Judge and full npm run ci before any external mutation."
+        - "Commit and push the exact 0.1.29 metadata with the reviewed implementation."
+        - "Create a ready PR, require green CI, and merge the reviewed commit to main."
+        - "Create one immutable annotated v0.1.29 tag on the merged main commit and push it once."
+        - "Require the tag-triggered Release workflow to attach lineage-codex-plugin-0.1.29.tgz and its .sha256 before npm latest becomes 0.1.29."
+        - "Repeat the full bridge oracle from lineage-stable with a fresh production profile."
+      deviations:
+        - "The dedicated GoalBuddy Worker exceeded its single bounded wait without returning a receipt and was interrupted; PM completed the allowed-file fallback."
+      remaining_blockers: []
+      verification_attempts: 1
+      stopped_because: null
   - id: T008
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Run the full public gate and audit release readiness, package boundaries, scope, and oracle evidence before external publication."
     inputs:
@@ -594,11 +677,227 @@ tasks:
       - "Version-lock and package-boundary matrix"
       - "Acceptance and top-failure-mode evidence matrix"
       - "Exact external release sequence if ready"
-    receipt: null
+    receipt:
+      result: done
+      decision: remediation_required
+      full_outcome_complete: false
+      rationale: "The first uninterrupted full public gate passed TypeScript checking but failed the zero-warning lint policy on four react-refresh/only-export-components warnings introduced by the canvas slice. The release cannot advance until non-component helpers are moved out of component modules and the full gate passes."
+      ci:
+        cmd: "npm run ci"
+        status: fail
+        passed_before_failure:
+          - "npm run check"
+        failure: "npm run lint: four react-refresh/only-export-components warnings with --max-warnings=0"
+      findings:
+        - file: src/web/components/LineageView.tsx
+          line: 825
+          finding: "decorateSnapshotWithGenerationTargets is exported from a React component module."
+        - file: src/web/components/NodeNextOutputTargets.tsx
+          lines: "21,39,53"
+          finding: "loadNodeNextOutputTargets, selectedNodeTargetResolutionDigest, and nodeTargetStateLabel are exported from a React component module."
+      required_remediation:
+        objective: "Move the four non-component helper exports into Fast Refresh-safe model modules, update consumers/tests without behavior changes, and rerun focused UI tests, lint, type-check, and the full uninterrupted CI gate."
+        scope:
+          - src/web/components/LineageView.tsx
+          - src/web/components/LineageView.test.ts
+          - src/web/components/LineageGenerationSheet.tsx
+          - src/web/components/LineageGenerationSheet.test.tsx
+          - src/web/components/NodeNextOutputTargets.tsx
+          - src/web/components/NodeNextOutputTargets.test.tsx
+          - src/web/components/NodeNextOutputTargetsModel.ts
+          - src/web/components/LineageGenerationTargets.ts
+      deviations:
+        - "The dedicated GoalBuddy Judge exceeded its single bounded wait without returning a receipt and was interrupted; PM ran the required uninterrupted CI fallback."
+      missing_evidence:
+        - "A completely green uninterrupted npm run ci."
+  - id: T012
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Restore the zero-warning public gate by moving node-target helper exports out of React component modules without changing behavior."
+    inputs:
+      - "T008 remediation_required receipt"
+      - "Four react-refresh/only-export-components lint findings"
+      - "Existing focused canvas tests"
+    constraints:
+      - "Preserve every node-target API, digest, label, and snapshot-decoration behavior."
+      - "Limit changes to module boundaries and imports."
+      - "Do not alter release metadata, backend contracts, CLI behavior, or external state."
+    expected_output:
+      - "Fast Refresh-safe component modules"
+      - "Focused canvas tests, lint, and type-check passing"
+      - "One uninterrupted green npm run ci"
+      - "ready_for_pr"
+    allowed_files:
+      - "src/web/components/LineageView.tsx"
+      - "src/web/components/LineageView.test.ts"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "src/web/components/NodeNextOutputTargets.tsx"
+      - "src/web/components/NodeNextOutputTargets.test.tsx"
+      - "src/web/components/NodeNextOutputTargetsModel.ts"
+      - "src/web/components/LineageGenerationTargets.ts"
+    verify:
+      - "npm test -- src/web/components/LineageView.test.ts src/web/components/LineageGenerationSheet.test.tsx src/web/components/NodeNextOutputTargets.test.tsx"
+      - "npm run lint"
+      - "npm run check"
+      - "npm run ci"
+    stop_if:
+      - "Fixing the warnings requires behavior or public-contract changes."
+      - "Required edits extend outside allowed_files."
+      - "Focused verification fails twice for goal-owned reasons."
+    receipt:
+      result: done
+      decision: remediation_required
+      summary: "Moved all non-component helper exports out of React component modules. Focused canvas tests, zero-warning lint, TypeScript check, and diff check pass. The next uninterrupted CI run cleared the original lint failure and stopped later at knip on six redundant shared type exports/re-exports introduced by the feature."
+      changed_files:
+        - src/web/components/LineageView.tsx
+        - src/web/components/LineageView.test.ts
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - src/web/components/NodeNextOutputTargets.tsx
+        - src/web/components/NodeNextOutputTargets.test.tsx
+        - src/web/components/NodeNextOutputTargetsModel.ts
+        - src/web/components/LineageGenerationTargets.ts
+      commands:
+        - cmd: "npm test -- src/web/components/LineageView.test.ts src/web/components/LineageGenerationSheet.test.tsx src/web/components/NodeNextOutputTargets.test.tsx"
+          status: pass
+          note: "3 files, 6 tests passed."
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+      evidence:
+        - "The next uninterrupted npm run ci cleared check, lint, 619 tests with 4 skips, release policy, and docs before knip rejected six redundant shared type exports outside T012 allowed_files."
+      deviations:
+        - "The dedicated GoalBuddy Worker exceeded its single bounded wait without returning a receipt and was interrupted; PM completed the allowed-file fallback."
+      remaining_blockers:
+        - "Remove only the unused NodeNextOutputTargetOrigin export and the unused node-target type re-export barrel from src/shared/types.ts, then rerun knip and full CI."
+      verification_attempts: 2
+      stopped_because: "A separate package-boundary issue outside T012 allowed_files surfaced at knip."
+  - id: T013
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Restore the package-boundary gate by removing only redundant node-target type exports and re-exports."
+    inputs:
+      - "T012 remediation_required receipt"
+      - "Six knip unused-export findings"
+      - "Direct internal import graph for outputTargetTypes.ts"
+    constraints:
+      - "Do not change any runtime type shape or behavior."
+      - "Preserve direct internal imports from outputTargetTypes.ts."
+      - "Do not alter release metadata, UI behavior, CLI behavior, or external state."
+    expected_output:
+      - "No redundant node-target public barrel exports"
+      - "Knip and type-check passing"
+      - "One uninterrupted green npm run ci"
+      - "ready_for_pr"
+    allowed_files:
+      - "src/shared/outputTargetTypes.ts"
+      - "src/shared/types.ts"
+    verify:
+      - "npm run knip"
+      - "npm run check"
+      - "npm run ci"
+    stop_if:
+      - "A removed export has a real consumer."
+      - "Fixing knip requires runtime-contract changes."
+      - "Required edits extend outside allowed_files."
+    receipt:
+      result: done
+      decision: remediation_required
+      summary: "Removed only the unused NodeNextOutputTargetOrigin export and the redundant node-target type barrel re-export. Knip and TypeScript now pass. Full CI cleared check, lint, 619 tests, release policy, docs, knip, build, Pages, onboarding, runtime isolation/oracle, and stable-upgrade before a reproducible rich-demo progress e2e failure outside this task's allowed files."
+      changed_files:
+        - src/shared/outputTargetTypes.ts
+        - src/shared/types.ts
+      commands:
+        - cmd: "npm run knip"
+          status: pass
+          note: "Only pre-existing configuration hints remained; exit 0."
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      evidence:
+        - "The uninterrupted npm run ci cleared every gate through stable-upgrade and 13 of 14 browser tests; qa-rich-seed-visible missed the user-visible indexing progress transition."
+        - "A focused rerun reproduced the progress failure: Creating rich demo workspace transitioned directly to Rich demo ready in the observed UI without rendering Indexing 14 rich demo images."
+      deviations:
+        - "The dedicated GoalBuddy Worker exceeded its single bounded wait without returning a receipt and was interrupted; its exact two-line allowed-file patch was preserved and PM verified it."
+      remaining_blockers:
+        - "Guarantee the truthful indexing phase reaches a browser paint before the rich demo refresh can advance to ready, then rerun the focused e2e and full CI."
+      verification_attempts: 2
+      stopped_because: "A reproducible UI progress issue outside T013 allowed_files surfaced during the full gate."
+  - id: T014
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Make the truthful rich-demo indexing phase visibly commit before the graph can advance to ready."
+    inputs:
+      - "T013 remediation_required receipt"
+      - "Reproduced qa-rich-seed-visible transcript"
+      - "Existing Lineage workspace progress state machine"
+    constraints:
+      - "Do not weaken or remove the browser assertion."
+      - "Do not add arbitrary fixed-duration sleeps."
+      - "Preserve seed request count, graph readiness, node-target refresh, and all output-target behavior."
+      - "Do not alter backend, release metadata, or external state."
+    expected_output:
+      - "Indexing 14 rich demo images reaches a real browser paint"
+      - "Focused rich-seed and output-target browser tests pass"
+      - "One uninterrupted green npm run ci"
+      - "ready_for_pr"
+    allowed_files:
+      - "src/web/components/LineageView.tsx"
+      - "src/web/components/LineageView.test.ts"
+      - "e2e/qa-rich-seed-visible.e2e.ts"
+    verify:
+      - "npm run e2e -- e2e/qa-rich-seed-visible.e2e.ts e2e/output-target-locks.e2e.ts"
+      - "npm run lint"
+      - "npm run check"
+      - "npm run ci"
+    stop_if:
+      - "A real indexing phase cannot be rendered without changing seed or readiness semantics."
+      - "Required edits extend outside allowed_files."
+      - "Focused browser verification fails twice for goal-owned reasons."
+    receipt:
+      result: done
+      decision: ready_for_pr
+      summary: "Guaranteed the rich-demo indexing state reaches a real browser paint using a double requestAnimationFrame boundary before refresh work. The focused rich-seed and output-target browser tests pass, lint/type-check pass, and one uninterrupted full public CI gate is green end to end."
+      changed_files:
+        - src/web/components/LineageView.tsx
+      commands:
+        - cmd: "npm run e2e -- e2e/qa-rich-seed-visible.e2e.ts e2e/output-target-locks.e2e.ts"
+          status: pass
+          note: "2 browser tests passed."
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run ci"
+          status: pass
+          note: "87 test files; 619 passed and 4 intentional skips; 17 release-policy tests; 31 docs pages; knip; builds and Pages; onboarding with real Codex driver; runtime isolation and three-channel oracle; stable upgrade; 14 browser tests; public readiness; package/managed-service smoke; 35 plugin-installer tests; audit found 0 vulnerabilities."
+        - cmd: "git diff --check"
+          status: pass
+      top_failure_modes:
+        - mode: "Fast Refresh or package-boundary warnings block release."
+          proof: "Zero-warning lint and knip both pass inside the uninterrupted CI gate."
+        - mode: "The progress fix hides or races the target-lock canvas flow."
+          proof: "The rich-seed and output-target e2e tests pass together and again in the 14-test full browser suite."
+        - mode: "A locally green UI masks package/runtime isolation defects."
+          proof: "Onboarding, package smoke, managed-service smoke, runtime isolation, simultaneous stable/preview/dev oracle, and stable-upgrade all passed."
+      deviations:
+        - "The dedicated GoalBuddy Worker exceeded its single bounded wait without returning a receipt and was interrupted; PM completed the one-file allowed fallback."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
   - id: T009
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Commit and push the reviewed branch, create a ready pull request, monitor CI and review, merge only when green, then create the immutable annotated release tag and monitor the Release workflow."
     inputs:

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GenerationJob } from '../../shared/generationTypes';
 import type { LineageSnapshot } from '../../shared/types';
-import type { NodeNextOutputTargetsResponse } from './NodeNextOutputTargets';
-import { decorateSnapshotWithGenerationTargets } from './LineageView';
+import { decorateSnapshotWithGenerationTargets } from './LineageGenerationTargets';
+import type { NodeNextOutputTargetsResponse } from './NodeNextOutputTargetsModel';
 
 describe('decorateSnapshotWithGenerationTargets', () => {
   it('keeps current produced geometry separate from the node future-child target state', () => {
