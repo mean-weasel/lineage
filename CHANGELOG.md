@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.28
+
+- Preserve independent canvas generation drafts across interactions and parent rerenders, and flush complete machine-readable CLI output even when receipts exceed the process stdout buffer.
+- Add a provider-neutral image-generation scaffold that derives deterministic, no-clobber scratch destinations from frozen target-aware jobs for external generation and exact-size atomic import.
+
 ## 0.1.27
 
 - Add provider-neutral static-image output targets across agents, the CLI, and the canvas, with explicit surface resolution, shared-geometry consolidation, per-source overrides, custom dimensions, and immutable variant counts.

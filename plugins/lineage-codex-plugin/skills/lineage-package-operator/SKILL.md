@@ -135,7 +135,8 @@ lineage-stable output-targets resolve --profile "$LINEAGE_PROD_PROFILE" --query 
 lineage-stable output-targets defaults --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --json
 lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create two variations" --from-lineage-selection --count 2 --json
 lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create locked variants" --from-lineage-selection --destination instagram.feed_portrait --destination instagram.story --variants-per-target 2 --json
-lineage-stable generate image import --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --manifest .asset-scratch/generation-output-manifest.json --confirm-write --json
+lineage-stable generate image scaffold --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --format png --confirm-write --json
+lineage-stable generate image import --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --manifest .asset-scratch/generation/<job-id>/generation-output-manifest.json --confirm-write --json
 lineage-stable agent release --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
 ```
 
@@ -143,11 +144,35 @@ Export the returned raw token as `LINEAGE_CLAIM_TOKEN`. Heartbeat while working,
 pass the token to claim-scoped writes, and release it before handoff. Use
 `link-child` only for a visible child variation, and supply a one- or two-word
 `--summary` describing the change from parent to child. Use `reroll mark`, `reroll
-plan`, and `reroll import` for a new attempt on the same node. A new `generate
-image plan` response includes `job.handoff.output_manifest`; copy that draft to
-a JSON file, fill every output path and distinct one- or two-word edge summary,
-and import it with `--manifest`. Do not combine manifest input with legacy
-`--files` or `--parent-files`. Discover output targets instead of memorizing
+plan`, and `reroll import` for a new attempt on the same node.
+
+For a persisted planned target-aware v3 selection job, use this exact agent
+sequence:
+
+1. Run `generate image scaffold --job-id <job-id> [--format
+   png|jpeg|webp] --confirm-write --profile <profile> --project <project>
+   --json`.
+2. Read each returned output index, absolute path, width, height, target group,
+   variant, and digest. The scaffold creates only
+   `.asset-scratch/generation/<job-id>/generation-output-manifest.json`; require
+   every reported image destination to remain absent.
+3. Invoke image generation outside Lineage for each slot at exactly its stored
+   width and height. Do not infer a surface, substitute provider-native
+   geometry, resize, or crop.
+4. Copy each generated file to its returned absolute path only after
+   `test ! -e "$OUTPUT_ABSOLUTE_PATH"`. Stop on any collision.
+5. Edit only each empty `edge_summary` to a distinct one- or two-word
+   description. Scaffolding already changed only `file_path`; do not change
+   parent, group, variant, output specification, or digest.
+6. Import the job-scoped manifest with the unchanged `generate image import
+   --confirm-write` command, then inspect the imported job and actual decoded
+   dimensions.
+
+Scaffolding is provider-neutral, deterministic, atomic, scratch-confined, and
+no-clobber. It does not create placeholder images. It refuses legacy/unlocked,
+re-roll, imported, unsafe-ID, unsupported-format, missing-spec, escaping,
+existing, and partial-collision cases. Do not combine manifest input with
+legacy `--files` or `--parent-files`. Discover output targets instead of memorizing
 platform sizes. A platform-only resolution is a clarification request, never
 permission to choose a surface. One-source target flags may use
 `--destination`, `--custom-dimensions`, `--separate-destination`, and

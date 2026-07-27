@@ -15,8 +15,8 @@ lineage-stable db info --profile team-production --json
 
 Use `inspect`, `next`, and `brief` for read-only context. Use `link-child` for a
 new visible branch. Use the `reroll` sequence for another attempt on one asset.
-Use `generate image plan`, `inspect`, and `import` for the Codex handoff
-workflow.
+Use `generate image plan`, `inspect`, `scaffold`, and `import` for the external
+image-generation handoff workflow.
 
 ## Static-image output targets
 
@@ -75,6 +75,41 @@ counts, ordered output slots, and the expected output total. Target-aware jobs
 reject legacy count flags. Locked import decodes PNG, JPEG, or WebP dimensions
 from bytes and rejects the complete batch before persistent writes when any
 output is unsupported, corrupt, tampered, or the wrong size.
+
+For a persisted planned target-aware v3 job, create deterministic local
+destinations and a manifest without creating image files:
+
+```bash
+lineage-stable generate image scaffold \
+  --profile team-production \
+  --project <project> \
+  --job-id <job-id> \
+  --format png \
+  --confirm-write \
+  --json
+```
+
+`--format` is optional and defaults to `png`; accepted values are `png`,
+`jpeg`, and `webp`. The command atomically creates
+`.asset-scratch/generation/<job-id>/generation-output-manifest.json`, fills
+only manifest `file_path` values, leaves every `edge_summary` empty, and
+returns exact output indexes, relative and absolute paths, dimensions, groups,
+variants, and digests. It refuses unsafe IDs, existing or partial job
+directories, unlocked/legacy/re-roll/imported jobs, and scratch escapes.
+
+Generate outside Lineage at each returned exact size. Copy each result to its
+returned absolute path only when that path is absent. Then add only distinct
+one- or two-word `edge_summary` values and run the existing import command:
+
+```bash
+lineage-stable generate image import \
+  --profile team-production \
+  --project <project> \
+  --job-id <job-id> \
+  --manifest .asset-scratch/generation/<job-id>/generation-output-manifest.json \
+  --confirm-write \
+  --json
+```
 
 ## Social marks
 

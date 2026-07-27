@@ -1,9 +1,10 @@
 {
-  "reviewedFor": "0.1.27",
+  "reviewedFor": "0.1.28",
   "result": "updated",
   "areas": [
     "workflows",
     "integrations",
-    "reference-cli"
+    "reference-cli",
+    "generation-scaffold"
   ]
 }

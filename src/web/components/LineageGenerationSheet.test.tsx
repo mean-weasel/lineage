@@ -75,34 +75,32 @@ describe('LineageGenerationSheet', () => {
     expect(container.querySelectorAll('.lineage-source-targets')).toHaveLength(2);
   });
 
-  it('supports independent custom overrides, source defaults, advanced counts, and custom-plus-surface grouping', async () => {
+  it('retains a two-source independent map through every interaction and parent rerender, then submits the canonical map unchanged', async () => {
     const canonicalMap = {
       schema_version: 'lineage.generation_target_map.v1',
       sources: [{
         asset_id: 'source-a',
-        default_variant_count: 3,
-        separate_surface_ids: [],
+        default_variant_count: 2,
+        separate_surface_ids: ['facebook.story'],
         targets: [
-          { kind: 'custom', width: 1080, height: 1920 },
           { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+          { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1, variant_count: 1 },
         ],
       }, {
         asset_id: 'source-b',
         default_variant_count: 2,
         separate_surface_ids: [],
         targets: [
-          { kind: 'custom', width: 1200, height: 1500, variant_count: 4 },
-          { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+          { kind: 'custom', width: 1200, height: 1500 },
         ],
       }],
     };
-    const preview = customPlanResponse(canonicalMap);
+    const preview = interactionPlanResponse(canonicalMap);
     const fetch = vi.fn()
       .mockResolvedValueOnce(response(settings({
-        default_variant_count: 2,
+        default_variant_count: 1,
         targets: [
           { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
-          { kind: 'custom', width: 1080, height: 1920 },
         ],
         separate_surface_ids: [],
       })))
@@ -112,22 +110,42 @@ describe('LineageGenerationSheet', () => {
     const onPlanned = vi.fn();
     await render(onPlanned);
 
-    expect(inputByLabel('Source 1 custom size 1 width').value).toBe('1080');
-    expect(inputByLabel('Source 2 custom size 1 width').value).toBe('1080');
-    setInput(inputByLabel('Source 1 Variants per format'), '3');
+    const sourceOne = sourceFieldset('Source 1');
+    const sourceTwo = sourceFieldset('Source 2');
+    clickCheckbox(labelContaining(sourceOne, 'Facebook · Story').querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await rerender(onPlanned);
+    expect(labelContaining(sourceOne, 'Facebook · Story').querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true);
+
+    clickCheckbox(labelContaining(rowContaining(sourceOne, 'Facebook · Story'), 'Create separate variants').querySelector<HTMLInputElement>('input')!);
+    await rerender(onPlanned);
+    expect(labelContaining(rowContaining(sourceOne, 'Facebook · Story'), 'Create separate variants').querySelector<HTMLInputElement>('input')?.checked).toBe(true);
+
+    setInput(inputByLabel('Source 1 Variants per format'), '2');
+    await rerender(onPlanned);
+    expect(inputByLabel('Source 1 Variants per format').value).toBe('2');
+
+    setInput(inputsByLabel('Source 1 Story count', sourceOne)[1], '1');
+    await rerender(onPlanned);
+    expect(inputsByLabel('Source 1 Story count', sourceOne)[1].value).toBe('1');
+
+    clickCheckbox(labelContaining(sourceTwo, 'Instagram · Story').querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    setInput(inputByLabel('Source 2 Variants per format'), '2');
+    act(() => button('Add custom size', sourceTwo)!.click());
     setInput(inputByLabel('Source 2 custom size 1 width'), '1200');
     setInput(inputByLabel('Source 2 custom size 1 height'), '1500');
-    setInput(inputByLabel('Source 2 custom size 1 count'), '4');
-    expect(inputByLabel('Source 1 custom size 1 width').value).toBe('1080');
+    await rerender(onPlanned);
+    expect(inputByLabel('Source 2 custom size 1 width').value).toBe('1200');
+    expect(inputByLabel('Source 2 custom size 1 height').value).toBe('1500');
+
     setTextarea(container.querySelector('textarea')!, 'Create custom and story formats');
+    await rerender(onPlanned);
+    expect(container.querySelector('textarea')?.value).toBe('Create custom and story formats');
 
     await act(async () => { button('Resolve preview')!.click(); await tick(); });
     const previewBody = JSON.parse(String(fetch.mock.calls[1][1].body));
-    expect(previewBody.targetMap).toEqual({
-      ...canonicalMap,
-      sources: canonicalMap.sources.map(source => ({ ...source, targets: [...source.targets].reverse() })),
-    });
-    expect(container.textContent).toContain('9 exact outputs');
+    expect(previewBody.targetMap).toEqual(canonicalMap);
+    expect(container.textContent).toContain('5 exact outputs');
+    expect(container.textContent).toContain('3 resolved groups');
     expect(container.textContent).toContain('1200 × 1500 px');
     expect(container.textContent).toContain('No delivery destination');
 
@@ -144,8 +162,27 @@ async function render(onPlanned: (job: GenerationJob) => void) {
     await tick();
   });
 }
-function button(label: string) { return [...container.querySelectorAll('button')].find(item => item.textContent === label) as HTMLButtonElement | undefined; }
-function inputByLabel(label: string) { return container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!; }
+async function rerender(onPlanned: (job: GenerationJob) => void) {
+  await act(async () => {
+    root.render(<LineageGenerationSheet onClose={vi.fn()} onPlanned={onPlanned} project="project" rootAssetId="root" sources={sources.map(source => ({ ...source }))} />);
+    await tick();
+  });
+}
+function button(label: string, scope: ParentNode = container) { return [...scope.querySelectorAll('button')].find(item => item.textContent === label) as HTMLButtonElement | undefined; }
+function inputByLabel(label: string, scope: ParentNode = container) { return scope.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!; }
+function inputsByLabel(label: string, scope: ParentNode = container) { return [...scope.querySelectorAll<HTMLInputElement>(`input[aria-label="${label}"]`)]; }
+function labelContaining(scope: ParentNode, text: string) {
+  return [...scope.querySelectorAll('label')].find(label => label.textContent?.includes(text))!;
+}
+function rowContaining(scope: ParentNode, text: string) {
+  return [...scope.querySelectorAll<HTMLElement>('.lineage-target-row')].find(row => row.textContent?.includes(text))!;
+}
+function sourceFieldset(title: string) {
+  return [...container.querySelectorAll<HTMLFieldSetElement>('.lineage-source-targets')].find(fieldset => fieldset.querySelector('legend')?.textContent?.includes(title))!;
+}
+function clickCheckbox(element: HTMLInputElement) {
+  act(() => element.click());
+}
 function setInput(element: HTMLInputElement, value: string) {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(element, value);
@@ -171,21 +208,24 @@ function settings(defaults: CanvasTargetSettingsResponse['defaults'] = {
     registry: {
       schema_version: 'lineage.output_target_registry.v1',
       geometries: [{ id: 'static-image.1080x1920', version: 1, media_kind: 'static_image', width: 1080, height: 1920 }],
-      surfaces: [{ id: 'instagram.story', version: 1, platform: 'Instagram', surface: 'Story', media_kind: 'static_image', geometry_profile_id: 'static-image.1080x1920', geometry_profile_version: 1, aliases: [], guidance: [], source_url: 'https://example.test', source_verified_at: '2026-07-27', lifecycle: 'active' }],
+      surfaces: [
+        { id: 'instagram.story', version: 1, platform: 'Instagram', surface: 'Story', media_kind: 'static_image', geometry_profile_id: 'static-image.1080x1920', geometry_profile_version: 1, aliases: [], guidance: [], source_url: 'https://example.test', source_verified_at: '2026-07-27', lifecycle: 'active' },
+        { id: 'facebook.story', version: 1, platform: 'Facebook', surface: 'Story', media_kind: 'static_image', geometry_profile_id: 'static-image.1080x1920', geometry_profile_version: 1, aliases: [], guidance: [], source_url: 'https://example.test', source_verified_at: '2026-07-27', lifecycle: 'active' },
+      ],
     },
   };
 }
-function customPlanResponse(map: unknown) {
+function interactionPlanResponse(map: unknown) {
   const groups = [
-    { id: 'group-a', parent_asset_id: 'source-a', width: 1080, height: 1920, delivery_surfaces: [{ platform: 'Instagram', surface: 'Story' }], grouping_mode: 'consolidated', variant_count: 3, target_map_digest: 'digest', guidance: [], unlocked: false },
-    { id: 'group-b-story', parent_asset_id: 'source-b', width: 1080, height: 1920, delivery_surfaces: [{ platform: 'Instagram', surface: 'Story' }], grouping_mode: 'consolidated', variant_count: 2, target_map_digest: 'digest', guidance: [], unlocked: false },
-    { id: 'group-b-custom', parent_asset_id: 'source-b', width: 1200, height: 1500, delivery_surfaces: [], grouping_mode: 'consolidated', variant_count: 4, target_map_digest: 'digest', guidance: [], unlocked: false },
+    { id: 'group-a-instagram', parent_asset_id: 'source-a', width: 1080, height: 1920, delivery_surfaces: [{ platform: 'Instagram', surface: 'Story' }], grouping_mode: 'consolidated', variant_count: 2, target_map_digest: 'digest', guidance: [], unlocked: false },
+    { id: 'group-a-facebook', parent_asset_id: 'source-a', width: 1080, height: 1920, delivery_surfaces: [{ platform: 'Facebook', surface: 'Story' }], grouping_mode: 'explicit_split', variant_count: 1, target_map_digest: 'digest', guidance: [], unlocked: false },
+    { id: 'group-b-custom', parent_asset_id: 'source-b', width: 1200, height: 1500, delivery_surfaces: [], grouping_mode: 'consolidated', variant_count: 2, target_map_digest: 'digest', guidance: [], unlocked: false },
   ];
   return {
     ok: true, command: 'generate image plan', project: 'project', dryRun: true, wouldWrite: true,
     job: {
-      id: 'preview-custom-job', project_id: 'project', expected_output_count: 9, status: 'planned', inputs: [], outputs: [], receipts: [],
-      target_plan: { map, canonical_json: JSON.stringify(map), digest_sha256: 'digest', groups, slots: [], expected_output_count: 9 },
+      id: 'preview-custom-job', project_id: 'project', expected_output_count: 5, status: 'planned', inputs: [], outputs: [], receipts: [],
+      target_plan: { map, canonical_json: JSON.stringify(map), digest_sha256: 'digest', groups, slots: [], expected_output_count: 5 },
     },
   };
 }

@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
 
-active_task: T003
+active_task: T012
 
 tasks:
   - id: T001
@@ -258,7 +258,7 @@ tasks:
   - id: T003
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Publish the first approved release candidate through reviewed main, the immutable tag workflow, and complete npm/GitHub/plugin/runtime verification."
     inputs:
@@ -275,11 +275,58 @@ tasks:
       - "Immutable annotated tag"
       - "Successful release workflow"
       - "Verified package, GitHub Release, plugin assets, and runtime channel"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Published Lineage 0.1.27 through reviewed main, the immutable annotated tag workflow, npm latest, a non-prerelease GitHub Release with both plugin assets, and an identity-gated stable runtime."
+      pull_request:
+        number: 120
+        url: "https://github.com/mean-weasel/lineage/pull/120"
+        reviewed_head: 3ce6afebfbd45e31825b3ef0a9c8b95699c8c023
+        merge_commit: d1c680928e7006cc1a9d51026d494cb1752324a1
+        merge_queue_checks: "six successful checks"
+      release:
+        version: 0.1.27
+        tag: v0.1.27
+        tag_object: 9bb0c2017c9ab181f66154c03a246bff2625d133
+        peeled_commit: d1c680928e7006cc1a9d51026d494cb1752324a1
+        workflow_run: "https://github.com/mean-weasel/lineage/actions/runs/30291211437"
+        workflow_conclusion: success
+        npm_latest: 0.1.27
+        github_release: "https://github.com/mean-weasel/lineage/releases/tag/v0.1.27"
+        github_prerelease: false
+        assets:
+          - lineage-codex-plugin-0.1.27.tgz
+          - lineage-codex-plugin-0.1.27.tgz.sha256
+        post_release_docs_issue: "https://github.com/mean-weasel/lineage/issues/121"
+      stable_runtime:
+        launcher: lineage-stable
+        channel: stable
+        origin: package
+        version: 0.1.27
+        git_sha: d1c680928e7006cc1a9d51026d494cb1752324a1
+        code_fingerprint: adb642984cc89e6e5a9c3d78b817c62f3da780835b58de58b0ec0f507ebbd18d
+        profile: output-target-adoption-027
+        profile_fingerprint: 3b665c17f61dbdd2073cc1abba97e148a7af6bad75014fae2bc002f1931e02ed
+        environment: production
+        service_origin: "http://lineage.localhost:5197"
+        database: "isolated profile-bound lineage.sqlite"
+        gate: "runtime doctor, profile doctor, and db info all passed after versioned profile upgrade"
+      user_facing_claim: "Lineage 0.1.27 is the released stable package and is ready for dogfood through a verified package runtime, not checkout code."
+      top_failure_modes:
+        - "A moved or lightweight tag could publish code other than the reviewed main commit."
+        - "npm latest, the GitHub Release, or plugin assets could disagree on version."
+        - "Dogfood could accidentally run against old stable or checkout code."
+      evidence:
+        - "PR #120 exact-head merge-queue success"
+        - "Post-merge CI, plugin installer CI, and public-site deployment success on d1c6809"
+        - "Annotated remote tag object peeling to d1c6809"
+        - "Successful tag-triggered Release workflow run 30291211437"
+        - "Independent npm latest and GitHub Release asset inspection"
+        - "Stable runtime/profile/database identity gate for output-target-adoption-027"
   - id: T004
     type: pm
     assignee: PM
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Dogfood the released feature through the ambiguous-platform, multi-source override, and locked-reroll scenarios and record actionable friction."
     inputs:
@@ -295,11 +342,63 @@ tasks:
       - "Multi-source independent override/group/split/count walkthrough"
       - "Locked reroll inheritance and child-variation walkthrough"
       - "Screenshots, command receipts, persisted-state evidence, and ranked friction list"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Dogfooded the released 0.1.27 static-image target contract through ambiguous Instagram resolution, independent multi-source target groups, exact-pixel child imports, and a same-node locked reroll. The backend contract passed; canvas branch edits reset immediately and large CLI JSON receipts truncate at 65,536 bytes."
+      runtime:
+        launcher: lineage-stable
+        channel: stable
+        version: 0.1.27
+        git_sha: d1c680928e7006cc1a9d51026d494cb1752324a1
+        code_fingerprint: adb642984cc89e6e5a9c3d78b817c62f3da780835b58de58b0ec0f507ebbd18d
+        profile: output-target-adoption-027-dogfood
+        profile_fingerprint: d1d81c6328e4d57d42b165f58b3a8b47dfba3597ea0cfd7ff47b664dd3a83e1a
+        service_origin: "http://lineage.localhost:5198"
+      walkthroughs:
+        ambiguous_instagram: "Returned three explicit choices: Feed square 1080x1080, Feed portrait 1080x1440, and Story 1080x1920."
+        multi_source:
+          job_id: gen-ms3je09k-d877722d
+          expected_outputs: 5
+          persisted_outputs: 5
+          groups:
+            - "Selected Product: Facebook Story + Instagram Story, consolidated, one 1080x1920 output"
+            - "Founder Note: Instagram Story, consolidated, two 1080x1920 outputs"
+            - "Founder Note: X standalone vertical, explicit split, two 1080x1920 outputs"
+          digest: 3c559921d84bf532ef9ed07bd2ddb0c25d8a18d4c0a2882b613eeb72ba6a290d
+        locked_reroll:
+          job_id: gen-ms3jiqza-8f846ecb
+          node_asset_id: local-fc24e75b30d8
+          attempt_count: 2
+          node_count_before_and_after: 15
+          dimensions: 1080x1920
+          surfaces:
+            - facebook.story
+            - instagram.story
+      friction:
+        - severity: critical
+          item: "Canvas branch-level destination, split, and count edits reset immediately because the generation sheet initialization effect depends on an unstable sources array."
+          disposition: "Must fix with direct interaction regression coverage before adoption is complete."
+        - severity: medium
+          item: "generate image inspect --json emits exactly 65,536 bytes and terminates mid-string for a realistic multi-source receipt."
+          disposition: "Fix managed output transport and add a regression fixture larger than 64 KiB."
+        - severity: low
+          item: "Byte-identical synthetic outputs cannot carry conflicting immutable output specs."
+          disposition: "Expected safety behavior; no product change required."
+      user_facing_claim: "The released CLI and persisted target contract work end to end, but the released canvas cannot yet retain explicit branch overrides."
+      top_failure_modes:
+        - "Canvas appears configurable while silently discarding branch overrides."
+        - "Grouping, split, or count persistence disagrees with the requested target map."
+        - "A locked reroll creates a visible child or mutates exact geometry."
+      evidence:
+        - docs/goals/static-image-output-target-adoption/notes/T004-dogfood.md
+        - docs/goals/static-image-output-target-adoption/notes/T004-planner-reset.png
+        - docs/goals/static-image-output-target-adoption/notes/T004-locked-child-reroll.png
+        - docs/goals/static-image-output-target-adoption/notes/T004-generation-proof.png
+        - "Persisted jobs gen-ms3je09k-d877722d and gen-ms3jiqza-8f846ecb in the isolated dogfood profile"
   - id: T005
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Judge the dogfood evidence, reject theater, and define the largest bounded UX adoption package required before integration and final release."
     inputs:
@@ -315,13 +414,61 @@ tasks:
       - "Friction severity/disposition matrix"
       - "Exact T006 objective, allowed_files, verify commands, and stop conditions"
       - "Explicit no-op disposition if no code change is justified"
-    receipt: null
+    receipt:
+      result: done
+      decision: remediate
+      full_outcome_complete: false
+      summary: "Accepted T004 as substantive released-runtime dogfood. Repair both the critical canvas draft-reset and the medium 65,536-byte CLI JSON truncation in one bounded T006 slice before agent integration."
+      rationale: "The canvas defect blocks the approved hybrid defaults-plus-branch-overrides UX. Complete parseable CLI JSON is a dependency for the downstream agent bridge. Both fixes are bounded and locally reversible; aesthetic redesign, summary substitution, and content-identity relaxation are not justified."
+      friction_disposition:
+        - severity: critical
+          item: "Canvas destination, split, and count edits reset immediately."
+          disposition: "Fix in T006."
+        - severity: medium
+          item: "Large generate image inspect --json output truncates at 65,536 bytes."
+          disposition: "Fix in T006 with an actual CLI subprocess proof."
+        - severity: low
+          item: "Byte-identical files with conflicting immutable output specs are rejected."
+          disposition: "No-op; expected safety behavior."
+        - severity: none
+          item: "Aesthetic planner redesign or bounded summary mode."
+          disposition: "No-op; unsupported by evidence and not a substitute for complete JSON."
+      worker_package:
+        objective: "Repair the released canvas draft-retention and large-JSON CLI output defects as one evidence-backed adoption slice, preserving canonical target planning, persisted job semantics, exact-pixel enforcement, and complete --json output."
+        allowed_files:
+          - src/web/components/LineageView.tsx
+          - src/web/components/LineageGenerationSheet.tsx
+          - src/web/components/LineageGenerationSheet.test.tsx
+          - e2e/output-target-locks.e2e.ts
+          - src/cli/lineageCli.ts
+          - src/cli/lineageCli.test.ts
+        verify:
+          - "npx vitest run --config vitest.config.ts src/web/components/LineageGenerationSheet.test.tsx src/cli/lineageCli.test.ts"
+          - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          - "npm run check"
+          - "npm run lint"
+          - "npm run package:smoke"
+          - "npm run ci"
+          - "git diff --check"
+        acceptance_criteria:
+          - "Two-source independent destination, split, count, and custom edits survive each interaction and unrelated parent rerenders."
+          - "A real interaction regression proves the requested independent map, three groups, and five outputs."
+          - "Submission preserves backend-resolved canonical semantics and legacy unlocked behavior."
+          - "A real CLI subprocess emits and parses complete JSON larger than 65,536 bytes."
+          - "The fix prevents premature output loss rather than trimming or summarizing."
+          - "Focused tests, browser workflow, package smoke, and full CI pass."
+      blocked_tasks:
+        - "T007 and later work until T006 proves both remediations."
+        - "Final release until repaired behavior is released and re-dogfooded."
+      evidence:
+        - docs/goals/static-image-output-target-adoption/notes/T004-dogfood.md
+        - "T005 GoalBuddy Judge source and test boundary inspection"
   - id: T006
     type: worker
     assignee: Worker
-    status: queued
+    status: done
     reasoning_hint: medium
-    objective: "Implement the evidence-backed UX adoption package selected by T005 without weakening the frozen target contract."
+    objective: "Repair the released canvas draft-retention and large-JSON CLI output defects as one evidence-backed adoption slice, preserving canonical target planning, persisted job semantics, exact-pixel enforcement, and complete --json output."
     inputs:
       - "T005 decision and exact Worker package"
       - "T004 dogfood evidence"
@@ -330,21 +477,77 @@ tasks:
       - "Do not add provider calls, publishing, transforms, agent mutation of defaults, or mismatch overrides."
       - "Keep legacy unlocked workflows compatible."
     expected_output:
-      - "Resolved material dogfood friction"
-      - "Focused component/browser regression coverage"
-      - "Passing exact verification from T005"
-    allowed_files: []
-    verify: []
+      - "Two-source independent destination, split, count, and custom edits survive each interaction and unrelated parent rerenders."
+      - "A real interaction regression proves the requested independent source map, three groups, and five-output count."
+      - "Submission preserves backend-resolved canonical semantics and legacy unlocked behavior."
+      - "A real CLI subprocess emits and parses complete JSON larger than 65,536 bytes."
+      - "The CLI fix prevents premature output loss rather than trimming fields or substituting a summary."
+      - "Focused tests, browser workflow, package smoke, and full CI pass."
+    allowed_files:
+      - "src/web/components/LineageView.tsx"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "e2e/output-target-locks.e2e.ts"
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+    verify:
+      - "npx vitest run --config vitest.config.ts src/web/components/LineageGenerationSheet.test.tsx src/cli/lineageCli.test.ts"
+      - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run package:smoke"
+      - "npm run ci"
+      - "git diff --check"
     stop_if:
-      - "T005 has not installed exact allowed_files and verify commands."
-      - "The work requires files outside allowed_files."
-      - "A proposed UX shortcut changes persisted target semantics."
+      - "Repair requires changing target-map schemas, persisted generation semantics, database migrations, decoded-pixel validation, or provider boundaries."
+      - "Complete large-output proof cannot be achieved through the actual CLI subprocess within allowed_files."
+      - "Retaining drafts requires an unresolved product decision about changing selected sources while the planner is open."
+      - "The implementation requires files outside allowed_files."
+      - "A new user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Canvas drafts now retain independent destinations, split settings, default/per-group counts, prompt, and custom dimensions across interactions and parent rerenders; submission preserves the canonical map. CLI inspect now flushes complete large JSON."
+      changed_files:
+        - src/web/components/LineageView.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - e2e/output-target-locks.e2e.ts
+        - src/cli/lineageCli.ts
+        - src/cli/lineageCli.test.ts
+      commands:
+        - cmd: "npx vitest run --config vitest.config.ts src/web/components/LineageGenerationSheet.test.tsx src/cli/lineageCli.test.ts"
+          status: pass
+          result: 42/42
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+          result: 1/1
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "npm run ci"
+          status: pass
+          result: "84 test files, 595 passed, 4 skipped, 14/14 E2E, audit clean"
+        - cmd: "git diff --check"
+          status: pass
+      user_facing_claim: "Branch-level canvas target edits survive rerenders and large machine-readable CLI receipts are complete and parseable."
+      top_failure_modes:
+        - "Draft initialization reruns on every parent render and overwrites branch edits."
+        - "Immediate CLI process exit truncates buffered stdout at 65,536 bytes."
+        - "Interaction or assertion changes accidentally alter canonical target-map ordering or semantics."
+      evidence:
+        - "Direct two-source interaction test retaining destinations, split, counts, custom dimensions, and prompt across rerenders"
+        - "Browser workflow persisting an exact three-group, five-output canonical plan"
+        - "Actual CLI subprocess emitting more than 65,536 bytes, parsing successfully, and equaling the persisted object"
+        - "Full npm run ci and package smoke"
+      remaining_blockers: []
   - id: T007
     type: scout
     assignee: Scout
-    status: queued
+    status: done
     reasoning_hint: low
     objective: "Map the current agent/operator, CLI handoff, image-generation tool, scratch-file, manifest, and import boundaries for a provider-neutral plan-to-generation workflow."
     inputs:
@@ -361,11 +564,61 @@ tasks:
       - "Boundary and failure-mode analysis"
       - "Candidate integration slices ranked by usefulness, reversibility, and proof strength"
       - "Recommended live oracle for generated files"
-    receipt: null
+    receipt:
+      result: done
+      summary: "The durable planning and strict import contracts already exist; the missing provider-neutral bridge is agent-side materialization. The strongest reversible slice is an agent/operator workflow that consumes handoff v3 and manifest v2, scaffolds deterministic scratch paths, invokes external generation per exact slot, fills only file paths and short summaries, and imports through the unchanged atomic contract."
+      workflow_map:
+        - "Identity-gate one launcher/profile/database/service."
+        - "Read selection/defaults and resolve platform ambiguity through a human surface choice."
+        - "Persist an explicit target plan and consume its handoff v3, resolved slots, expected count, and manifest v2 draft."
+        - "Generate externally per exact slot; no provider call enters the Lineage server."
+        - "Copy unique generated bitmaps beneath a job-scoped .asset-scratch path."
+        - "Fill only file_path and one/two-word edge_summary."
+        - "Import through exact manifest, scratch-confinement, decoded-pixel, and atomic persistence checks."
+        - "Inspect immutable output specs, receipts, visible child nodes, and canvas badges."
+      ranked_slices:
+        - rank: 1
+          slice: "Agent/operator bridge plus scratch-manifest scaffolding using existing handoff v3 and manifest v2"
+          usefulness: high
+          reversibility: high
+          proof_strength: high
+        - rank: 2
+          slice: "Skill/documentation-only manual recipe"
+          usefulness: medium-high
+          reversibility: "very high"
+          proof_strength: medium
+        - rank: 3
+          slice: "New CLI projection for per-slot work items and scratch destinations"
+          usefulness: high
+          reversibility: medium
+          proof_strength: high
+        - rank: 4
+          slice: "Provider-specific server adapter"
+          usefulness: rejected
+          reversibility: low
+          proof_strength: low
+      recommended_live_oracle:
+        - "Use an identity-gated dedicated non-production profile and synthetic selected parent."
+        - "Persist one locked custom 1024x1536 plan."
+        - "Generate an exact 1024x1536 bitmap externally into a job-scoped scratch directory."
+        - "Fill only file_path and edge_summary, then confirmed-import the manifest."
+        - "Require imported status, one visible child, decoded 1024x1536 dimensions, matching immutable spec/digest/checksum receipt, and locked canvas visibility."
+        - "Negative companion: wrong-sized output is atomically rejected with no child or persisted output."
+      judge_questions:
+        - "Choose skill/docs-only versus a local scaffolding command that writes deterministic scratch paths and a manifest without changing persistent schemas."
+        - "Choose exact custom geometry for the deterministic first oracle versus a named platform surface with provider-size compatibility risk."
+      evidence:
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - src/shared/generationTypes.ts
+        - src/shared/generationOutputManifest.ts
+        - src/shared/outputTargetTypes.ts
+        - src/server/generationReceipts.ts
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - "T004 released-runtime dogfood and T006 remediation receipts"
   - id: T008
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Choose and specify the smallest complete provider-neutral agent integration that materially reduces handoff friction."
     inputs:
@@ -381,13 +634,48 @@ tasks:
       - "Exact T009 objective, allowed_files, verify commands, and stop conditions"
       - "Protocol compatibility and rollout assessment"
       - "Live acceptance transcript"
-    receipt: null
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      summary: "Approve one additive provider-neutral vertical slice: generate image scaffold plus operator/public guidance. It consumes persisted handoff v3/manifest v2, creates deterministic no-clobber job-scoped scratch paths, preserves frozen fields, leaves generation external, and imports through the unchanged hard contract."
+      architecture:
+        syntax: "lineage generate image scaffold --job-id <job-id> [--format png|jpeg|webp] --confirm-write --profile <profile> --project <project> --json"
+        input: "One persisted planned target-aware generation-receipts-v3 job with handoff v3 and output manifest v2."
+        filesystem_effect: "Atomically create .asset-scratch/generation/<job-id>/generation-output-manifest.json and deterministic output-000.<ext> paths without creating placeholder images."
+        manifest_effect: "Copy stored manifest draft exactly and populate only file_path; leave edge_summary empty."
+        response: "Return job ID, manifest path, relative/absolute output paths, indexes, dimensions, groups, variants, and output-spec digests."
+        safety: "Named profile and confirmation required; safe job IDs/formats only; refuse non-v3, non-planned, missing-spec, existing, escaping, or partially colliding scaffolds; never overwrite."
+      first_oracle:
+        kind: custom
+        width: 1024
+        height: 1536
+        variant_count: 1
+        reason: "Native exact image-tool geometry proves the bridge without platform-size compatibility risk."
+      compatibility:
+        - "Additive CLI surface only; no existing command changes semantics."
+        - "No protocol, persistence, or database migration."
+        - "Legacy unlocked and reroll remain available but outside scaffold v1."
+        - "Import remains the sole persistent ingestion authority."
+        - "Rollback removes the additive command and guidance without invalidating jobs, manifests, assets, or databases."
+      user_facing_claim: "An agent can take a frozen target-aware plan, obtain deterministic destinations, generate externally, and import an exact-size locked child without reconstructing immutable manifest fields."
+      top_failure_modes:
+        - "Scaffolding mutates or recomputes frozen target fields."
+        - "Scratch paths escape the active profile root, collide, or overwrite prior work."
+        - "A wrong-size generated file is accepted or leaves partial lineage state."
+      evidence_required:
+        - "Manifest frozen-field equality and deterministic no-clobber path tests."
+        - "Exact-size byte-valid raster import with actual dimensions and digest."
+        - "Wrong-size raster rejection with unchanged job outputs and lineage node count."
+      blocked_tasks:
+        - "T010 until T009 passes."
+        - "T011 until T010 proves success and atomic mismatch rejection."
   - id: T009
     type: worker
     assignee: Worker
-    status: queued
+    status: done
     reasoning_hint: medium
-    objective: "Implement the provider-neutral agent plan-to-generation-to-manifest/import bridge selected by T008."
+    objective: "Add a provider-neutral generate image scaffold bridge for persisted target-aware jobs and teach the operator workflow to invoke external image generation, materialize each exact slot, fill only short edge summaries, and import through the unchanged manifest-v2 and decoded-pixel contract."
     inputs:
       - "T008 architecture and exact Worker package"
       - "Existing output-target and import contracts"
@@ -397,23 +685,95 @@ tasks:
       - "Generated output must pass byte-based type and exact-pixel validation."
       - "Preserve CLI/canvas parity and legacy compatibility."
     expected_output:
-      - "One coherent agent-facing workflow from request through imported locked node"
-      - "Machine-readable errors and retry guidance"
-      - "Focused protocol/operator/integration tests"
-      - "Passing exact verification from T008"
-    allowed_files: []
-    verify: []
+      - "CLI help, operator skill, integration guide, workflow guide, and CLI reference describe the same scaffold/generate/copy/summarize/import sequence."
+      - "Scaffolding accepts only a persisted planned target-aware v3 job and derives geometry and slot order only from stored manifest v2 and target plan."
+      - "The scaffold is deterministic, atomic, no-clobber, scratch-confined, and creates no placeholder image."
+      - "Only manifest file_path values change during scaffolding; the agent subsequently changes only short edge_summary values."
+      - "PNG, JPEG, and WebP paths are supported without provider assumptions."
+      - "Machine-readable output returns exact manifest/output paths, indexes, dimensions, groups, variants, and digests."
+      - "A focused exact-size import succeeds and a wrong-size import is atomically rejected with zero partial state."
+      - "Existing plan, inspect, import, unlocked, reroll, defaults, handoff, manifest, target-map, and database contracts remain unchanged."
+    allowed_files:
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md"
+      - "docs-site/src/content/docs/integrations/image-generation.md"
+      - "docs-site/src/content/docs/workflows/generate-import-variations.md"
+      - "docs-site/src/content/docs/reference/cli.md"
+      - "docs-site/docs-review.json"
+    verify:
+      - "npx vitest run --config vitest.config.ts src/cli/lineageCli.test.ts"
+      - "npm run docs:check"
+      - "npm run plugin:smoke"
+      - "npm run plugin:codex-smoke"
+      - "npm run check"
+      - "npm run lint"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "npm run ci"
+      - "git diff --check"
     stop_if:
-      - "T008 has not installed exact allowed_files and verify commands."
-      - "The work requires files outside allowed_files."
-      - "Provider credentials or calls would enter the Lineage server."
-      - "The bridge can bypass frozen dimensions or atomic import."
+      - "Implementation requires changing generation handoff, output manifest, target map, output spec, persistence, or database schemas."
+      - "Implementation requires provider calls or credentials in Lineage server or CLI code."
+      - "Deterministic paths cannot be anchored to the active profile asset root or cannot be created atomically without overwrite."
+      - "The command would infer a named surface, mutate canvas defaults, create placeholder outputs, resize or crop files, or weaken exact-byte validation."
+      - "The slice requires legacy or unlocked jobs, rerolls, remote storage, transforms, publishing, or files outside allowed_files."
+      - "A new user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Agents can now scaffold a frozen target-aware job, generate externally, copy exact files, add only short summaries, and import unchanged. The additive command is profile-bound, deterministic, atomic, no-placeholder, no-clobber, and returns exact machine-readable slot paths and specifications."
+      changed_files:
+        - src/cli/lineageCli.ts
+        - src/cli/lineageCli.test.ts
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - docs-site/src/content/docs/workflows/generate-import-variations.md
+        - docs-site/src/content/docs/reference/cli.md
+        - docs-site/docs-review.json
+      commands:
+        - cmd: "npx vitest run --config vitest.config.ts src/cli/lineageCli.test.ts"
+          status: pass
+          result: "42 tests"
+        - cmd: "npm run docs:check"
+          status: pass
+          result: "31 pages validated and 32 built"
+        - cmd: "npm run plugin:smoke"
+          status: pass
+          result: "release smoke and 35 installer tests"
+        - cmd: "npm run plugin:codex-smoke"
+          status: pass
+          result: "isolated install, doctor, reinstall, cleanup, and rollback"
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+          result: "package and managed-service smoke"
+        - cmd: "npm run ci"
+          status: pass
+          result: "598 passed, 4 skipped, 14/14 E2E, runtime/package/plugin/audit green"
+        - cmd: "git diff --check"
+          status: pass
+      user_facing_claim: "A frozen target-aware job can be turned into deterministic external-generation destinations and an import-ready manifest without reconstructing or weakening immutable fields."
+      top_failure_modes:
+        - "Scaffolding drifts frozen fields."
+        - "Scratch paths escape, collide, overwrite, or create misleading placeholder images."
+        - "Wrong-size bytes are accepted or leave partial persistent state."
+      evidence:
+        - "Frozen-field equality and no-clobber scaffold tests"
+        - "PNG/JPEG/WebP deterministic path and machine metadata coverage"
+        - "Exact byte-valid scaffold import"
+        - "Wrong-size atomic rejection with unchanged assets, edges, outputs, and specs"
+        - "Packaged operator skill, public docs, package smoke, plugin smoke, and full CI"
+      remaining_blockers: []
   - id: T010
     type: pm
     assignee: PM
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Run the integrated agent-generation oracle and prove request resolution, exact generation geometry, manifest handoff, atomic import, and canvas visibility."
     inputs:
@@ -430,11 +790,58 @@ tasks:
       - "Generated static-image manifest and successful import"
       - "Rejected invalid output with zero partial state"
       - "Canvas/CLI visibility evidence and screenshots"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Proved the integrated provider-neutral agent loop in a dedicated identity-gated dev profile: exact 1024x1536 planning, deterministic no-clobber scaffold, real generated PNG handoff, atomic import, and locked canvas visibility. A second real 1254x1254 generated PNG was rejected against the frozen 1024x1536 contract with zero partial database or graph state."
+      evidence:
+        - notes/T010-agent-generation-oracle.md
+        - notes/T010-agent-generated-child.png
+        - notes/T010-generation-proof.png
+        - notes/T010-generation-proof-detail.png
+        - "job=gen-ms3la7dj-eeb5763c imported node=local-25d0fa2d7d93 decoded=1024x1536"
+        - "job=gen-ms3lcoq6-6a43035c rejected decoded=1254x1254 required=1024x1536"
+        - "negative-state assets=0 edges=0 generation_job_outputs=0 asset_output_specs=0"
+      identity:
+        channel: dev
+        profile: output-target-agent-oracle-dev-1
+        service: "http://lineage-dev.localhost:5298"
+        git_commit: 61347d06edd08f113d2668abd440c8836cccad5b
+        code_fingerprint: 221f976e77ac2037f90e34e70efa7d42d225616b9841331d23c54a12a394891d
+        profile_fingerprint: 707ad853cee9b31935e7fd4e331c13c1ba196d6ee4c36e61b2590fda6301a970
+      success_contract:
+        job_id: gen-ms3la7dj-eeb5763c
+        output_node_id: local-25d0fa2d7d93
+        dimensions: 1024x1536
+        sha256: 25d0fa2d7d9388088d857c11fa2e212d055d63b45ce85ee19f8b7c213dea1ce6
+        target_plan_digest: 383758f95a2107003da8689f1b1e3f8e0158d18172c93c364e0589cdd752db4a
+        output_spec_digest: 417e17fd88dbb9235ffbc2c6fa8f04fbc860cef5ad4fc1b4b180fc4c8550ba16
+      negative_contract:
+        job_id: gen-ms3lcoq6-6a43035c
+        required_dimensions: 1024x1536
+        decoded_dimensions: 1254x1254
+        sha256: 950d99fc847c0b85a4846c86f5fe6c9071f16e81b20dfef8f80bb124573eae3a
+        partial_state: false
+      commands:
+        - command: "npm run lineage:dev -- runtime doctor --json; profile doctor --profile output-target-agent-oracle-dev-1 --json; db info --profile output-target-agent-oracle-dev-1 --json; make status-dev LINEAGE_DEV_PROFILE=output-target-agent-oracle-dev-1"
+          status: pass
+        - command: "generate variations plan; generate image scaffold; external image generation; generate variations import"
+          status: pass
+        - command: "wrong-size generated PNG import plus CLI/graph/direct-SQL zero-partial-state inspection"
+          status: pass
+      scope:
+        provider_calls_inside_lineage: false
+        static_images_only: true
+        deferred:
+          - video
+          - transforms
+          - "safe-zone validation"
+          - publishing
+          - scheduling
+      harness: codex
   - id: T011
     type: worker
     assignee: Worker
-    status: queued
+    status: done
     reasoning_hint: medium
     objective: "Prepare the final release delta containing justified adoption polish and agent integration after the integrated oracle passes."
     inputs:
@@ -449,18 +856,95 @@ tasks:
       - "Reviewable final release commit and PR, or a proven no-delta disposition"
       - "Full CI, public-readiness, package, plugin, and release-policy evidence"
       - "Exact prospective immutable tag when a release is required"
-    allowed_files: []
-    verify: []
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+      - "plugins/lineage-codex-plugin/package.json"
+      - "plugins/lineage-codex-plugin/.codex-plugin/plugin.json"
+      - "CHANGELOG.md"
+      - "docs-site/docs-review.json"
+      - "docs-site/src/content/docs/workflows/generate-import-variations.md"
+      - "docs-site/src/content/docs/integrations/image-generation.md"
+      - "docs-site/src/content/docs/reference/cli.md"
+      - "plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md"
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "src/web/components/LineageView.tsx"
+      - "e2e/output-target-locks.e2e.ts"
+    verify:
+      - "GITHUB_REF_NAME=v0.1.28 node scripts/tag-release-plan.mjs"
+      - "npm run release:policy:test"
+      - "npm run docs:check"
+      - "npm run plugin:smoke"
+      - "npm run plugin:codex-smoke"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "npm run runtime:oracle"
+      - "npm run e2e"
+      - "npm run ci"
+      - "git diff --check"
     stop_if:
-      - "The exact release scope and version have not been revalidated against current main."
-      - "GitHub main, package versions, tags, or release state changed unexpectedly."
+      - "GitHub origin/main is not d1c680928e7006cc1a9d51026d494cb1752324a1 or no longer merges cleanly with the adoption branch."
+      - "v0.1.28, npm @mean-weasel/lineage 0.1.28, a 0.1.28 GitHub Release, or a conflicting release PR appears."
+      - "Any root/plugin/manifest/lock/docs-review version cannot be made exactly 0.1.28."
+      - "The post-0.1.27 product delta differs from the T006 and T009 receipts or includes unrelated work."
       - "The release requires files outside allowed_files."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Prepared the bounded stable 0.1.28 release delta: synchronized every root, lock, plugin, manifest compatibility, and docs-review version; added release notes for draft retention, complete large CLI JSON, and the provider-neutral generation scaffold. No tag, publication, GitHub Release, PR, push, merge, commit, or GoalBuddy-board mutation was performed."
+      changed_files:
+        - CHANGELOG.md
+        - docs-site/docs-review.json
+        - package-lock.json
+        - package.json
+        - plugins/lineage-codex-plugin/.codex-plugin/plugin.json
+        - plugins/lineage-codex-plugin/package.json
+      version_contract:
+        root: 0.1.28
+        lock: 0.1.28
+        lock_root: 0.1.28
+        plugin: 0.1.28
+        manifest: 0.1.28
+        lineage_compatibility: 0.1.28
+        docs_reviewed_for: 0.1.28
+        changelog_section: 0.1.28
+        prospective_immutable_tag: v0.1.28
+        npm_dist_tag: latest
+        github_prerelease: false
+      commands:
+        - command: "Remote main, v0.1.28 tag, npm version, GitHub Release, open PR, and merge-tree collision checks"
+          status: pass
+        - command: "GITHUB_REF_NAME=v0.1.28 node scripts/tag-release-plan.mjs; npm run release:policy:test; npm run docs:check"
+          status: pass
+        - command: "npm run plugin:smoke; npm run plugin:codex-smoke; npm run public:readiness; npm run package:smoke; npm run runtime:oracle; npm run e2e"
+          status: pass
+        - command: "npm run ci"
+          status: pass
+          result: "First attempt encountered transient EPERM on an ignored concurrently-created scratch fixture; immediate inspection proved the file readable and no source or release file changed."
+        - command: "npm run ci"
+          status: pass
+          result: "84/84 files, 598 passed, 4 skipped; 14/14 E2E; all release, docs, runtime, package, plugin, readiness, and audit gates passed."
+        - command: "git diff --check"
+          status: pass
+      user_facing_claim: "The adoption repairs and provider-neutral generation scaffold have an exact, reviewable stable 0.1.28 release delta whose version locks, public documentation review, changelog, package/plugin artifacts, runtime isolation, and browser workflows agree."
+      top_failure_modes:
+        - "A stale root, lockfile, plugin manifest, Lineage compatibility, or docs-review version could produce mismatched release artifacts."
+        - "An existing v0.1.28 tag, npm version, GitHub Release, or open release PR could collide with the immutable release."
+        - "The release-only delta could mask regressions in draft retention, large JSON flushing, scaffolding, package/plugin installation, runtime isolation, or browser workflows."
+      evidence:
+        - "All six version and compatibility locks plus docs review and changelog equal 0.1.28."
+        - "Remote Git, npm, and GitHub checks proved exact origin/main, no v0.1.28 collision, no open PR, and a clean merge."
+        - "Full CI passed 598 tests with 4 skipped, 14/14 E2E, all release/package/plugin/runtime gates, and zero-vulnerability audit."
+      remaining_blockers: []
+      verification_attempts: 2
+      harness: codex
   - id: T012
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Publish and verify the final adoption release when T011 proves a release delta is required."
     inputs:
