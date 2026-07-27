@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T007
+active_task: T999
 
 tasks:
   - id: T001
@@ -599,7 +599,7 @@ tasks:
   - id: T007
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Run fresh repository gates and an identity-gated checkout walkthrough that exercises the complete two-way bridge and failure oracle."
     inputs:
@@ -619,7 +619,46 @@ tasks:
       - "Wrong dimensions, corrupt/renamed content, unsupported formats, and one-invalid-item batches are rejected with zero partial state."
       - "Multi-source overrides, shared-dimension consolidation, explicit split, count semantics, defaults authorization, reroll inheritance, and child variation behavior are demonstrated."
       - "Screenshots, command output, and/or traces are linked in the receipt without private data."
-    receipt: null
+    receipt:
+      result: done
+      decision: proceed
+      full_outcome_complete: false
+      commands:
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run ci"
+          status: pass
+        - cmd: "npm run e2e"
+          status: pass
+        - cmd: "npm run public:readiness"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "npm test -- src/server/staticImageMetadata.test.ts src/server/generationReceipts.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetDefaults.test.ts src/shared/generationTargetMap.test.ts --reporter=verbose"
+          status: pass
+        - cmd: "Checkout-only runtime doctor, profile doctor, db info, managed-service status, and live /api/runtime identity gate"
+          status: pass
+        - cmd: "Identity-gated live canvas/CLI planning, exact-size import, and wrong-dimension rejection walkthrough"
+          status: pass
+      summary: "Fresh full gates and an identity-gated checkout walkthrough prove the two-way bridge. Independently created canvas and CLI jobs persisted the same canonical digest, surfaces, one consolidated 1080x1920 group, and one slot; an exact decoded PNG imported and rendered in canvas, while a 1080x1919 PNG failed with zero outputs. Named tests cover byte-decoded PNG/JPEG/WebP, corrupt/spoof/unsupported rejection, atomic full-batch preflight and rollback, multi-source mappings, split/count semantics, defaults authorization, reroll inheritance, and child variations."
+      evidence:
+        - notes/T007-live-proof.md
+        - "canvas_job=gen-ms3amiou-6c4bd6e6"
+        - "cli_job=gen-ms3amzy6-d0e70494"
+        - "shared_digest=9193936a00d840c058528cbe2f4af2ddaad943ef47a45ae7ae8e3e0138f0da94"
+        - "wrong_dimension_job=gen-ms3aqecc-24a4ad5a status=planned outputs=0"
+        - ".asset-scratch/T007-canvas-locked-job.png (ignored synthetic evidence)"
+        - ".asset-scratch/T007-imported-fit-view.png (ignored synthetic evidence)"
+        - ".asset-scratch/T007-imported-detail.png (ignored synthetic evidence)"
+      deviations:
+        - "The first managed start encountered a different profile/service identity and failed closed; the service was stopped, the dedicated profile was repinned, and the complete gate was repeated before use."
+        - "The first exact-image import found no file in the profile-scoped scratch root and failed closed; placing the same synthetic file correctly allowed a safe retry."
+        - "Three prior full-CI attempts surfaced and dispositioned T009 unused-export hygiene, T010 browser-locator ambiguity, and T011 decoder dependency vulnerabilities; the final uninterrupted CI run passed."
+      remaining_blockers:
+        - "T999 final read-only completion audit."
+      verification_attempts: 4
 
   - id: T008
     type: worker
@@ -860,7 +899,7 @@ tasks:
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Audit whether the complete implementation satisfies the original user outcome and live oracle."
     inputs:
@@ -883,6 +922,14 @@ tasks:
 checks:
   dirty_fingerprint: "execution branch codex/static-image-output-target-locks starts from GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257 plus approved spec commit; product tree clean"
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T007
+    commands:
+      - "npm run check"
+      - "npm run lint"
+      - "npm run ci"
+      - "npm run e2e"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "Focused 50-test adversarial suite"
+      - "Identity-gated canvas/CLI/import walkthrough"
