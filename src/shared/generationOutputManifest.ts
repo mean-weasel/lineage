@@ -1,36 +1,70 @@
+import { createHash } from 'node:crypto';
 import { EdgeSummaryValidationError, requireEdgeSummary } from './edgeSummary';
 import type { GenerationJob, GenerationJobInput } from './generationTypes';
+import type { GenerationOutputSlot } from './outputTargetTypes';
 
 export const generationOutputManifestSchemaVersion = 'lineage.generation_output_manifest.v1' as const;
+export const targetAwareGenerationOutputManifestSchemaVersion = 'lineage.generation_output_manifest.v2' as const;
 
-interface GenerationOutputManifestEntry {
+interface LegacyGenerationOutputManifestEntry {
   output_index: number;
   file_path: string;
   parent_asset_id: string;
   edge_summary: string;
 }
 
-export interface GenerationOutputManifest {
-  schema_version: typeof generationOutputManifestSchemaVersion;
-  job_id: string;
-  outputs: GenerationOutputManifestEntry[];
+interface TargetAwareGenerationOutputManifestEntry extends LegacyGenerationOutputManifestEntry {
+  target_group_id: string;
+  variant_index: number;
+  output_spec: GenerationOutputSlot['output_spec'] | null;
+  output_spec_digest: string | null;
 }
 
-interface GenerationOutputManifestDraftEntry {
+export interface LegacyGenerationOutputManifest {
+  schema_version: typeof generationOutputManifestSchemaVersion;
+  job_id: string;
+  outputs: LegacyGenerationOutputManifestEntry[];
+}
+
+export interface TargetAwareGenerationOutputManifest {
+  schema_version: typeof targetAwareGenerationOutputManifestSchemaVersion;
+  job_id: string;
+  outputs: TargetAwareGenerationOutputManifestEntry[];
+}
+
+export type GenerationOutputManifest = LegacyGenerationOutputManifest | TargetAwareGenerationOutputManifest;
+
+interface LegacyGenerationOutputManifestDraftEntry {
   output_index: number;
   file_path: '';
   parent_asset_id: string;
   edge_summary: '';
 }
 
-export interface GenerationOutputManifestDraft {
+interface TargetAwareGenerationOutputManifestDraftEntry extends LegacyGenerationOutputManifestDraftEntry {
+  target_group_id: string;
+  variant_index: number;
+  output_spec: GenerationOutputSlot['output_spec'] | null;
+  output_spec_digest: string | null;
+}
+
+export interface LegacyGenerationOutputManifestDraft {
   schema_version: typeof generationOutputManifestSchemaVersion;
   job_id: string;
-  outputs: GenerationOutputManifestDraftEntry[];
+  outputs: LegacyGenerationOutputManifestDraftEntry[];
 }
+
+export interface TargetAwareGenerationOutputManifestDraft {
+  schema_version: typeof targetAwareGenerationOutputManifestSchemaVersion;
+  job_id: string;
+  outputs: TargetAwareGenerationOutputManifestDraftEntry[];
+}
+
+export type GenerationOutputManifestDraft = LegacyGenerationOutputManifestDraft | TargetAwareGenerationOutputManifestDraft;
 
 export type GenerationOutputManifestJob = Pick<GenerationJob, 'id' | 'expected_output_count'> & {
   inputs: Array<Pick<GenerationJobInput, 'asset_id' | 'position' | 'role'>>;
+  target_plan?: GenerationJob['target_plan'];
 };
 
 export interface GenerationOutputManifestParseOptions {
@@ -64,6 +98,21 @@ function nonEmptyText(value: unknown, label: string): string {
   return value.trim();
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function generationOutputSpecDigest(outputSpec: GenerationOutputSlot['output_spec']): string | null {
+  return outputSpec ? createHash('sha256').update(stableJson(outputSpec)).digest('hex') : null;
+}
+
 export function expectedGenerationOutputParents(job: GenerationOutputManifestJob): string[] {
   if (!Number.isInteger(job.expected_output_count) || job.expected_output_count <= 0) {
     throw new GenerationOutputManifestError('Generation job expected output count must be a positive integer');
@@ -95,6 +144,25 @@ export function expectedGenerationOutputParents(job: GenerationOutputManifestJob
 }
 
 export function createGenerationOutputManifestDraft(job: GenerationOutputManifestJob): GenerationOutputManifestDraft {
+  if (job.target_plan) {
+    if (job.target_plan.slots.length !== job.expected_output_count) {
+      throw new GenerationOutputManifestError('Generation target plan output count does not match the job');
+    }
+    return {
+      schema_version: targetAwareGenerationOutputManifestSchemaVersion,
+      job_id: job.id,
+      outputs: job.target_plan.slots.map(slot => ({
+        output_index: slot.output_index,
+        file_path: '',
+        parent_asset_id: slot.parent_asset_id,
+        edge_summary: '',
+        target_group_id: slot.group_id,
+        variant_index: slot.variant_index,
+        output_spec: slot.output_spec ? structuredClone(slot.output_spec) : null,
+        output_spec_digest: generationOutputSpecDigest(slot.output_spec),
+      })),
+    };
+  }
   return {
     schema_version: generationOutputManifestSchemaVersion,
     job_id: job.id,
@@ -117,21 +185,28 @@ export function parseGenerationOutputManifest(
   }
   const manifest = record(value, 'Generation output manifest');
   exactKeys(manifest, ['schema_version', 'job_id', 'outputs'], 'Generation output manifest');
-  if (manifest.schema_version !== generationOutputManifestSchemaVersion) {
-    throw new GenerationOutputManifestError(`Generation output manifest schema_version must be ${generationOutputManifestSchemaVersion}`);
+  const expectedSchema = job.target_plan
+    ? targetAwareGenerationOutputManifestSchemaVersion
+    : generationOutputManifestSchemaVersion;
+  if (manifest.schema_version !== expectedSchema) {
+    throw new GenerationOutputManifestError(`Generation output manifest schema_version must be ${expectedSchema}`);
   }
   if (manifest.job_id !== job.id) throw new GenerationOutputManifestError(`Generation output manifest job_id must be ${job.id}`);
   if (!Array.isArray(manifest.outputs)) throw new GenerationOutputManifestError('Generation output manifest outputs must be an array');
 
-  const expectedParents = expectedGenerationOutputParents(job);
+  const expectedParents = job.target_plan
+    ? job.target_plan.slots.map(slot => slot.parent_asset_id)
+    : expectedGenerationOutputParents(job);
   if (manifest.outputs.length !== expectedParents.length) {
     throw new GenerationOutputManifestError(`Generation output manifest requires ${expectedParents.length} outputs, received ${manifest.outputs.length}`);
   }
 
   const seenIndexes = new Set<number>();
-  const outputs = manifest.outputs.map((value, position): GenerationOutputManifestEntry => {
+  const outputs = manifest.outputs.map((value, position): TargetAwareGenerationOutputManifestEntry | LegacyGenerationOutputManifestEntry => {
     const output = record(value, `Generation output at position ${position}`);
-    exactKeys(output, ['output_index', 'file_path', 'parent_asset_id', 'edge_summary'], `Generation output at position ${position}`);
+    exactKeys(output, job.target_plan
+      ? ['output_index', 'file_path', 'parent_asset_id', 'edge_summary', 'target_group_id', 'variant_index', 'output_spec', 'output_spec_digest']
+      : ['output_index', 'file_path', 'parent_asset_id', 'edge_summary'], `Generation output at position ${position}`);
     const outputIndex = output.output_index;
     if (!Number.isInteger(outputIndex) || Number(outputIndex) < 0) {
       throw new GenerationOutputManifestError(`Generation output at position ${position} requires a non-negative integer output_index`);
@@ -156,11 +231,31 @@ export function parseGenerationOutputManifest(
       }
       throw error;
     }
-    return {
+    const base = {
       output_index: normalizedIndex,
       file_path: filePath,
       parent_asset_id: parentAssetId,
       edge_summary: edgeSummary,
+    };
+    if (!job.target_plan) return base;
+    const slot = job.target_plan.slots.find(candidate => candidate.output_index === normalizedIndex);
+    if (!slot) throw new GenerationOutputManifestError(`Unknown generation target slot: ${normalizedIndex}`);
+    const expectedSpec = slot.output_spec ?? null;
+    const expectedDigest = generationOutputSpecDigest(slot.output_spec);
+    if (
+      output.target_group_id !== slot.group_id
+      || output.variant_index !== slot.variant_index
+      || stableJson(output.output_spec) !== stableJson(expectedSpec)
+      || output.output_spec_digest !== expectedDigest
+    ) {
+      throw new GenerationOutputManifestError(`Generation output ${normalizedIndex} target contract does not match the stored job`);
+    }
+    return {
+      ...base,
+      target_group_id: slot.group_id,
+      variant_index: slot.variant_index,
+      output_spec: expectedSpec ? structuredClone(expectedSpec) : null,
+      output_spec_digest: expectedDigest,
     };
   });
 
@@ -176,8 +271,8 @@ export function parseGenerationOutputManifest(
     return { ...output, file_path: filePath };
   });
   return {
-    schema_version: generationOutputManifestSchemaVersion,
+    schema_version: expectedSchema,
     job_id: job.id,
     outputs: resolvedOutputs,
-  };
+  } as GenerationOutputManifest;
 }

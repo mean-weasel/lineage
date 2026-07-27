@@ -530,6 +530,25 @@ lineage generate image inspect --project demo-project --job-id <job-id> --json
 lineage generate image import --project demo-project --job-id <job-id> --manifest .asset-scratch/generation-output-manifest.json --confirm-write --json
 ```
 
+Static-image output locks are discoverable offline; agents must resolve an
+explicit delivery surface instead of guessing from a platform name:
+
+```bash
+lineage output-targets list --media image --json
+lineage output-targets resolve --query "Instagram Feed portrait" --json
+lineage output-targets defaults --project demo-project --root <root-asset-id> --json
+lineage generate image plan --project demo-project --prompt "Create campaign variants" --from-lineage-selection --destination instagram.feed_portrait --destination instagram.story --custom-dimensions 1200x1500 --variants-per-target 2 --json
+lineage generate image plan --project demo-project --prompt "Create per-source variants" --from-lineage-selection --target-map target-map.json --json
+```
+
+Platform-only resolution returns selectable surfaces. Repeated destination and
+custom-dimension flags are one-source shorthand; multiple selected sources
+require a complete `lineage.generation_target_map.v1` file. Use
+`--separate-destination` to prevent same-sized surfaces from consolidating.
+Target-aware jobs reject legacy `--count` and `--per-base-count`; variant counts
+default to one per resolved group and can be set with `--variants-per-target` or
+per target in the map. Defaults are read-only to agents and the CLI.
+
 Newly planned selection jobs require the versioned manifest and reject mixed
 `--manifest`, `--files`, or `--parent-files` input. Jobs already planned with
 the legacy adapter may still finish with `--files` or `--parent-files`; those

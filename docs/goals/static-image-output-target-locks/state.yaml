@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T003
+active_task: T004
 
 tasks:
   - id: T001
@@ -256,7 +256,7 @@ tasks:
   - id: T003
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement the agent/CLI discovery and job-planning bridge plus the approved target-aware protocol versions."
     inputs:
@@ -304,12 +304,42 @@ tasks:
       - "Target-aware flags alter legacy unlocked planning, count, manifest, or import behavior."
       - "A new tracked or untracked user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
-
+    receipt:
+      result: done
+      changed_files:
+        - README.md
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - src/cli/outputTargetCli.ts
+        - src/cli/outputTargetCli.test.ts
+        - src/cli/lineageCli.ts
+        - src/cli/lineageCli.test.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+        - src/shared/generationTypes.ts
+        - src/shared/generationTargetMap.ts
+        - src/shared/generationOutputManifest.ts
+        - src/shared/generationOutputManifest.test.ts
+      commands:
+        - cmd: "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/shared/generationTargetMap.test.ts src/shared/generationOutputManifest.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run plugin:smoke"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Implemented read-only registry/default discovery, structured ambiguity, one-source target shorthand, explicit multi-source maps, custom geometry, splits, group counts, durable CLI/canvas parity, and exact target-aware v3/v2/v1 protocols while retaining legacy behavior. Independent PM reruns confirmed 5 focused files and 80 tests, TypeScript, lint, plugin smoke with 35 installer tests, diff hygiene, and exact scope."
+      deviations:
+        - "Corrected two test assertions for canonical group ordering and partial array members without changing product behavior."
+        - "A transient attempted out-of-scope type edit was fully reverted; no out-of-scope diff survived."
+      remaining_blockers: []
+      verification_attempts: 3
   - id: T004
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Implement decoded-media validation, all-or-nothing output import, selection-packet dimensions, and immutable reroll propagation."
     inputs:

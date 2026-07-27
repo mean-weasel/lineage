@@ -530,6 +530,45 @@ describe('generation receipts', () => {
     expect(imported.imported.map(output => output.edge_summary)).toEqual([undefined, undefined, undefined, undefined]);
   });
 
+  it('requires an explicit target map for multiple selected sources without partial persistence', () => {
+    const lineage = setupSelectedLineage('target-aware-multi-source');
+    updateSelectedAsset(defaultProject, {
+      assetIds: [lineage.selectedId, lineage.otherId],
+      confirmWrite: true,
+      mode: 'replace',
+      rootAssetId: lineage.rootId,
+    });
+    const jobsBefore = countRows('generation_jobs');
+    expect(() => planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Do not apply shorthand to every source.',
+      targetShorthand: { destinations: ['instagram.story'] },
+    })).toThrow('requires --target-map');
+    expect(countRows('generation_jobs')).toBe(jobsBefore);
+
+    const plan = planImageGeneration(defaultProject, {
+      fromLineageSelection: true,
+      prompt: 'Create exact per-source target variants.',
+      targetMap: {
+        schema_version: GENERATION_TARGET_MAP_SCHEMA,
+        sources: [
+          { asset_id: lineage.selectedId, targets: [{ kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 }] },
+          { asset_id: lineage.otherId, targets: [{ kind: 'custom', width: 1200, height: 1500, variant_count: 2 }] },
+        ],
+      },
+    });
+    expect(plan.job).toMatchObject({
+      adapter_version: 'generation-receipts-v3',
+      expected_output_count: 3,
+      target_plan: {
+        groups: expect.arrayContaining([
+          expect.objectContaining({ parent_asset_id: lineage.selectedId, width: 1080, height: 1920, variant_count: 1 }),
+          expect.objectContaining({ parent_asset_id: lineage.otherId, width: 1200, height: 1500, variant_count: 2 }),
+        ]),
+      },
+    });
+  });
+
   it('plans and imports a re-roll output as a current attempt without adding a child edge', () => {
     const lineage = setupSelectedLineage('reroll');
     process.env.LINEAGE_CHANNEL = 'dev';
@@ -884,6 +923,14 @@ describe('generation receipts', () => {
     expect(plan.job).toMatchObject({
       adapter_version: 'generation-receipts-v3',
       expected_output_count: 2,
+      handoff: {
+        schema_version: 'lineage.generation_handoff.v3',
+        output_manifest: { schema_version: 'lineage.generation_output_manifest.v2' },
+        target_resolution: {
+          map: { schema_version: 'lineage.generation_target_map.v1' },
+          groups: [{ width: 1080, height: 1920, variant_count: 2 }],
+        },
+      },
       target_plan: {
         groups: [{ width: 1080, height: 1920, variant_count: 2 }],
         slots: [{ output_index: 0 }, { output_index: 1 }],
@@ -897,5 +944,14 @@ describe('generation receipts', () => {
     expect(countRows('generation_target_maps', `where job_id = '${plan.job.id}'`)).toBe(1);
     expect(countRows('generation_target_groups', `where job_id = '${plan.job.id}'`)).toBe(1);
     expect(countRows('generation_output_slots', `where job_id = '${plan.job.id}'`)).toBe(2);
+    expect(plan.job.handoff.output_manifest?.outputs[0]).toMatchObject({
+      output_spec: { schema_version: 'lineage.output_spec.v1', width: 1080, height: 1920 },
+    });
+    expect(() => planImageGeneration(defaultProject, {
+      count: 2,
+      fromLineageSelection: true,
+      prompt: 'Do not accept a legacy count for a locked plan.',
+      targetMap: plan.job.target_plan?.map,
+    })).toThrow('does not accept legacy --count');
   });
 });

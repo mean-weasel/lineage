@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { customGeometrySnapshot, surfaceSnapshot } from './outputTargetRegistry';
+import { customGeometrySnapshot, outputTargetRegistry, surfaceSnapshot } from './outputTargetRegistry';
 import {
   GENERATION_TARGET_MAP_SCHEMA,
   OutputTargetResolutionError,
@@ -12,6 +12,84 @@ import {
   type ResolvedGenerationTargetPlan,
   type ResolvedTargetGroup,
 } from './outputTargetTypes';
+
+export interface OutputTargetShorthand {
+  destinations?: string[];
+  customDimensions?: string[];
+  separateDestinations?: string[];
+  variantsPerTarget?: number;
+}
+
+function normalizedQuery(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ');
+}
+
+function shorthandSurface(value: string) {
+  const query = normalizedQuery(value);
+  const records = outputTargetRegistry.surfaces.filter(surface => surface.lifecycle !== 'removed');
+  const platformMatches = records.filter(surface => normalizedQuery(surface.platform) === query);
+  if (platformMatches.length > 0) {
+    throw new OutputTargetResolutionError(
+      'ambiguous_platform',
+      `${value} requires an explicit delivery surface`,
+      platformMatches.map(surface => {
+        const snapshot = surfaceSnapshot(surface.id, surface.version);
+        return {
+          surface_id: snapshot.id,
+          surface_version: snapshot.version,
+          platform: snapshot.platform,
+          surface: snapshot.surface,
+          width: snapshot.geometry.width,
+          height: snapshot.geometry.height,
+        };
+      }),
+    );
+  }
+  const match = records.find(surface => [
+    surface.id,
+    `${surface.platform} ${surface.surface}`,
+    ...surface.aliases,
+  ].some(alias => normalizedQuery(alias) === query));
+  if (!match) throw new OutputTargetResolutionError('unknown_surface', `Unknown delivery surface: ${value}`);
+  return surfaceSnapshot(match.id, match.version);
+}
+
+function shorthandDimensions(value: string): { width: number; height: number } {
+  const match = /^(\d+)x(\d+)$/i.exec(value.trim());
+  if (!match) throw new OutputTargetResolutionError('invalid_custom_geometry', `Invalid custom dimensions "${value}"; expected WIDTHxHEIGHT`);
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
+
+export function generationTargetMapFromShorthand(sourceAssetId: string, input: OutputTargetShorthand): GenerationTargetMap | undefined {
+  const destinations = input.destinations ?? [];
+  const customDimensions = input.customDimensions ?? [];
+  const separateDestinations = input.separateDestinations ?? [];
+  if (destinations.length === 0 && customDimensions.length === 0 && separateDestinations.length === 0 && input.variantsPerTarget === undefined) return undefined;
+  if (destinations.length === 0 && customDimensions.length === 0) {
+    throw new OutputTargetResolutionError('invalid_target_map', 'Target-aware planning requires at least one --destination or --custom-dimensions');
+  }
+  if (input.variantsPerTarget !== undefined && (!Number.isInteger(input.variantsPerTarget) || input.variantsPerTarget <= 0)) {
+    throw new OutputTargetResolutionError('invalid_target_map', '--variants-per-target must be a positive integer');
+  }
+  const surfaces = destinations.map(shorthandSurface);
+  const splitSurfaces = separateDestinations.map(shorthandSurface);
+  const selectedSurfaceIds = new Set(surfaces.map(surface => surface.id));
+  for (const split of splitSurfaces) {
+    if (!selectedSurfaceIds.has(split.id)) throw new OutputTargetResolutionError('invalid_target_map', `Cannot split unselected destination ${split.id}`);
+  }
+  return {
+    schema_version: GENERATION_TARGET_MAP_SCHEMA,
+    sources: [{
+      asset_id: sourceAssetId,
+      default_variant_count: input.variantsPerTarget ?? 1,
+      targets: [
+        ...surfaces.map(surface => ({ kind: 'delivery_surface' as const, surface_id: surface.id, surface_version: surface.version })),
+        ...customDimensions.map(value => ({ kind: 'custom' as const, ...shorthandDimensions(value) })),
+      ],
+      separate_surface_ids: splitSurfaces.map(surface => surface.id),
+    }],
+  };
+}
 
 function positiveInteger(value: unknown, label: string): number {
   if (!Number.isInteger(value) || Number(value) <= 0) {

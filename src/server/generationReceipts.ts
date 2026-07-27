@@ -10,6 +10,7 @@ import { contentTypeFor, fileSha256 } from './localReview';
 import { lineageCliCommand } from './lineageRuntimeCommand';
 import { createGenerationOutputManifestDraft, parseGenerationOutputManifest, type GenerationOutputManifest } from '../shared/generationOutputManifest';
 import type { GenerationTargetMap } from '../shared/outputTargetTypes';
+import { generationTargetMapFromShorthand, type OutputTargetShorthand } from '../shared/generationTargetMap';
 import { planGenerationTargets } from './generationTargetPlanning';
 import { loadGenerationTargetPlan, persistTargetAwareGenerationAggregate } from './generationTargetPersistence';
 import type {
@@ -90,6 +91,7 @@ function buildHandoff(
   next: LineageNextResponse,
   inputs: GenerationJobInput[],
   targetOutputParents?: string[],
+  targetPlan?: NonNullable<GenerationJob['target_plan']>,
 ): GenerationHandoffPacket {
   const parent = next.next_asset;
   if (!parent) throw new GenerationReceiptError('Missing lineage next base');
@@ -99,19 +101,17 @@ function buildHandoff(
       output_indexes: targetOutputParents.flatMap((assetId, index) => assetId === parent.asset_id ? [index] : []),
     }))
     : parentMappings(next, perBaseCount);
-  const outputManifest = targetOutputParents
-    ? {
-      schema_version: 'lineage.generation_output_manifest.v1' as const,
-      job_id: id,
-      outputs: targetOutputParents.map((parentAssetId, outputIndex) => ({
-        output_index: outputIndex, file_path: '' as const, parent_asset_id: parentAssetId, edge_summary: '' as const,
-      })),
-    }
-    : createGenerationOutputManifestDraft({ id, expected_output_count: count, inputs });
+  const outputManifest = createGenerationOutputManifestDraft({
+    id,
+    expected_output_count: count,
+    inputs,
+    ...(targetPlan ? { target_plan: targetPlan } : {}),
+  });
   const importCommand = lineageCliCommand(`generate image import --project ${quote(project)} --job-id ${quote(id)} --manifest ${quote('.asset-scratch/generation-output-manifest.json')} --confirm-write`);
   return {
-    schema_version: 'lineage.generation_handoff.v2', provider, project, job_id: id, prompt, expected_output_count: count,
-    per_base_count: next.selection_mode === 'multiple' ? perBaseCount : undefined,
+    schema_version: targetPlan ? 'lineage.generation_handoff.v3' : 'lineage.generation_handoff.v2',
+    provider, project, job_id: id, prompt, expected_output_count: count,
+    per_base_count: !targetPlan && next.selection_mode === 'multiple' ? perBaseCount : undefined,
     lineage: {
       root_asset_id: next.root_asset_id, parent_asset_id: parent.asset_id, selection_strategy: next.strategy,
       parent_title: parent.title, parent_local_path: parent.local_path, parent_s3_key: parent.s3_key,
@@ -129,6 +129,15 @@ function buildHandoff(
     ],
     import_command: importCommand,
     output_manifest: outputManifest,
+    ...(targetPlan ? {
+      target_resolution: {
+        map: targetPlan.map,
+        digest_sha256: targetPlan.digest_sha256,
+        groups: targetPlan.groups,
+        slots: targetPlan.slots,
+        expected_output_count: targetPlan.expected_output_count,
+      },
+    } : {}),
     guardrails: { live_generation: false, external_services: false, output_root: '.asset-scratch', confirm_write_required: true },
   };
 }
@@ -260,6 +269,7 @@ export function planImageGeneration(project = defaultProject, fields: {
   fromLineageSelection: boolean;
   perBaseCount?: number;
   targetMap?: GenerationTargetMap;
+  targetShorthand?: OutputTargetShorthand;
 }): GenerationPlanResponse {
   const prompt = fields.prompt.trim();
   if (!prompt) throw new GenerationReceiptError('Missing --prompt');
@@ -268,17 +278,29 @@ export function planImageGeneration(project = defaultProject, fields: {
   const parentCount = selectedParents(next).length;
   const id = jobId();
   const inputs = inputsFrom(id, project, next);
-  const targetPlan = fields.targetMap
-    ? planGenerationTargets({ jobId: id, sourceAssetIds: inputs.map(input => input.asset_id), targetMap: fields.targetMap })
+  const shorthandRequested = fields.targetShorthand !== undefined;
+  if (fields.targetMap && shorthandRequested) {
+    throw new GenerationReceiptError('Use --target-map or destination/custom-dimension flags, not both');
+  }
+  if (shorthandRequested && inputs.length !== 1) {
+    throw new GenerationReceiptError('Target-aware multi-source generation requires --target-map with an explicit mapping for every selected source');
+  }
+  const targetMap = fields.targetMap ?? (shorthandRequested
+    ? generationTargetMapFromShorthand(inputs[0].asset_id, fields.targetShorthand ?? {})
+    : undefined);
+  const targetPlan = targetMap
+    ? planGenerationTargets({ jobId: id, sourceAssetIds: inputs.map(input => input.asset_id), targetMap })
     : undefined;
-  if (targetPlan && fields.perBaseCount !== undefined) throw new GenerationReceiptError('Target-aware generation does not accept legacy --per-base-count');
+  if (targetPlan && (fields.count !== undefined || fields.perBaseCount !== undefined)) {
+    throw new GenerationReceiptError('Target-aware generation does not accept legacy --count or --per-base-count; use --variants-per-target or target-map variant_count');
+  }
   if (!targetPlan && parentCount > 1 && !positiveInteger(fields.perBaseCount)) throw new GenerationReceiptError('Multi-parent generation requires --per-base-count');
   const perBaseCount = targetPlan ? 1 : parentCount > 1 ? Number(fields.perBaseCount) : Number(fields.count ?? fields.perBaseCount);
   const count = targetPlan?.expected_output_count ?? parentCount * perBaseCount;
   if (!targetPlan && !positiveInteger(perBaseCount)) throw new GenerationReceiptError('Generation count must be a positive integer');
-  if (fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
+  if (!targetPlan && fields.count !== undefined && fields.count !== count) throw new GenerationReceiptError(`Generation count mismatch: expected ${count} from selected bases, received ${fields.count}`);
   const targetOutputParents = targetPlan?.slots.map(slot => slot.parent_asset_id);
-  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs, targetOutputParents);
+  const handoff = buildHandoff(project, id, prompt, count, perBaseCount, next, inputs, targetOutputParents, targetPlan);
   const mappings = targetPlan
     ? selectedParents(next).map(parent => ({
       parent_asset_id: parent.asset_id,

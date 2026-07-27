@@ -27,7 +27,7 @@ export interface GenerationJobReceipt {
 }
 
 export interface GenerationHandoffPacket {
-  schema_version: 'lineage.generation_handoff.v1' | 'lineage.generation_handoff.v2';
+  schema_version: 'lineage.generation_handoff.v1' | 'lineage.generation_handoff.v2' | 'lineage.generation_handoff.v3';
   provider: GenerationProvider; project: string; job_id: string; prompt: string;
   expected_output_count: number; per_base_count?: number;
   lineage: {
@@ -37,10 +37,20 @@ export interface GenerationHandoffPacket {
   };
   instructions: string[]; import_command: string;
   output_manifest?: {
-    schema_version: 'lineage.generation_output_manifest.v1';
+    schema_version: 'lineage.generation_output_manifest.v1' | 'lineage.generation_output_manifest.v2';
     job_id: string;
-    outputs: Array<{ output_index: number; file_path: ''; parent_asset_id: string; edge_summary: '' }>;
+    outputs: Array<{
+      output_index: number;
+      file_path: '';
+      parent_asset_id: string;
+      edge_summary: '';
+      target_group_id?: string;
+      variant_index?: number;
+      output_spec?: ResolvedGenerationTargetPlan['slots'][number]['output_spec'] | null;
+      output_spec_digest?: string | null;
+    }>;
   };
+  target_resolution?: Pick<ResolvedGenerationTargetPlan, 'map' | 'digest_sha256' | 'groups' | 'slots' | 'expected_output_count'>;
   guardrails: {
     live_generation: false; external_services: false;
     output_root: '.asset-scratch'; confirm_write_required: true;

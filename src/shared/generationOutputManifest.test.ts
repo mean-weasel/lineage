@@ -5,8 +5,11 @@ import {
   expectedGenerationOutputParents,
   generationOutputManifestSchemaVersion,
   parseGenerationOutputManifest,
+  targetAwareGenerationOutputManifestSchemaVersion,
   type GenerationOutputManifestJob,
 } from './generationOutputManifest';
+import { resolveGenerationTargetPlan } from './generationTargetMap';
+import { GENERATION_TARGET_MAP_SCHEMA } from './outputTargetTypes';
 
 function job(overrides: Partial<GenerationOutputManifestJob> = {}): GenerationOutputManifestJob {
   return {
@@ -18,6 +21,22 @@ function job(overrides: Partial<GenerationOutputManifestJob> = {}): GenerationOu
       { asset_id: 'parent-a', position: 0, role: 'lineage_next_base' },
     ],
     ...overrides,
+  };
+}
+
+function targetJob(): GenerationOutputManifestJob {
+  const targetPlan = resolveGenerationTargetPlan('gen-target-contract', {
+    schema_version: GENERATION_TARGET_MAP_SCHEMA,
+    sources: [{
+      asset_id: 'parent-a',
+      targets: [{ kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1, variant_count: 2 }],
+    }],
+  }, ['parent-a']);
+  return {
+    id: 'gen-target-contract',
+    expected_output_count: 2,
+    inputs: [{ asset_id: 'parent-a', position: 0, role: 'lineage_next_base' }],
+    target_plan: targetPlan,
   };
 }
 
@@ -50,6 +69,44 @@ function validManifest() {
 }
 
 describe('generation output manifest contract', () => {
+  it('creates and round-trips the immutable target-aware v2 contract', () => {
+    const target = targetJob();
+    const draft = createGenerationOutputManifestDraft(target);
+    expect(draft).toMatchObject({
+      schema_version: targetAwareGenerationOutputManifestSchemaVersion,
+      outputs: [
+        {
+          target_group_id: 'gen-target-contract:target-group:0',
+          variant_index: 0,
+          output_spec: { schema_version: 'lineage.output_spec.v1', width: 1080, height: 1920 },
+        },
+        {
+          target_group_id: 'gen-target-contract:target-group:0',
+          variant_index: 1,
+          output_spec: { schema_version: 'lineage.output_spec.v1', width: 1080, height: 1920 },
+        },
+      ],
+    });
+    if (draft.schema_version !== targetAwareGenerationOutputManifestSchemaVersion) throw new Error('Expected v2 manifest');
+    const filled = {
+      ...draft,
+      outputs: draft.outputs.map((output, index) => ({
+        ...output,
+        file_path: `imports/target-${index}.png`,
+        edge_summary: `Variant ${index + 1}`,
+      })),
+    };
+    expect(parseGenerationOutputManifest(filled, target, { resolveFilePath: resolveScratchFilePath })).toEqual(filled);
+    expect(() => parseGenerationOutputManifest({
+      ...filled,
+      outputs: filled.outputs.map((output, index) => index === 0 ? { ...output, variant_index: 99 } : output),
+    }, target, { resolveFilePath: resolveScratchFilePath })).toThrow('target contract does not match the stored job');
+    expect(() => parseGenerationOutputManifest({
+      ...filled,
+      schema_version: generationOutputManifestSchemaVersion,
+    }, target, { resolveFilePath: resolveScratchFilePath })).toThrow(`schema_version must be ${targetAwareGenerationOutputManifestSchemaVersion}`);
+  });
+
   it('derives stable per-output parent assignments and creates an intentionally unfilled draft', () => {
     expect(expectedGenerationOutputParents(job())).toEqual(['parent-a', 'parent-a', 'parent-b', 'parent-b']);
     expect(createGenerationOutputManifestDraft(job())).toEqual({
