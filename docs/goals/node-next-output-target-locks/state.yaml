@@ -68,13 +68,13 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T001
+active_task: T002
 
 tasks:
   - id: T001
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Validate the approved design against current repository contracts and shape the largest safe atomic Worker packages without implementing."
     inputs:
@@ -91,11 +91,62 @@ tasks:
       - "Largest safe useful Worker packages"
       - "Exact allowed_files, verify commands, and stop conditions"
       - "Risks, compatibility constraints, and deferred scope"
-    receipt: null
+    receipt:
+      result: done
+      harness: codex
+      decision: approved
+      full_outcome_complete: false
+      rationale: "The approved design fits the released target-map, generation-receipt, selection-packet, writer-lease, and canvas architecture. The seeded three-package sequence is safe after correcting exact ownership: backend must include generationReceiptJobs and shared exports; CLI must own selection v3 plus writer-lease classification and the real plugins/ path; canvas must own LineageView and detail/context integration. Backend first, then CLI/agent, then canvas preserves one normalization path. Full completion still requires integrated review, checkout oracle, release, stable replay, and final audit."
+      worker_package:
+        objective: "Implement the durable backend vertical slice: versioned sticky node target settings, dynamic default resolution, compare-and-swap mutation, immutable job materialization and cancellation, and atomic per-child initialization."
+        allowed_files:
+          - src/shared/outputTargetTypes.ts
+          - src/shared/generationTargetMap.ts
+          - src/shared/generationTypes.ts
+          - src/shared/types.ts
+          - "src/shared/*.test.ts"
+          - src/server/assetLineageDb.ts
+          - src/server/generationReceiptJobs.ts
+          - src/server/generationReceiptJobs.test.ts
+          - src/server/generationTargetDefaults.ts
+          - src/server/generationTargetPlanning.ts
+          - src/server/generationTargetPersistence.ts
+          - src/server/generationTargetRoutes.ts
+          - src/server/generationReceipts.ts
+          - "src/server/generationTarget*.test.ts"
+          - "src/server/generationReceipts*.test.ts"
+          - src/server/nodeNextOutputTargets.ts
+          - src/server/nodeNextOutputTargets.test.ts
+        verify:
+          - "npm test -- src/shared/generationTargetMap.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetPersistence.test.ts src/server/generationTargetRoutes.test.ts src/server/nodeNextOutputTargets.test.ts src/server/generationReceipts.test.ts"
+          - "npm run check"
+        stop_if:
+          - "A migration would rewrite existing assets, jobs, defaults, or output specifications."
+          - "Atomic child initialization cannot share the existing import transaction without a larger reviewed boundary."
+          - "Required implementation extends outside the approved allowed_files."
+          - "Verification fails twice for reasons not isolated to this Worker package."
+      evidence:
+        - "src/server/assetLineageDb.ts already provides generation jobs, target maps/groups/slots, immutable asset_output_specs, human defaults, and cancelled job status."
+        - "src/server/generationTargetRoutes.ts is the shared canvas target/default/plan route boundary."
+        - "src/server/generationReceipts.ts owns target-aware aggregate creation, exact-pixel preflight, atomic import, immutable output specs, and child edges."
+        - "src/server/generationReceiptJobs.ts owns canonical job loading and therefore must read new per-source setting snapshots."
+        - "src/server/lineageSelectionPacket.ts and src/shared/lineageSelectionPacketTypes.ts own versioned native agent packets."
+        - "src/cli/lineageCli.ts and src/server/profileWriterLease.ts jointly classify read versus mutation and managed-service delegation."
+        - "src/web/components/LineageView.tsx and LineageDetailModal.tsx integrate generation sheets and receipt-derived node state."
+        - "plugins/lineage-codex-plugin is the actual operator-skill source; the originally seeded packages/lineage-plugin path does not exist."
+        - "The dedicated GoalBuddy Judge exceeded one bounded wait without a receipt and was interrupted; PM completed the required read-only fallback."
+      parallel_safety:
+        safe: false
+        rationale: "T002-T004 touch shared generation route, receipt, type, and UI contracts in dependency order; only one write-capable Worker may be active."
+      blocked_tasks: []
+      missing_evidence: []
+      required_board_updates:
+        - "Use the corrected allowed_files and verify commands already written onto T002-T004 and T007."
+        - "Activate T002 only; keep later Workers queued until their predecessor receipts are done."
   - id: T002
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Implement the durable backend vertical slice: versioned sticky node target settings, dynamic default resolution, compare-and-swap mutation, immutable job materialization and cancellation, and atomic per-child initialization."
     inputs:
@@ -119,8 +170,11 @@ tasks:
       - "src/shared/outputTargetTypes.ts"
       - "src/shared/generationTargetMap.ts"
       - "src/shared/generationTypes.ts"
+      - "src/shared/types.ts"
       - "src/shared/*.test.ts"
       - "src/server/assetLineageDb.ts"
+      - "src/server/generationReceiptJobs.ts"
+      - "src/server/generationReceiptJobs.test.ts"
       - "src/server/generationTargetDefaults.ts"
       - "src/server/generationTargetPlanning.ts"
       - "src/server/generationTargetPersistence.ts"
@@ -131,7 +185,7 @@ tasks:
       - "src/server/nodeNextOutputTargets.ts"
       - "src/server/nodeNextOutputTargets.test.ts"
     verify:
-      - "npm test -- src/shared/generationTargetMap.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPersistence.test.ts src/server/nodeNextOutputTargets.test.ts src/server/generationReceipts.test.ts"
+      - "npm test -- src/shared/generationTargetMap.test.ts src/server/generationTargetDefaults.test.ts src/server/generationTargetPlanning.test.ts src/server/generationTargetPersistence.test.ts src/server/generationTargetRoutes.test.ts src/server/nodeNextOutputTargets.test.ts src/server/generationReceipts.test.ts"
       - "npm run check"
     stop_if:
       - "T001 changes the approved behavior or requires files outside allowed_files."
@@ -166,19 +220,24 @@ tasks:
     allowed_files:
       - "src/shared/lineageSelectionPacketTypes.ts"
       - "src/shared/generationTypes.ts"
-      - "src/server/*SelectionPacket*"
+      - "src/shared/types.ts"
+      - "src/server/lineageSelectionPacket.ts"
+      - "src/server/lineageSelectionPacket.test.ts"
       - "src/server/generationTargetRoutes.ts"
       - "src/server/generationReceipts.ts"
-      - "src/server/*.test.ts"
+      - "src/server/generationReceipts.test.ts"
+      - "src/server/profileWriterLease.ts"
+      - "src/server/profileWriterLease.test.ts"
       - "src/cli/outputTargetCli.ts"
       - "src/cli/outputTargetCli.test.ts"
       - "src/cli/lineageCli.ts"
       - "src/cli/lineageCli.test.ts"
-      - "packages/lineage-plugin/**"
+      - "src/cli/lineageCli.profile.test.ts"
+      - "plugins/lineage-codex-plugin/**"
       - "README.md"
       - "docs-site/src/content/docs/**"
     verify:
-      - "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/server/generationReceipts.test.ts"
+      - "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/server/lineageSelectionPacket.test.ts src/server/profileWriterLease.test.ts src/server/generationReceipts.test.ts"
       - "npm run check"
       - "npm run plugin:smoke"
     stop_if:
@@ -215,17 +274,20 @@ tasks:
     allowed_files:
       - "src/web/api.ts"
       - "src/web/components/LineageAssetNode.*"
+      - "src/web/components/LineageContextMenu.*"
+      - "src/web/components/LineageDetailModal.*"
       - "src/web/components/LineageGenerationSheet.*"
+      - "src/web/components/LineageNodeActionFooter.*"
+      - "src/web/components/LineageView.*"
       - "src/web/components/OutputTargetPreferencesDialog.*"
+      - "src/web/components/NodeNextOutputTargets*"
       - "src/web/components/*Target*"
       - "src/web/components/*.test.tsx"
       - "src/web/**/*.css"
-      - "src/server/generationTargetRoutes.ts"
-      - "src/server/generationTargetRoutes.test.ts"
       - "e2e/output-target-locks.e2e.ts"
       - "e2e/fixtures/**"
     verify:
-      - "npm test -- src/web/components/LineageAssetNode.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/OutputTargetPreferencesDialog.test.tsx"
+      - "npm test -- src/web/components/LineageAssetNode.test.tsx src/web/components/LineageDetailModal.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/LineageView.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx"
       - "npm run check"
       - "npm run e2e -- e2e/output-target-locks.e2e.ts"
     stop_if:
@@ -306,12 +368,12 @@ tasks:
       - "package-lock.json"
       - "CHANGELOG.md"
       - "README.md"
+      - "docs-site/docs-review.json"
       - "docs-site/src/content/docs/**"
-      - "packages/lineage-plugin/package.json"
-      - "packages/lineage-plugin/.claude-plugin/plugin.json"
-      - "packages/lineage-plugin/.codex-plugin/plugin.json"
-      - "packages/lineage-plugin/lineage.version"
-      - "packages/lineage-plugin/**/SKILL.md"
+      - "plugins/lineage-codex-plugin/package.json"
+      - "plugins/lineage-codex-plugin/.codex-plugin/plugin.json"
+      - "plugins/lineage-codex-plugin/README.md"
+      - "plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md"
     verify:
       - "npm run release:policy:test"
       - "npm run public:readiness"
