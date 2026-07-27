@@ -72,7 +72,7 @@ visual_board:
   selected: local
   local:
     status: live
-    url: "http://goalbuddy.localhost:41737/static-image-output-target-locks/"
+    url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
 active_task: T001
