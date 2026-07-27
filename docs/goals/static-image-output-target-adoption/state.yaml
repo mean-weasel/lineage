@@ -8,7 +8,7 @@ goal:
   slug: "static-image-output-target-adoption"
   kind: existing_plan
   tranche: "Release the merged output-target feature, dogfood its critical workflows, apply evidence-backed UX polish, and prove one provider-neutral agent generation loop."
-  status: active
+  status: done
   oracle:
     signal: "A released Lineage build completes the approved dogfood scenarios and one agent plan-to-generation-to-validated-import workflow with recorded evidence and no unresolved critical friction."
     cadence: "after each Worker package and at final audit"
@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
 
-active_task: T012
+active_task: null
 
 tasks:
   - id: T001
@@ -944,7 +944,7 @@ tasks:
   - id: T012
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Publish and verify the final adoption release when T011 proves a release delta is required."
     inputs:
@@ -959,7 +959,57 @@ tasks:
       - "Merged final release PR and immutable tag, or proven no-op disposition"
       - "Green release workflow and exact npm/GitHub/plugin artifact parity"
       - "Identity-gated released-runtime replay of the integrated oracle"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Merged green PR #122 through the repository merge queue, published immutable v0.1.28 from exact main commit 9df5f2b, verified npm/GitHub/plugin parity, and replayed the agent scaffold/import workflow from the published stable package in a fresh production profile with locked 1024x1536 canvas proof."
+      evidence:
+        - notes/T012-final-release.md
+        - notes/T012-stable-release-proof.jpg
+        - "https://github.com/mean-weasel/lineage/pull/122"
+        - "https://github.com/mean-weasel/lineage/actions/runs/30298217262"
+        - "https://github.com/mean-weasel/lineage/releases/tag/v0.1.28"
+        - "npm @mean-weasel/lineage@0.1.28 latest=0.1.28"
+        - "stable job=gen-ms3mj5ov-a4e8323e output=local-25d0fa2d7d93 decoded=1024x1536"
+      release:
+        version: 0.1.28
+        tag: v0.1.28
+        reviewed_head: 0e07edc49fe999b2d4697421285519decaa9413d
+        main_merge_commit: 9df5f2b4d15d1ab3b0203af4fa5bf0af084cb6bf
+        pull_request: 122
+        release_run: 30298217262
+        npm_latest: 0.1.28
+        release_workflow: success
+      stable_replay:
+        channel: stable
+        profile: output-target-adoption-028-final
+        service: "http://lineage.localhost:5199"
+        git_sha: 9df5f2b4d15d1ab3b0203af4fa5bf0af084cb6bf
+        code_fingerprint: f6ca8c085bd6fdabb4b33aa46baca5cef659bdb38675306219ed08df63ce3bb4
+        profile_fingerprint: e19e90af2ab574f0956d0faa7ef7fbb6bc595fcec475a24124f1bdb9f92869dd
+        job_id: gen-ms3mj5ov-a4e8323e
+        output_asset_id: local-25d0fa2d7d93
+        dimensions: 1024x1536
+        checksum: 25d0fa2d7d9388088d857c11fa2e212d055d63b45ce85ee19f8b7c213dea1ce6
+        output_spec_digest: 3757dd2b92d601d14ccbc724903e38f3ec7ea0f5bd5556c5bc73faf0880ea54c
+      commands:
+        - command: "PR #122 check monitor and merge queue"
+          status: pass
+          result: "6/6 PR checks and 8/8 post-merge checks successful"
+        - command: "annotated v0.1.28 tag push and Release workflow 30298217262"
+          status: pass
+        - command: "npm/GitHub/plugin artifact parity inspection"
+          status: pass
+        - command: "stable runtime/profile/db/service identity gates before and after writes"
+          status: pass
+        - command: "published stable 1024x1536 plan, scaffold, external file handoff, import, inspect, and canvas proof"
+          status: pass
+      user_facing_claim: "Lineage 0.1.28 is released and the published stable runtime performs the exact provider-neutral static-image agent bridge with a visible locked output."
+      top_failure_modes:
+        - "The immutable tag does not point at the reviewed main commit."
+        - "npm, GitHub Release, plugin assets, or stable runtime versions disagree."
+        - "The bridge works from checkout but fails from the published stable package."
+      remaining_blockers: []
+      harness: codex
   - id: T013
     type: pm
     assignee: PM
@@ -1005,10 +1055,96 @@ tasks:
           status: pass
       note_needed: true
       harness: codex
+  - id: T014
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: high
+    objective: "Re-dogfood both repaired T006 behaviors from the published stable 0.1.28 package in one fresh identity-gated synthetic profile, without changing product files."
+    inputs:
+      - "T005 released-and-re-dogfooded completion gate"
+      - "T006 remediation receipt"
+      - "T012 published stable release receipt"
+      - "notes/T999-preaudit.md"
+    constraints:
+      - "Use lineage-stable with a fresh named production profile, isolated database, synthetic media, and exact runtime/profile/db/service gates."
+      - "Do not edit product code, release metadata, tags, services outside the named profile, or external release state."
+      - "Exercise two-source canvas destination, explicit split, count, prompt, and custom-dimension edits; prove retention after every interaction and an unrelated parent rerender."
+      - "Submit and inspect the canonical persisted map; require exactly three groups and five outputs."
+      - "Create a synthetic generation receipt larger than 65,536 bytes and prove published-stable subprocess output is complete, parseable, and equal to persisted state."
+    expected_output:
+      - "Stable canvas screenshots and interaction transcript proving retained independent two-source drafts"
+      - "Persisted stable plan with exactly three groups and five outputs"
+      - "Stable CLI output larger than 65,536 bytes that parses and equals persisted state"
+      - "Identity gates before and after writes"
+    stop_if:
+      - "Runtime, profile, database, service, npm, tag, or git identity disagrees."
+      - "Any draft edit resets or the persisted map differs from the intended three-group/five-output contract."
+      - "Large JSON truncates, fails parsing, or differs from persisted state."
+      - "The proof requires a product change; record the defect and return to Judge for a new bounded Worker package."
+    receipt:
+      result: done
+      summary: "Re-dogfooded both T006 repairs from published stable 0.1.28 in a fresh production profile. All independent two-source destination, split, count, custom-size, and prompt drafts survived every interaction and a forced parent rerender; the canvas persisted exactly three groups and five outputs. Stable CLI emitted 87,786 bytes of valid JSON whose canonical job object exactly matched persisted state."
+      evidence:
+        - notes/T014-stable-redogfood.md
+        - notes/T014-source-one-retained.jpg
+        - notes/T014-counts-retained.jpg
+        - notes/T014-source-two-retained.jpg
+        - notes/T014-preview.jpg
+        - notes/T014-planned-canvas.jpg
+        - "job=gen-ms3n0j7v-864cb2fe expected_outputs=5 groups=3"
+        - "cli_stdout_bytes=87786 persisted_equality=true"
+      identity:
+        channel: stable
+        version: 0.1.28
+        git_sha: 9df5f2b4d15d1ab3b0203af4fa5bf0af084cb6bf
+        code_fingerprint: f6ca8c085bd6fdabb4b33aa46baca5cef659bdb38675306219ed08df63ce3bb4
+        profile: output-target-adoption-028-redogfood
+        profile_fingerprint: fa03a0218b144fe81206f4efe3d79899aca23b1c4a7f25e6cdf95533492d7755
+        service: "http://lineage.localhost:5200"
+        service_instance: 4482fbd2-76a6-49dd-8903-9cd26ca9160f
+      canvas_contract:
+        job_id: gen-ms3n0j7v-864cb2fe
+        expected_output_count: 5
+        group_count: 3
+        parent_rerender_retained: true
+        source_one:
+          instagram_story: true
+          facebook_story: true
+          facebook_explicit_split: true
+          default_count: 2
+          instagram_count: 2
+          facebook_count: 1
+        source_two:
+          instagram_story: false
+          default_count: 2
+          custom_dimensions: 1200x1500
+      large_json_contract:
+        stdout_bytes: 87786
+        parsed: true
+        persisted_equality: true
+        api_job_sha256: 35b2d5aa9c5038af9078efa8bea0bef94550e22449be4c66409a1555e1372bf8
+        cli_job_sha256: 35b2d5aa9c5038af9078efa8bea0bef94550e22449be4c66409a1555e1372bf8
+      commands:
+        - command: "stable runtime/profile/db/service gates before and after writes"
+          status: pass
+        - command: "published stable two-source canvas interaction and parent-rerender replay"
+          status: pass
+        - command: "persisted map inspection for exactly three groups and five outputs"
+          status: pass
+        - command: "stable subprocess 87,786-byte JSON parse and persisted-object equality proof"
+          status: pass
+      user_facing_claim: "The released 0.1.28 package fixes both adoption blockers under real stable-runtime interaction."
+      top_failure_modes:
+        - "Later interactions reset earlier independent source drafts."
+        - "An unrelated parent rerender resets the sheet."
+        - "Preview, persistence, or large CLI JSON disagree."
+      remaining_blockers: []
+      harness: codex
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit whether release, dogfood, adoption polish, agent integration, final publication, and deferred-scope discipline satisfy the complete owner outcome."
     inputs:
@@ -1028,11 +1164,46 @@ tasks:
       - "Acceptance-criterion-to-evidence map"
       - "Top realistic failure modes and evidence"
       - "Missing evidence and exact next task when incomplete"
-    receipt: null
-
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      summary: "The complete owner outcome is proved. Remote main, annotated v0.1.28, PR #122, the successful release workflow, GitHub assets, npm latest, and both stable profiles agree on commit 9df5f2b and package 0.1.28. T014 directly closes the T005 released-and-re-dogfooded gate: independent two-source drafts survive every interaction and a parent rerender, persist as exactly three groups and five outputs, and emit 87,786 bytes of parseable CLI JSON canonically equal to API state. Earlier receipts prove ambiguity handling, locked rerolls, provider-neutral scaffolding, exact generated import, atomic mismatch rejection, and explicit deferrals."
+      acceptance_to_evidence:
+        immutable_release: "v0.1.28 peels to main 9df5f2b; PR, release workflow, npm latest, GitHub assets, and stable runtime all agree."
+        ambiguous_surface_choice: "T004 required an explicit Instagram surface and planned Story only after the user choice."
+        multi_source_overrides: "T014 stable 0.1.28 retained independent destination, split, count, custom-size, and prompt drafts through every interaction and a parent rerender, then persisted 3 groups and 5 outputs."
+        locked_reroll: "T004 preserved the same node and 1080x1920 Facebook/Instagram Story lock while advancing the attempt."
+        large_cli_json: "T014 emitted and parsed 87,786 bytes; canonical CLI and persisted API job SHA-256 values matched."
+        agent_bridge: "T009 implemented provider-neutral deterministic scaffolding; T010 proved real success and wrong-size atomic rejection; T012 replayed success from published stable."
+        scope_discipline: "Static images only; provider execution remains external; canvas defaults remain human-controlled; video, transforms, safe zones, publishing, and scheduling remain deferred."
+      user_facing_claim: "Lineage 0.1.28 ships a verified static-image output-target workflow in which people can retain and persist independent platform-specific drafts, agents can scaffold and externally generate exact outputs, valid files import as locked variants, invalid geometry fails atomically, and broader media and publishing contracts remain intentionally deferred."
+      top_failure_modes:
+        - failure_mode: "Later source edits or a parent rerender reset earlier multi-source choices."
+          evidence: "T014 inspected every value after every interaction, forced a parent rerender, captured five screenshots, and persisted the exact intended plan."
+        - failure_mode: "Reviewed code, tag, npm package, plugin assets, or running stable service disagree."
+          evidence: "Remote main/tag, PR, release workflow, GitHub assets, npm integrity, runtime/profile/database/service identities all agree on 0.1.28 and 9df5f2b."
+        - failure_mode: "Wrong decoded dimensions are accepted or leave partial state."
+          evidence: "A real 1254x1254 image was rejected against 1024x1536 with zero partial assets, edges, outputs, or specs; published stable separately proved exact success."
+      commands:
+        - command: "GoalBuddy state, all receipts, notes, and screenshots"
+          status: pass
+        - command: "remote main/tag/PR/release workflow/GitHub Release/npm parity"
+          status: pass
+        - command: "stable runtime/profile/db/service identity checks for T012 and T014 profiles"
+          status: pass
+        - command: "T014 87,786-byte CLI parse and persisted canonical hash comparison"
+          status: pass
+      contradictions: []
+      missing_evidence: []
+      remaining_blockers: []
+      harness: codex
 checks:
   dirty_fingerprint: "Board prepared in the clean merged-feature worktree because the primary checkout contains unrelated documentation work; T001 must create/validate a fresh origin/main execution worktree."
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T999
+    commands:
+      - "GoalBuddy state checker"
+      - "Remote main, annotated tag, PR, release workflow, GitHub Release, npm, and stable-runtime parity"
+      - "T014 published stable draft-retention and 87,786-byte CLI equality proof"
