@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
 
-active_task: T002
+active_task: T003
 
 tasks:
   - id: T001
@@ -155,7 +155,7 @@ tasks:
   - id: T002
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Prepare the stable 0.1.27 release metadata and public documentation for the merged static-image output-target feature without publishing, tagging, merging, or mutating external release state."
     inputs:
@@ -199,11 +199,66 @@ tasks:
       - "The release requires files outside allowed_files."
       - "A new user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Prepared the stable 0.1.27 release metadata and public documentation for static-image output targets with exact root, lock, plugin, manifest, and Lineage compatibility parity."
+      changed_files:
+        - package.json
+        - package-lock.json
+        - plugins/lineage-codex-plugin/package.json
+        - plugins/lineage-codex-plugin/.codex-plugin/plugin.json
+        - CHANGELOG.md
+        - docs-site/docs-review.json
+        - docs-site/src/content/docs/workflows/generate-import-variations.md
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - docs-site/src/content/docs/reference/cli.md
+      commands:
+        - command: "GITHUB_REF_NAME=v0.1.27 node scripts/tag-release-plan.mjs"
+          status: pass
+        - command: "npm run release:policy:test"
+          status: pass
+        - command: "npm run docs:check"
+          status: pass
+        - command: "npm run plugin:smoke"
+          status: pass
+        - command: "npm run plugin:codex-smoke"
+          status: pass
+        - command: "npm run public:readiness"
+          status: pass
+        - command: "npm run package:smoke"
+          status: pass
+        - command: "npm run ci"
+          status: pass
+        - command: "git diff --check"
+          status: pass
+      version_contract:
+        root: 0.1.27
+        lock: 0.1.27
+        lock_root: 0.1.27
+        plugin: 0.1.27
+        manifest: 0.1.27
+        lineage_compatibility: 0.1.27
+        prospective_tag: v0.1.27
+      notes:
+        - "Fresh-worktree dependencies were installed with npm ci before the documentation and full gates."
+        - "The first package smoke correctly required a build; npm run build then package smoke passed."
+        - "The first full CI run had one transient canvas click-interception failure in qa-rich-seed-visible.e2e.ts; that focused test passed immediately, and the second complete uninterrupted npm run ci passed all 14 browser tests."
+        - "No publish, tag, merge, npm mutation, or GitHub release mutation occurred in T002."
+      user_facing_claim: "The 0.1.27 release candidate consistently describes and packages static-image output-target locking across the CLI, canvas workflow documentation, plugin metadata, and public release surfaces."
+      top_failure_modes:
+        - "A version-lock mismatch could make the immutable tag workflow fail closed."
+        - "Documentation could omit ambiguity resolution or hard decoded-pixel validation and mislead users."
+        - "A browser or package regression could be hidden by a narrow verification run."
+      evidence:
+        - "Exact six-field version parity inspection"
+        - "Full uninterrupted npm run ci"
+        - "Public readiness, package smoke, plugin smoke, and Codex plugin smoke"
+        - "Release policy and prospective tag plan"
+        - "Nine-file scope inspection and git diff --check"
   - id: T003
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Publish the first approved release candidate through reviewed main, the immutable tag workflow, and complete npm/GitHub/plugin/runtime verification."
     inputs:
