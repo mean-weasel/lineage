@@ -507,6 +507,16 @@ their current attempts, and stable diagnostics. Timestamps, local paths, storage
 details, source metadata, generation job IDs, and human-readable warning/error
 text stay in the envelope but do not change v2 identity.
 
+Use `--schema v3` before node-target-driven image generation. Version 3 retains
+the verified v2 media identity and adds separate `current_geometry` and
+`next_output_targets` facts for every selected node. Its
+`selected_source_resolution_digest_sha256` covers the effective target
+resolution for the complete ordered selection:
+
+```bash
+lineage selection packet --project demo-project --root <root-asset-id> --schema v3 --json
+```
+
 Keep the claim fresh and pass it to mutating commands:
 
 ```bash
@@ -537,6 +547,10 @@ explicit delivery surface instead of guessing from a platform name:
 lineage output-targets list --media image --json
 lineage output-targets resolve --query "Instagram Feed portrait" --json
 lineage output-targets defaults --project demo-project --root <root-asset-id> --json
+lineage output-targets node get --project demo-project --root <root-asset-id> --node <node-asset-id> --json
+lineage output-targets node set --project demo-project --root <root-asset-id> --node <node-asset-id> --destination instagram.story --confirm-write --json
+lineage output-targets node replace --project demo-project --root <root-asset-id> --node <node-asset-id> --expected-revision <revision> --destination instagram.feed_portrait --confirm-write --json
+lineage generate image plan --project demo-project --prompt "Create persisted variants" --from-lineage-selection --from-node-targets --expected-target-resolution-digest <selection-v3-digest> --variants-per-target 2 --json
 lineage generate image plan --project demo-project --prompt "Create campaign variants" --from-lineage-selection --destination instagram.feed_portrait --destination instagram.story --custom-dimensions 1200x1500 --variants-per-target 2 --json
 lineage generate image plan --project demo-project --prompt "Create per-source variants" --from-lineage-selection --target-map target-map.json --json
 ```
@@ -548,6 +562,15 @@ require a complete `lineage.generation_target_map.v1` file. Use
 Target-aware jobs reject legacy `--count` and `--per-base-count`; variant counts
 default to one per resolved group and can be set with `--variants-per-target` or
 per target in the map. Defaults are read-only to agents and the CLI.
+
+Node settings are sticky and geometry-only. `node set` refuses an existing
+setting; a conflict requires the distinct `node replace` command with its exact
+revision, and `node clear` also requires that revision before returning to the
+current human canvas default. Plan-from-node requires the v3 selection digest
+and snapshots exact pixels, origin, revision/digests, and frozen surface
+metadata before provider work. Later setting changes do not mutate the job.
+Use `generate image cancel --job-id <job-id> --confirm-write` to abandon a
+planned job; cancelled jobs cannot import.
 
 Newly planned selection jobs require the versioned manifest and reject mixed
 `--manifest`, `--files`, or `--parent-files` input. Jobs already planned with

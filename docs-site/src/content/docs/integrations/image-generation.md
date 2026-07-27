@@ -43,21 +43,28 @@ split.
 ## Step-by-step workflow
 
 1. Select the intended parent assets.
-2. Resolve explicit surfaces or choose bounded custom dimensions.
-3. For one source, plan with repeated destination/custom-dimension flags. For
-   multiple sources, provide an explicit per-source target map.
-4. Inspect the exact dimensions, grouping, variant counts, and output total.
-5. Run `generate image scaffold` for the persisted target-aware job. This
+2. Read `selection packet --schema v3` to separate current geometry from each
+   node's effective next-output targets and capture the complete resolution
+   digest.
+3. Resolve explicit surfaces or choose bounded custom dimensions. A missing
+   node setting may be created explicitly; replacing a conflicting sticky lock
+   requires its exact revision and separate user approval.
+4. Persist a plan with `--from-node-targets
+   --expected-target-resolution-digest <selection-v3-digest>`. Variation count
+   remains a job-time option. Explicit target maps remain available for
+   intentionally unlocked or per-job planning.
+5. Inspect the exact dimensions, grouping, variant counts, and output total.
+6. Run `generate image scaffold` for the persisted target-aware job. This
    creates one no-clobber manifest under
    `.asset-scratch/generation/<job-id>/` and reports every exact output path
    and pixel size without creating placeholder images.
-6. Generate each image with an external tool, then copy it to its reported
+7. Generate each image with an external tool, then copy it to its reported
    `output-000`, `output-001`, and later destination only if that path does not
    already exist.
-7. Add a distinct one- or two-word `edge_summary` to each manifest entry.
+8. Add a distinct one- or two-word `edge_summary` to each manifest entry.
    Scaffolding has already filled `file_path`; do not alter any other field.
-8. Import that unchanged manifest contract with confirmation.
-9. Inspect the durable plan, output specifications, actual dimensions, and
+9. Import that unchanged manifest contract with confirmation.
+10. Inspect the durable plan, output specifications, actual dimensions, and
    import receipts in either the CLI or canvas.
 
 ```bash
@@ -96,5 +103,7 @@ tampered, or wrong-size output. It does not automatically crop or resize.
 Safe-zone and composition notes are guidance rather than machine-enforced
 publishing rules.
 
-Canvas preferred targets remain human-managed. Agent and CLI access is
-read-only, and a locked re-roll cannot change geometry.
+Canvas defaults remain human-managed and read-only to agents. Agents may
+explicitly set, replace, or clear a node's sticky next-output setting through
+revision-checked commands; a locked re-roll still cannot change current
+geometry. Each imported child inherits only its own produced geometry.

@@ -7,7 +7,7 @@ import {
   writeCanvasGenerationTargetDefaults,
   type CanvasDefaultsMutation,
 } from './generationTargetDefaults';
-import { planImageGeneration, planImageReroll } from './generationReceipts';
+import { cancelImageGeneration, planImageGeneration, planImageReroll } from './generationReceipts';
 import {
   clearNodeNextOutputTargetSetting,
   NodeNextOutputTargetError,
@@ -230,6 +230,14 @@ export function registerGenerationTargetRoutes(app: express.Express, projectFrom
       prompt: String(req.body.prompt || ''),
       dryRun: preview,
       requestedDimensions,
+    }));
+  }));
+
+  app.post('/api/generation/targets/cancel', asyncRoute((req, res) => {
+    requireHumanWrite(req.body);
+    res.json(cancelImageGeneration(projectFrom(req), {
+      jobId: String(req.body.jobId || ''),
+      confirmWrite: true,
     }));
   }));
 }

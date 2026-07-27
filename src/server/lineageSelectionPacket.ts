@@ -5,6 +5,10 @@ import { listAssets, repoRoot, validateProject } from './assetCore';
 import { getLineageSnapshot } from './assetLineage';
 import { lineageDb, lineageDbPath } from './assetLineageDb';
 import { loadAssetOutputSpec } from './generationTargetPersistence';
+import {
+  nodeTargetResolutionsDigest,
+  resolveEffectiveNodeNextOutputTargets,
+} from './nodeNextOutputTargets';
 import { lineageWorkspaceId, listLineageWorkspaces } from './assetLineageWorkspaces';
 import { contentTypeFor, fileSha256 } from './localReview';
 import type {
@@ -19,6 +23,10 @@ import type {
   LineageSelectionPacketV2Asset,
   LineageSelectionPacketV2Attempt,
   LineageSelectionPacketV2IdentityProjection,
+  LineageSelectionPacketCurrentGeometry,
+  LineageSelectionPacketV3,
+  LineageSelectionPacketV3Asset,
+  LineageSelectionPacketV3IdentityProjection,
   LineageWorkspace,
 } from '../shared/types';
 
@@ -31,7 +39,7 @@ export interface LineageSelectionPacketOptions {
   labels?: string[];
   packageVersion?: string;
   rootAssetId?: string;
-  schema?: 'v2';
+  schema?: 'v2' | 'v3';
   strict?: boolean;
   workspaceId?: string;
 }
@@ -267,6 +275,72 @@ export function lineageSelectionPacketV2IdentityProjection(packet: LineageSelect
 export function lineageSelectionPacketV2IdentitySha256(packet: LineageSelectionPacketV2): string {
   const projection = lineageSelectionPacketV2IdentityProjection(packet);
   return createHash('sha256').update(canonicalLineageSelectionPacketIdentityJson(projection)).digest('hex');
+}
+
+export function lineageSelectionPacketV3IdentityProjection(packet: LineageSelectionPacketV3): LineageSelectionPacketV3IdentityProjection {
+  const assetsById = new Map(packet.assets.map(asset => [asset.asset_id, asset]));
+  return {
+    schema_version: 'lineage.selection_packet.v3',
+    project: packet.project,
+    product: packet.product,
+    workspace: {
+      id: packet.workspace.id,
+      root_asset_id: packet.workspace.root_asset_id,
+    },
+    context: {
+      campaign: packet.context.campaign,
+      channel: packet.context.channel,
+      labels: packet.context.labels,
+      notes: packet.context.notes,
+    },
+    selection: packet.selection.items.map(item => {
+      const asset = assetsById.get(item.asset_id);
+      if (!asset) {
+        const diagnostics: LineageSelectionPacketDiagnostic[] = [{
+          asset_id: item.asset_id,
+          code: 'selected_asset_missing',
+          severity: 'error',
+        }];
+        throw new LineageSelectionPacketError(
+          `Selected asset ${item.asset_id} is absent from the v3 packet asset envelope.`,
+          [],
+          ['selected_asset_missing'],
+          diagnostics,
+        );
+      }
+      return {
+        asset_id: item.asset_id,
+        campaign: asset.campaign,
+        channel: asset.channel,
+        current_attempt: {
+          asset_id: asset.current_attempt.asset_id,
+          attempt_index: asset.current_attempt.attempt_index,
+          checksum_sha256: asset.current_attempt.checksum_sha256,
+          id: asset.current_attempt.id,
+          source: asset.current_attempt.source,
+        },
+        current_geometry: structuredClone(asset.current_geometry),
+        media_type: asset.media_type,
+        mime_type: asset.mime_type,
+        next_output_targets: structuredClone(asset.next_output_targets),
+        position: item.position,
+        selection_note: item.selection_note,
+        title: asset.title,
+      };
+    }),
+    diagnostics: packet.diagnostics.map(diagnostic => ({
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      ...(diagnostic.asset_id ? { asset_id: diagnostic.asset_id } : {}),
+    })),
+    selected_source_resolution_digest_sha256: packet.selected_source_resolution_digest_sha256,
+  };
+}
+
+export function lineageSelectionPacketV3IdentitySha256(packet: LineageSelectionPacketV3): string {
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalValue(lineageSelectionPacketV3IdentityProjection(packet))))
+    .digest('hex');
 }
 
 function addDiagnostic(diagnostics: LineageSelectionPacketDiagnostic[], diagnostic: LineageSelectionPacketDiagnostic): void {
@@ -607,8 +681,58 @@ function getLineageSelectionPacketV2(project: string, options: LineageSelectionP
   return packet;
 }
 
+function currentGeometryFor(
+  database: ReturnType<typeof lineageDb>,
+  assetId: string,
+): LineageSelectionPacketCurrentGeometry | null {
+  const spec = loadAssetOutputSpec(database, assetId);
+  if (!spec) return null;
+  return {
+    media_kind: spec.output_spec.media_kind,
+    width: spec.actual_width,
+    height: spec.actual_height,
+    output_spec_digest: spec.output_spec_digest,
+    delivery_surfaces: structuredClone(spec.output_spec.delivery_surfaces),
+  };
+}
+
+function getLineageSelectionPacketV3(project: string, options: LineageSelectionPacketOptions): LineageSelectionPacketV3 {
+  const v2 = getLineageSelectionPacketV2(project, options);
+  const database = lineageDb();
+  let assets: LineageSelectionPacketV3Asset[];
+  try {
+    assets = v2.assets.map(asset => ({
+      ...structuredClone(asset),
+      current_geometry: currentGeometryFor(database, asset.asset_id),
+      next_output_targets: resolveEffectiveNodeNextOutputTargets(
+        database,
+        project,
+        v2.workspace.root_asset_id,
+        asset.asset_id,
+      ),
+    }));
+  } finally {
+    database.close();
+  }
+  const selectedSourceResolutionDigest = nodeTargetResolutionsDigest(assets.map(asset => ({
+    parent_asset_id: asset.asset_id,
+    resolution_digest_sha256: asset.next_output_targets.resolution_digest_sha256,
+  })));
+  const packet: LineageSelectionPacketV3 = {
+    ...v2,
+    assets,
+    identity_sha256: '',
+    packet_id: '',
+    schema_version: 'lineage.selection_packet.v3',
+    selected_source_resolution_digest_sha256: selectedSourceResolutionDigest,
+  };
+  packet.identity_sha256 = lineageSelectionPacketV3IdentitySha256(packet);
+  packet.packet_id = `lineage_packet_${packet.identity_sha256.slice(0, 24)}`;
+  return packet;
+}
+
 export function getLineageSelectionPacket(project: string, options: LineageSelectionPacketOptions = {}): LineageSelectionPacket {
-  return options.schema === 'v2'
-    ? getLineageSelectionPacketV2(project, options)
-    : getLineageSelectionPacketV1(project, options);
+  if (options.schema === 'v3') return getLineageSelectionPacketV3(project, options);
+  if (options.schema === 'v2') return getLineageSelectionPacketV2(project, options);
+  return getLineageSelectionPacketV1(project, options);
 }

@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T003
+active_task: T004
 
 tasks:
   - id: T001
@@ -222,7 +222,7 @@ tasks:
   - id: T003
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement the native CLI and agent bridge: selection packet v3, effective node-target read/set/replace/clear commands, atomic plan-from-node-targets, complete JSON, and operator guidance."
     inputs:
@@ -271,11 +271,48 @@ tasks:
       - "The selected-source resolution digest cannot be made deterministic across CLI and canvas."
       - "A new operation would bypass named-profile or writer-lease safety."
       - "Verification fails twice for reasons not isolated to this Worker package."
-    receipt: null
+    receipt:
+      result: done
+      changed_files:
+        - README.md
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - docs-site/src/content/docs/reference/cli.md
+        - docs-site/src/content/docs/workflows/generate-import-variations.md
+        - plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md
+        - src/cli/lineageCli.test.ts
+        - src/cli/lineageCli.ts
+        - src/cli/outputTargetCli.test.ts
+        - src/cli/outputTargetCli.ts
+        - src/server/generationReceipts.test.ts
+        - src/server/generationReceipts.ts
+        - src/server/generationTargetRoutes.ts
+        - src/server/lineageSelectionPacket.test.ts
+        - src/server/lineageSelectionPacket.ts
+        - src/server/profileWriterLease.test.ts
+        - src/shared/lineageSelectionPacketTypes.ts
+        - src/shared/types.ts
+      commands:
+        - cmd: "npm test -- src/cli/outputTargetCli.test.ts src/cli/lineageCli.test.ts src/server/lineageSelectionPacket.test.ts src/server/profileWriterLease.test.ts src/server/generationReceipts.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run plugin:smoke"
+          status: pass
+        - cmd: "npm run docs:validate"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added selection_packet.v3 with separate current geometry, effective future targets, and a deterministic complete-selection digest. Added native node get/set/replace/clear, ambiguity refusal, no-force revision semantics, digest-required locked planning, job-time variation counts, cancellation, managed-writer classification, and complete inspect parity. Updated operator and public guidance to require persisted jobs before provider work. Focused tests prove conflict/stale refusal, immutable inspection, multi-source/child parity, and large JSON output."
+      deviations:
+        - "The dedicated GoalBuddy Worker timed out without edits; PM completed the bounded fallback package."
+        - "Ran documentation validation in addition to the required T003 gates because public docs changed."
+      remaining_blockers: []
+      verification_attempts: 2
+      stopped_because: null
   - id: T004
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Implement the canvas node next-output experience on the shared backend contract, including inherited/explicit/unresolved states, sticky multi-target editing, clear-to-default, immutable older-job visibility, and exact branch planning."
     inputs:

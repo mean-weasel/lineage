@@ -121,6 +121,10 @@ export type {
   LineageSelectionPacketV2Asset,
   LineageSelectionPacketV2Attempt,
   LineageSelectionPacketV2IdentityProjection,
+  LineageSelectionPacketCurrentGeometry,
+  LineageSelectionPacketV3,
+  LineageSelectionPacketV3Asset,
+  LineageSelectionPacketV3IdentityProjection,
 } from './lineageSelectionPacketTypes';
 
 export interface ReviewableAsset extends GrowthAsset {

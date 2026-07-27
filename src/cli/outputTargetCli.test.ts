@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listOutputTargets, resolveOutputTargetQuery, targetMapFromShorthand } from './outputTargetCli';
+import { listOutputTargets, nodeTargetsFromCli, resolveOutputTargetQuery, targetMapFromShorthand } from './outputTargetCli';
 
 describe('output target CLI contract', () => {
   it('lists a versioned offline registry with exact dimensions', () => {
@@ -50,5 +50,18 @@ describe('output target CLI contract', () => {
     });
     expect(() => targetMapFromShorthand('asset-a', { destinations: ['Instagram'] })).toThrow('requires an explicit delivery surface');
     expect(() => targetMapFromShorthand('asset-a', { customDimensions: ['1200-by-1500'] })).toThrow('expected WIDTHxHEIGHT');
+  });
+
+  it('builds geometry-only sticky node targets and refuses platform guessing', () => {
+    expect(nodeTargetsFromCli({
+      destinations: ['instagram.story', 'facebook.story'],
+      customDimensions: ['1200x628'],
+    })).toEqual([
+      { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+      { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1 },
+      { kind: 'custom', width: 1200, height: 628 },
+    ]);
+    expect(() => nodeTargetsFromCli({ destinations: ['Instagram'] })).toThrow(/explicit delivery surface/i);
+    expect(() => nodeTargetsFromCli({})).toThrow(/requires --destination or --custom-dimensions/i);
   });
 });

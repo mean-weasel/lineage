@@ -4,12 +4,19 @@ import { outputTargetRegistry, surfaceSnapshot } from '../shared/outputTargetReg
 import {
   OutputTargetResolutionError,
   type DeliverySurfaceSnapshot,
+  type GenerationTarget,
   type OutputTargetChoice,
 } from '../shared/outputTargetTypes';
 import {
   generationTargetMapFromShorthand,
   type OutputTargetShorthand,
 } from '../shared/generationTargetMap';
+import {
+  clearNodeNextOutputTargetSetting,
+  readNodeNextOutputTargetSetting,
+  resolveEffectiveNodeNextOutputTargets,
+  writeNodeNextOutputTargetSetting,
+} from '../server/nodeNextOutputTargets';
 
 function normalized(value: string): string {
   return value.trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ');
@@ -107,4 +114,122 @@ export function readOutputTargetDefaults(database: DatabaseSync, project: string
 
 export function targetMapFromShorthand(sourceAssetId: string, input: OutputTargetShorthand) {
   return generationTargetMapFromShorthand(sourceAssetId, input);
+}
+
+export function nodeTargetsFromCli(input: {
+  destinations?: string[];
+  customDimensions?: string[];
+}): GenerationTarget[] {
+  const map = generationTargetMapFromShorthand('__node__', {
+    destinations: input.destinations,
+    customDimensions: input.customDimensions,
+  });
+  if (!map) throw new OutputTargetResolutionError('invalid_target_map', 'Node target mutation requires --destination or --custom-dimensions');
+  return map.sources[0].targets;
+}
+
+export function readNodeOutputTargets(
+  database: DatabaseSync,
+  project: string,
+  rootAssetId: string,
+  nodeAssetId: string,
+) {
+  return {
+    ok: true as const,
+    command: 'output-targets node get' as const,
+    project,
+    root_asset_id: rootAssetId,
+    node_asset_id: nodeAssetId,
+    setting: readNodeNextOutputTargetSetting(database, project, rootAssetId, nodeAssetId) ?? null,
+    effective: resolveEffectiveNodeNextOutputTargets(database, project, rootAssetId, nodeAssetId),
+  };
+}
+
+export function setNodeOutputTargets(
+  database: DatabaseSync,
+  fields: {
+    project: string;
+    rootAssetId: string;
+    nodeAssetId: string;
+    targets: readonly GenerationTarget[];
+  },
+) {
+  const setting = writeNodeNextOutputTargetSetting(database, {
+    projectId: fields.project,
+    rootAssetId: fields.rootAssetId,
+    nodeAssetId: fields.nodeAssetId,
+    expectedRevision: null,
+    targets: fields.targets,
+    provenance: { actor: 'agent', origin: 'cli' },
+  });
+  return {
+    ok: true as const,
+    command: 'output-targets node set' as const,
+    setting,
+    effective: resolveEffectiveNodeNextOutputTargets(
+      database,
+      fields.project,
+      fields.rootAssetId,
+      fields.nodeAssetId,
+    ),
+  };
+}
+
+export function replaceNodeOutputTargets(
+  database: DatabaseSync,
+  fields: {
+    project: string;
+    rootAssetId: string;
+    nodeAssetId: string;
+    expectedRevision: number;
+    targets: readonly GenerationTarget[];
+  },
+) {
+  const setting = writeNodeNextOutputTargetSetting(database, {
+    projectId: fields.project,
+    rootAssetId: fields.rootAssetId,
+    nodeAssetId: fields.nodeAssetId,
+    expectedRevision: fields.expectedRevision,
+    targets: fields.targets,
+    provenance: { actor: 'agent', origin: 'cli' },
+  });
+  return {
+    ok: true as const,
+    command: 'output-targets node replace' as const,
+    setting,
+    effective: resolveEffectiveNodeNextOutputTargets(
+      database,
+      fields.project,
+      fields.rootAssetId,
+      fields.nodeAssetId,
+    ),
+  };
+}
+
+export function clearNodeOutputTargets(
+  database: DatabaseSync,
+  fields: {
+    project: string;
+    rootAssetId: string;
+    nodeAssetId: string;
+    expectedRevision: number;
+  },
+) {
+  clearNodeNextOutputTargetSetting(database, {
+    projectId: fields.project,
+    rootAssetId: fields.rootAssetId,
+    nodeAssetId: fields.nodeAssetId,
+    expectedRevision: fields.expectedRevision,
+  });
+  return {
+    ok: true as const,
+    command: 'output-targets node clear' as const,
+    cleared: true as const,
+    effective: resolveEffectiveNodeNextOutputTargets(
+      database,
+      fields.project,
+      fields.rootAssetId,
+      fields.nodeAssetId,
+    ),
+  };
 }

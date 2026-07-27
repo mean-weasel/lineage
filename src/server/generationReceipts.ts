@@ -452,6 +452,9 @@ export function planImageGeneration(project = defaultProject, fields: {
   }
   let sourceTargetResolutions: NonNullable<GenerationJob['source_target_resolutions']> | undefined;
   if (fields.fromNodeTargets) {
+    if (!fields.expectedTargetResolutionDigest) {
+      throw new GenerationReceiptError('Locked-from-node planning requires expectedTargetResolutionDigest from selection packet v3');
+    }
     if (fields.variantsPerTarget !== undefined && !positiveInteger(fields.variantsPerTarget)) {
       throw new GenerationReceiptError('variantsPerTarget must be a positive integer');
     }
@@ -486,10 +489,7 @@ export function planImageGeneration(project = defaultProject, fields: {
       targetDatabase.close();
     }
     const resolutionDigest = nodeTargetResolutionsDigest(sourceTargetResolutions);
-    if (
-      fields.expectedTargetResolutionDigest
-      && fields.expectedTargetResolutionDigest !== resolutionDigest
-    ) {
+    if (fields.expectedTargetResolutionDigest !== resolutionDigest) {
       throw new GenerationReceiptError(
         `Node target resolution changed: expected ${fields.expectedTargetResolutionDigest}, current ${resolutionDigest}`,
         409,

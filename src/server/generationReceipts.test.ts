@@ -72,6 +72,12 @@ function outputManifest(job: GenerationJob, files: string[], summaries?: string[
   };
 }
 
+function selectedSourceResolutionDigest(rootAssetId: string): string {
+  const packet = getLineageSelectionPacket(defaultProject, { rootAssetId, schema: 'v3' });
+  if (packet.schema_version !== 'lineage.selection_packet.v3') throw new Error('Expected selection packet v3');
+  return packet.selected_source_resolution_digest_sha256;
+}
+
 function markGenerationJobLegacy(jobId: string): void {
   const database = lineageDb();
   try {
@@ -434,6 +440,7 @@ describe('generation receipts', () => {
       prompt: 'Do not silently fall back to unlocked generation.',
       fromLineageSelection: true,
       fromNodeTargets: true,
+      expectedTargetResolutionDigest: selectedSourceResolutionDigest(lineage.rootId),
     })).toThrow(new RegExp(`Node ${lineage.selectedId} has no resolvable next-output targets`));
     expect(countRows('generation_jobs')).toBe(0);
   });
@@ -471,6 +478,7 @@ describe('generation receipts', () => {
       prompt: 'Respect each selected source geometry.',
       fromLineageSelection: true,
       fromNodeTargets: true,
+      expectedTargetResolutionDigest: selectedSourceResolutionDigest(lineage.rootId),
       variantsPerTarget: 2,
     });
     expect(plan.job.source_target_resolutions).toEqual(expect.arrayContaining([
@@ -507,6 +515,7 @@ describe('generation receipts', () => {
       prompt: 'Plan a cancellable locked variation.',
       fromLineageSelection: true,
       fromNodeTargets: true,
+      expectedTargetResolutionDigest: selectedSourceResolutionDigest(lineage.rootId),
     });
     expect(cancelImageGeneration(defaultProject, { jobId: plan.job.id, confirmWrite: true }).job.status).toBe('cancelled');
     expect(cancelImageGeneration(defaultProject, { jobId: plan.job.id, confirmWrite: true })).toMatchObject({
@@ -544,6 +553,7 @@ describe('generation receipts', () => {
       prompt: 'Create one output for each produced geometry.',
       fromLineageSelection: true,
       fromNodeTargets: true,
+      expectedTargetResolutionDigest: selectedSourceResolutionDigest(lineage.rootId),
     });
     expect(plan.job.expected_output_count).toBe(2);
     const files = await Promise.all(plan.job.target_plan!.slots.map((slot, index) =>
@@ -574,6 +584,26 @@ describe('generation receipts', () => {
     } finally {
       childDatabase.close();
     }
+    updateSelectedAsset(defaultProject, {
+      assetIds: imported.imported.map(output => output.imported_asset_id),
+      confirmWrite: true,
+      mode: 'replace',
+      rootAssetId: lineage.rootId,
+    });
+    const packet = getLineageSelectionPacket(defaultProject, {
+      rootAssetId: lineage.rootId,
+      schema: 'v3',
+    });
+    expect(packet.schema_version).toBe('lineage.selection_packet.v3');
+    if (packet.schema_version !== 'lineage.selection_packet.v3') throw new Error('Expected v3 packet');
+    expect(packet.assets.map(asset => asset.current_geometry && `${asset.current_geometry.width}x${asset.current_geometry.height}`)).toEqual([
+      '1200x628',
+      '1080x1920',
+    ]);
+    expect(packet.assets.map(asset => asset.next_output_targets.resolved_targets.map(target => `${target.width}x${target.height}`))).toEqual([
+      ['1200x628'],
+      ['1080x1920'],
+    ]);
   });
 
   it('lists generation jobs by root and asset involvement for UX proof', () => {
