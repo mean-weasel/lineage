@@ -799,6 +799,64 @@ tasks:
         - "The first refinement to a page-wide exact accessible name still matched a second New lineage action; the second verification attempt correctly scoped the locator to the original header region."
       remaining_blockers: []
       verification_attempts: 2
+  - id: T011
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Upgrade the static-image decoder dependency to the patched sharp release and prove the byte-decoding, packaging, and dependency-audit contracts remain intact."
+    inputs:
+      - "Fresh T007 npm run ci audit failure"
+      - "High-severity libvips advisories inherited by sharp versions below 0.35.0"
+      - "npm audit fixed-release guidance for sharp 0.35.3"
+    constraints:
+      - "Upgrade only sharp and its lockfile-resolved transitive dependencies."
+      - "Do not weaken decoded-byte validation, format rejection, pixel limits, or atomic import behavior."
+      - "Keep the dependency pinned exactly."
+      - "Do not use npm audit fix --force."
+    expected_output:
+      - "package.json and package-lock.json pin sharp 0.35.3."
+      - "Focused static-image metadata and atomic import tests pass."
+      - "npm run package:smoke passes."
+      - "npm audit --audit-level=moderate reports zero vulnerabilities."
+      - "T007 is reactivated for a full fresh CI rerun."
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+    verify:
+      - "npm test -- src/server/staticImageMetadata.test.ts src/server/generationReceipts.test.ts src/server/generationReceiptsSelectionReset.test.ts"
+      - "npm run package:smoke"
+      - "npm audit --audit-level=moderate"
+      - "npm run check"
+      - "npm run lint"
+    stop_if:
+      - "The patched sharp release requires application code changes."
+      - "The install changes unrelated direct dependencies."
+      - "Decoded-byte, format, dimension, or atomicity tests regress."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - package.json
+        - package-lock.json
+      commands:
+        - cmd: "npm test -- src/server/staticImageMetadata.test.ts src/server/generationReceipts.test.ts src/server/generationReceiptsSelectionReset.test.ts"
+          status: pass
+        - cmd: "npm run package:smoke"
+          status: pass
+        - cmd: "npm audit --audit-level=moderate"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Pinned sharp 0.35.3 exactly and accepted only its lockfile-resolved platform/libvips dependency changes. The patched decoder passes 41 metadata, import, atomicity, and selection-reset tests; package and managed-service smoke pass; npm audit reports zero vulnerabilities."
+      deviations:
+        - "The provisional generationOutputImport.test.ts path did not exist; the actual atomic import coverage is in generationReceipts.test.ts and generationReceiptsSelectionReset.test.ts, so the verify command was corrected before receipt."
+      remaining_blockers: []
+      verification_attempts: 1
   - id: T999
     type: judge
     assignee: Judge
