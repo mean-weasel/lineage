@@ -217,7 +217,7 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
 test('creates a lineage workspace from a catalog asset through the modal', async ({ page }) => {
   await page.goto('/');
 
-  await page.locator('header.lineage-header .lineage-primary-controls > button.primary-button').click();
+  await page.locator('header.lineage-header').getByRole('button', { name: 'New lineage', exact: true }).click();
   const modal = page.getByRole('form', { name: 'New lineage' });
   await expect(modal).toBeVisible();
   await page.getByPlaceholder('Search by title, id, campaign, channel...').fill('meta short-form');

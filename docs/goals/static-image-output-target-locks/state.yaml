@@ -759,6 +759,46 @@ tasks:
         - "The fresh T007 CI attempt stopped at knip after 594 passing tests and passing release/docs checks; T007 was reactivated for a complete rerun."
       remaining_blockers: []
       verification_attempts: 1
+  - id: T010
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: low
+    objective: "Restore the public browser smoke test by selecting the New lineage action by its accessible name now that the header contains two primary actions."
+    inputs:
+      - "Fresh T007 npm run ci Playwright strict-mode failure"
+      - "The output-target canvas adds a Plan outputs primary action alongside New lineage"
+    constraints:
+      - "Do not remove, hide, or weaken either product action."
+      - "Change only the ambiguous test locator."
+      - "Keep the assertion on the New lineage workflow intact."
+    expected_output:
+      - "The affected public-smoke test passes."
+      - "The output-target browser workflow still passes."
+      - "T007 is reactivated for a full fresh CI rerun."
+    allowed_files:
+      - "e2e/public-smoke.e2e.ts"
+    verify:
+      - "npm run e2e -- e2e/public-smoke.e2e.ts e2e/output-target-locks.e2e.ts"
+      - "git diff --check"
+    stop_if:
+      - "The accessible button name is not stable or unique."
+      - "The change requires product behavior or files outside allowed_files."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      changed_files:
+        - e2e/public-smoke.e2e.ts
+      commands:
+        - cmd: "npm run e2e -- e2e/public-smoke.e2e.ts e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Scoped the existing New lineage smoke action to the header and selected it by exact accessible name, avoiding ambiguity with both the new Plan outputs action and the separate workbench New lineage action. All seven affected public-smoke and output-target browser tests pass."
+      deviations:
+        - "The first refinement to a page-wide exact accessible name still matched a second New lineage action; the second verification attempt correctly scoped the locator to the original header region."
+      remaining_blockers: []
+      verification_attempts: 2
   - id: T999
     type: judge
     assignee: Judge
