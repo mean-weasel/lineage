@@ -445,6 +445,54 @@ describe('generation receipts', () => {
     expect(countRows('generation_jobs')).toBe(0);
   });
 
+  it('rechecks the source resolution inside the same write transaction that persists the job', () => {
+    const lineage = setupSelectedLineage('node-target-atomic-recheck');
+    const database = lineageDb();
+    let expectedDigest: string;
+    try {
+      writeNodeNextOutputTargetSetting(database, {
+        projectId: defaultProject,
+        rootAssetId: lineage.rootId,
+        nodeAssetId: lineage.selectedId,
+        expectedRevision: null,
+        targets: [{ kind: 'custom', width: 1080, height: 1920 }],
+        provenance: { actor: 'agent', origin: 'cli' },
+      });
+      const effective = resolveEffectiveNodeNextOutputTargets(database, defaultProject, lineage.rootId, lineage.selectedId);
+      expectedDigest = nodeTargetResolutionsDigest([{
+        parent_asset_id: lineage.selectedId,
+        resolution_digest_sha256: effective.resolution_digest_sha256,
+      }]);
+    } finally {
+      database.close();
+    }
+
+    expect(() => planImageGeneration(defaultProject, {
+      prompt: 'The lock changes after the first read.',
+      fromLineageSelection: true,
+      fromNodeTargets: true,
+      expectedTargetResolutionDigest: expectedDigest,
+      beforePersistForTesting: () => {
+        const raced = lineageDb();
+        try {
+          writeNodeNextOutputTargetSetting(raced, {
+            projectId: defaultProject,
+            rootAssetId: lineage.rootId,
+            nodeAssetId: lineage.selectedId,
+            expectedRevision: 1,
+            targets: [{ kind: 'custom', width: 1080, height: 1350 }],
+            provenance: { actor: 'human', origin: 'canvas' },
+          });
+        } finally {
+          raced.close();
+        }
+      },
+    })).toThrow(/target resolution changed/i);
+    expect(countRows('generation_jobs')).toBe(0);
+    expect(countRows('generation_target_maps')).toBe(0);
+    expect(countRows('generation_job_target_resolutions')).toBe(0);
+  });
+
   it('resolves every selected source independently before a multi-source job is persisted', () => {
     const lineage = setupSelectedLineage('node-target-multi-source');
     updateSelectedAsset(defaultProject, {
@@ -1374,7 +1422,7 @@ describe('generation receipts', () => {
     })).toThrow(/already exists with different output/);
   });
 
-  it('inherits immutable reroll locks and routes geometry changes to child variations', async () => {
+  it('inherits immutable reroll locks and rejects transient geometry-change bypasses', async () => {
     const lineage = setupSelectedLineage('locked-reroll');
     const originalPlan = planImageGeneration(defaultProject, {
       fromLineageSelection: true,
@@ -1424,19 +1472,13 @@ describe('generation receipts', () => {
     expect(inspectImageGeneration(defaultProject, reroll.job.id).job.status).toBe('planned');
     expect(getLineageAttempts(defaultProject, lineage.rootId, lockedNodeId).attempts).toHaveLength(1);
 
-    const variation = planImageReroll(defaultProject, {
+    expect(() => planImageReroll(defaultProject, {
       prompt: 'Create a wider child instead.',
       requestedDimensions: { height: 19, width: 24 },
       rootAssetId: lineage.rootId,
       targetAssetId: lockedNodeId,
-    });
-    expect(variation).toMatchObject({
-      command: 'generate image plan',
-      job: {
-        source_mode: 'lineage_selection',
-        target_plan: { slots: [{ output_spec: { height: 19, width: 24 } }] },
-      },
-    });
+    })).toThrow(/must use durable node next-output targets/i);
+    expect(countRows('generation_jobs')).toBe(2);
     const correct = await writeRaster('imports/locked-reroll-correct.webp', 23, 19, 'webp');
     const rerolled = importImageRerollOutput(defaultProject, {
       confirmWrite: true,

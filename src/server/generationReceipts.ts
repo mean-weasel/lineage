@@ -38,6 +38,7 @@ import {
   loadGenerationTargetPlan,
   persistAssetOutputSpec,
   persistTargetAwareGenerationAggregate,
+  persistTargetAwareGenerationAggregateInTransaction,
 } from './generationTargetPersistence';
 import {
   initializeChildNextOutputTargetsInTransaction,
@@ -439,6 +440,7 @@ export function planImageGeneration(project = defaultProject, fields: {
   fromNodeTargets?: boolean;
   expectedTargetResolutionDigest?: string;
   variantsPerTarget?: number;
+  beforePersistForTesting?: () => void;
 }): GenerationPlanResponse {
   const prompt = fields.prompt.trim();
   if (!prompt) throw new GenerationReceiptError('Missing --prompt');
@@ -460,31 +462,12 @@ export function planImageGeneration(project = defaultProject, fields: {
     }
     const targetDatabase = lineageDb();
     try {
-      sourceTargetResolutions = inputs.map(input => {
-        const effective = resolveEffectiveNodeNextOutputTargets(
-          targetDatabase,
-          project,
-          next.root_asset_id,
-          input.asset_id,
-        );
-        if (effective.origin === 'unresolved') {
-          throw new GenerationReceiptError(
-            `Node ${input.asset_id} has no resolvable next-output targets; set explicit node targets or human canvas defaults first`,
-          );
-        }
-        return {
-          parent_asset_id: input.asset_id,
-          origin: effective.origin,
-          ...(effective.setting_revision === undefined ? {} : { setting_revision: effective.setting_revision }),
-          ...(effective.setting_digest_sha256 ? { setting_digest_sha256: effective.setting_digest_sha256 } : {}),
-          ...(effective.canvas_default_digest_sha256
-            ? { canvas_default_digest_sha256: effective.canvas_default_digest_sha256 }
-            : {}),
-          resolution_digest_sha256: effective.resolution_digest_sha256,
-          targets: structuredClone(effective.targets),
-          resolved_targets: structuredClone(effective.resolved_targets),
-        };
-      });
+      sourceTargetResolutions = resolveNodeTargetSources(
+        targetDatabase,
+        project,
+        next.root_asset_id,
+        inputs,
+      );
     } finally {
       targetDatabase.close();
     }
@@ -576,6 +559,80 @@ export function planImageGeneration(project = defaultProject, fields: {
   const database = lineageDb();
   try {
     if (targetPlan) {
+      if (sourceTargetResolutions) {
+        fields.beforePersistForTesting?.();
+        database.exec('BEGIN IMMEDIATE');
+        try {
+          const transactionalResolutions = resolveNodeTargetSources(
+            database,
+            project,
+            next.root_asset_id,
+            inputs,
+          );
+          const transactionalDigest = nodeTargetResolutionsDigest(transactionalResolutions);
+          if (fields.expectedTargetResolutionDigest !== transactionalDigest) {
+            throw new GenerationReceiptError(
+              `Node target resolution changed: expected ${fields.expectedTargetResolutionDigest}, current ${transactionalDigest}`,
+              409,
+            );
+          }
+          const transactionalPlan = materializeNodeTargetPlan(
+            id,
+            transactionalResolutions,
+            fields.variantsPerTarget ?? 1,
+          );
+          const transactionalHandoff = buildHandoff(
+            project,
+            id,
+            prompt,
+            transactionalPlan.expected_output_count,
+            perBaseCount,
+            next,
+            inputs,
+            transactionalPlan.slots.map(slot => slot.parent_asset_id),
+            transactionalPlan,
+          );
+          persistTargetAwareGenerationAggregateInTransaction(database, {
+            job: {
+              id,
+              project_id: project,
+              provider,
+              adapter_version: 'generation-receipts-v3',
+              source_mode: 'lineage_selection',
+              root_asset_id: next.root_asset_id,
+              prompt,
+              expected_output_count: transactionalPlan.expected_output_count,
+              status: 'planned',
+              output_dir: '.asset-scratch',
+              handoff: transactionalHandoff,
+              created_at: timestamp,
+              updated_at: timestamp,
+              inputs,
+            },
+            inputs,
+            plan: transactionalPlan,
+            sourceTargetResolutions: transactionalResolutions,
+            receipt: {
+              id: `${id}:receipt:plan:${Date.now()}`,
+              command: 'generate image plan',
+              payload: {
+                ...(preview.receipts[0].payload as Record<string, unknown>),
+                target_map_digest: transactionalPlan.digest_sha256,
+                target_groups: transactionalPlan.groups,
+                output_slots: transactionalPlan.slots,
+                source_target_resolutions: transactionalResolutions,
+                source_target_resolution_digest: transactionalDigest,
+              },
+              created_at: timestamp,
+            },
+          });
+          database.exec('COMMIT');
+          return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(database, project, id) };
+        } catch (error) {
+          database.exec('ROLLBACK');
+          throw error;
+        }
+      }
       persistTargetAwareGenerationAggregate(database, {
         job: {
           id,
@@ -627,6 +684,39 @@ export function planImageGeneration(project = defaultProject, fields: {
   }
 }
 
+function resolveNodeTargetSources(
+  database: DatabaseSync,
+  project: string,
+  rootAssetId: string,
+  inputs: readonly GenerationJobInput[],
+): NonNullable<GenerationJob['source_target_resolutions']> {
+  return inputs.map(input => {
+    const effective = resolveEffectiveNodeNextOutputTargets(
+      database,
+      project,
+      rootAssetId,
+      input.asset_id,
+    );
+    if (effective.origin === 'unresolved') {
+      throw new GenerationReceiptError(
+        `Node ${input.asset_id} has no resolvable next-output targets; set explicit node targets or human canvas defaults first`,
+      );
+    }
+    return {
+      parent_asset_id: input.asset_id,
+      origin: effective.origin,
+      ...(effective.setting_revision === undefined ? {} : { setting_revision: effective.setting_revision }),
+      ...(effective.setting_digest_sha256 ? { setting_digest_sha256: effective.setting_digest_sha256 } : {}),
+      ...(effective.canvas_default_digest_sha256
+        ? { canvas_default_digest_sha256: effective.canvas_default_digest_sha256 }
+        : {}),
+      resolution_digest_sha256: effective.resolution_digest_sha256,
+      targets: structuredClone(effective.targets),
+      resolved_targets: structuredClone(effective.resolved_targets),
+    };
+  });
+}
+
 export function planImageReroll(project = defaultProject, fields: {
   rootAssetId: string;
   targetAssetId: string;
@@ -660,114 +750,10 @@ export function planImageReroll(project = defaultProject, fields: {
       || fields.requestedDimensions.height !== inheritedSpec.output_spec.height
     )
   ) {
-    const variationMap: GenerationTargetMap = {
-      schema_version: 'lineage.generation_target_map.v1',
-      sources: [{
-        asset_id: target.asset_id,
-        targets: [{
-          kind: 'custom',
-          width: fields.requestedDimensions.width,
-          height: fields.requestedDimensions.height,
-        }],
-      }],
-    };
-    const variationPlan = planGenerationTargets({
-      jobId: id,
-      sourceAssetIds: [target.asset_id],
-      targetMap: variationMap,
-    });
-    if (!variationPlan) throw new GenerationReceiptError('Geometry-change variation requires a locked target plan');
-    const next: LineageNextResponse = {
-      project,
-      root_asset_id: snapshot.root_asset_id,
-      strategy: 'selected',
-      selection_mode: 'single',
-      recommended_action: 'evolve_variations',
-      reason: 'user_selected',
-      next_asset: target,
-      next_assets: [target],
-      latest: snapshot.latest,
-      selected: [target.asset_id],
-      selection: null,
-      selections: [],
-      candidates: snapshot.nodes,
-      warnings: ['Geometry changes create a child variation; the locked source node is unchanged.'],
-      fetchedAt: timestamp,
-    };
-    const variationInput = inputsFrom(id, project, next)[0];
-    const handoff = buildHandoff(project, id, prompt, 1, 1, next, [variationInput], [target.asset_id], variationPlan);
-    const preview: GenerationJob = {
-      id,
-      project_id: project,
-      provider,
-      adapter_version: 'generation-receipts-v3',
-      source_mode: 'lineage_selection',
-      root_asset_id: snapshot.root_asset_id,
-      prompt,
-      expected_output_count: 1,
-      status: 'planned',
-      output_dir: '.asset-scratch',
-      handoff,
-      created_at: timestamp,
-      updated_at: timestamp,
-      target_plan: variationPlan,
-      inputs: [variationInput],
-      outputs: [],
-      receipts: [{
-        id: `${id}:receipt:plan:preview`,
-        job_id: id,
-        receipt_type: 'plan',
-        status: 'ok',
-        command: 'generate image plan',
-        payload: {
-          geometry_change: {
-            from: {
-              height: inheritedSpec.output_spec.height,
-              width: inheritedSpec.output_spec.width,
-            },
-            representation: 'child_variation',
-            to: structuredClone(fields.requestedDimensions),
-          },
-          target_groups: variationPlan.groups,
-        },
-        created_at: timestamp,
-      }],
-    };
-    if (fields.dryRun) {
-      return { ok: true, command: 'generate image plan', project, dryRun: true, wouldWrite: true, job: preview };
-    }
-    const variationDatabase = lineageDb();
-    try {
-      persistTargetAwareGenerationAggregate(variationDatabase, {
-        job: {
-          id,
-          project_id: project,
-          provider,
-          adapter_version: 'generation-receipts-v3',
-          source_mode: 'lineage_selection',
-          root_asset_id: snapshot.root_asset_id,
-          prompt,
-          expected_output_count: 1,
-          status: 'planned',
-          output_dir: '.asset-scratch',
-          handoff,
-          created_at: timestamp,
-          updated_at: timestamp,
-          inputs: [variationInput],
-        },
-        inputs: [variationInput],
-        plan: variationPlan,
-        receipt: {
-          id: `${id}:receipt:plan:${Date.now()}`,
-          command: 'generate image plan',
-          payload: preview.receipts[0].payload,
-          created_at: timestamp,
-        },
-      });
-      return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(variationDatabase, project, id) };
-    } finally {
-      variationDatabase.close();
-    }
+    throw new GenerationReceiptError(
+      'Geometry changes are child variations and must use durable node next-output targets. Set or replace the node targets, then use the branch planner.',
+      409,
+    );
   }
   const targetPlan = inheritedSpec ? inheritedRerollTargetPlan(id, target.asset_id, inheritedSpec) : undefined;
   const handoff = buildRerollHandoff(project, id, prompt, snapshot.root_asset_id, target, request, targetPlan);

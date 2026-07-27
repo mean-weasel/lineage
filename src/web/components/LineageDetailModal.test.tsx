@@ -267,7 +267,11 @@ describe('LineageDetailModal', () => {
         created_at: '2026-07-27T00:00:00.000Z',
       },
     } satisfies LineageNode;
-    renderModal({ node: rerollNode, onToast: (type, message) => events.push(`${type}:${message}`) });
+    renderModal({
+      node: rerollNode,
+      onEditOutputTargets: () => events.push('edit-next-targets'),
+      onToast: (type, message) => events.push(`${type}:${message}`),
+    });
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
     expect(container!.textContent).toContain('Locked 1080 × 1920 px');
@@ -277,23 +281,23 @@ describe('LineageDetailModal', () => {
     expect(inherited.readOnly).toBe(true);
     expect(inherited.value).toBe('1080 × 1920 px');
 
-    setInput(container!.querySelector<HTMLTextAreaElement>('.lineage-reroll-target textarea')!, 'Try a taller child');
-    const numeric = container!.querySelectorAll<HTMLInputElement>('.lineage-reroll-target input[type="number"]');
-    setInput(numeric[0], '1200');
-    setInput(numeric[1], '1500');
+    expect(container!.textContent).toContain('must keep this asset’s immutable dimensions');
+    act(() => button('Edit next targets for child variation')!.click());
+    expect(events).toContain('edit-next-targets');
+    setInput(container!.querySelector<HTMLTextAreaElement>('.lineage-reroll-target textarea')!, 'Try another exact reroll');
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(button('Plan re-roll or child variation')!.disabled).toBe(false);
+    expect(button('Plan same-geometry re-roll')!.disabled).toBe(false);
     await act(async () => {
-      button('Plan re-roll or child variation')!.click();
+      button('Plan same-geometry re-roll')!.click();
       await new Promise(resolve => setTimeout(resolve, 0));
     });
     const rerollCall = vi.mocked(api).mock.calls.find(call => call[0] === '/api/generation/targets/reroll')!;
     expect(rerollCall[0]).toBe('/api/generation/targets/reroll');
     expect(JSON.parse(String((rerollCall[1] as RequestInit).body))).toMatchObject({
-      requestedDimensions: { width: 1200, height: 1500 },
       confirmWrite: true,
     });
-    expect(events).toContain('ok:Planned child variation job-child');
+    expect(JSON.parse(String((rerollCall[1] as RequestInit).body))).not.toHaveProperty('requestedDimensions');
+    expect(events).toContain('ok:Planned locked re-roll job-child');
   });
 });
 

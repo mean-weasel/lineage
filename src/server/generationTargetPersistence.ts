@@ -201,8 +201,20 @@ export function persistTargetAwareGenerationAggregate(
 ): void {
   database.exec('BEGIN IMMEDIATE');
   try {
-    const { job } = aggregate;
-    database.prepare(`
+    persistTargetAwareGenerationAggregateInTransaction(database, aggregate);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+export function persistTargetAwareGenerationAggregateInTransaction(
+  database: DatabaseSync,
+  aggregate: TargetAwareGenerationAggregate,
+): void {
+  const { job } = aggregate;
+  database.prepare(`
       insert into generation_jobs (
         id, project_id, provider, adapter_version, source_mode, root_asset_id, prompt,
         expected_output_count, status, output_dir, handoff_json, created_at, updated_at, imported_at
@@ -212,30 +224,25 @@ export function persistTargetAwareGenerationAggregate(
       job.prompt, job.expected_output_count, job.status, job.output_dir || null, JSON.stringify(job.handoff),
       job.created_at, job.updated_at, job.imported_at || null,
     );
-    const insertInput = database.prepare(`
+  const insertInput = database.prepare(`
       insert into generation_job_inputs (
         id, job_id, project_id, asset_id, root_asset_id, role, position,
         selection_strategy, selection_snapshot_json
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    for (const input of aggregate.inputs) {
-      insertInput.run(
-        input.id, input.job_id, input.project_id, input.asset_id, input.root_asset_id,
-        input.role, input.position, input.selection_strategy, JSON.stringify(input.selection_snapshot),
-      );
-    }
-    persistGenerationTargetPlan(database, job.id, aggregate.plan);
-    if (aggregate.sourceTargetResolutions) {
-      persistGenerationJobTargetResolutions(database, job.id, aggregate.sourceTargetResolutions);
-    }
-    database.prepare(`
+  for (const input of aggregate.inputs) {
+    insertInput.run(
+      input.id, input.job_id, input.project_id, input.asset_id, input.root_asset_id,
+      input.role, input.position, input.selection_strategy, JSON.stringify(input.selection_snapshot),
+    );
+  }
+  persistGenerationTargetPlan(database, job.id, aggregate.plan);
+  if (aggregate.sourceTargetResolutions) {
+    persistGenerationJobTargetResolutions(database, job.id, aggregate.sourceTargetResolutions);
+  }
+  database.prepare(`
       insert into generation_job_receipts (
         id, job_id, receipt_type, status, command, payload_json, created_at
       ) values (?, ?, 'plan', 'ok', ?, ?, ?)
     `).run(aggregate.receipt.id, job.id, aggregate.receipt.command, JSON.stringify(aggregate.receipt.payload), aggregate.receipt.created_at);
-    database.exec('COMMIT');
-  } catch (error) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
 }

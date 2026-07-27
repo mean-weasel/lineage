@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T005
+active_task: T006
 
 tasks:
   - id: T001
@@ -396,7 +396,7 @@ tasks:
   - id: T005
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the integrated backend, CLI/agent, and canvas implementation against every approved decision before live proof."
     inputs:
@@ -413,11 +413,102 @@ tasks:
       - "Decision matrix for every approved product rule"
       - "Top realistic failure modes and evidence"
       - "Exact remediation Worker task if rejected"
-    receipt: null
+    receipt:
+      result: done
+      decision: remediation_required
+      full_outcome_complete: false
+      rationale: "The integrated surfaces share the same canonical target resolver and browser/CLI digest parity is proven, but two realistic stale-intent bypasses remain. Locked-from-node planning resolves and checks the digest on one SQLite connection, closes it, then persists on another, allowing a node/default mutation between validation and job creation. The geometry-changing reroll path constructs a transient custom target map directly from requestedDimensions, without durable node intent or an expected resolution digest. Both violate the approved read-before-generate contract and must be closed before the live oracle."
+      decision_matrix:
+        - "approved: current output geometry remains separate from future node intent"
+        - "approved: node/default precedence, sticky CAS, explicit replace/clear, provenance, frozen metadata, multi-source resolution, child-only produced geometry, cancellation/import race guards"
+        - "approved: selection packet v3, CLI read/set/replace/clear, ambiguity refusal, complete JSON, agent read-only canvas defaults"
+        - "approved: canvas uses the persisted source-resolution digest and the backend canonical resolver; the real browser test proves digest parity"
+        - "rejected: committed locked-from-node plan validation and persistence are not one transaction"
+        - "rejected: geometry-changing reroll can bypass persisted node intent with requestedDimensions"
+      evidence:
+        - "src/server/generationReceipts.ts opens targetDatabase to resolve/check expectedTargetResolutionDigest, closes it, then later opens database and calls persistTargetAwareGenerationAggregate."
+        - "src/server/generationTargetPersistence.ts persistTargetAwareGenerationAggregate begins its own transaction only after the earlier resolution connection has closed."
+        - "src/server/generationReceipts.ts planImageReroll builds variationMap directly from fields.requestedDimensions and persists it without source_target_resolutions."
+        - "src/web/components/LineageDetailModal.tsx exposes that requestedDimensions bypass through the geometry-change reroll form."
+        - "e2e/output-target-locks.e2e.ts proves the canvas-computed aggregate digest is accepted by the backend and frozen into the job."
+      top_failure_modes:
+        - "Concurrent node/default change lands after digest validation but before job insert, producing a stale job even though the caller's digest was accepted."
+        - "A geometry-changing reroll plans from transient pixels that were never stored on the node and therefore cannot be read natively by another agent or surface."
+        - "Future refactors preserve happy-path tests while reopening one of the alternate route bypasses unless deterministic regression tests cover the transaction and reroll paths."
+      remaining_blockers:
+        - "T011 must pass before the checkout oracle."
+      verification_attempts: 1
+      stopped_because: "Integrated review found two goal-owned contract violations."
+  - id: T011
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Close the two integrated stale-intent bypasses: atomically re-resolve and persist node-target plans in one write transaction, and prevent geometry-changing rerolls from planning directly from transient dimensions."
+    inputs:
+      - "T005 remediation_required receipt"
+      - "Approved transactional read-before-generate and reroll contracts"
+      - "Existing node-target, generation aggregate, reroll, CLI, canvas, and browser proof"
+    constraints:
+      - "Persisted node/default intent is the only source for a geometry-changing child variation."
+      - "The expected selected-source resolution digest must be rechecked inside the same BEGIN IMMEDIATE transaction that writes the job aggregate."
+      - "Same-geometry rerolls continue to inherit the current immutable output specification."
+      - "Do not remove legacy target-map compatibility for explicit non-node generation."
+      - "Do not add provider calls or broaden beyond static images."
+    expected_output:
+      - "A transaction-aware aggregate persistence primitive and atomic node-target plan path"
+      - "A deterministic concurrency test proving a node/default mutation cannot interleave between resolution validation and job persistence"
+      - "Geometry-changing reroll refusal unless durable effective node intent and its expected digest are supplied"
+      - "Canvas reroll guidance routes geometry changes through node-target editing and the branch planner"
+      - "Focused backend, CLI, component, and browser regression proof"
+    allowed_files:
+      - "src/server/generationReceipts.ts"
+      - "src/server/generationReceipts.test.ts"
+      - "src/server/generationTargetPersistence.ts"
+      - "src/server/generationTargetPersistence.test.ts"
+      - "src/server/generationTargetRoutes.ts"
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "src/web/components/LineageDetailModal.tsx"
+      - "src/web/components/LineageDetailModal.test.tsx"
+      - "e2e/output-target-locks.e2e.ts"
+    verify:
+      - "npm test -- src/server/generationReceipts.test.ts src/server/generationTargetPersistence.test.ts src/cli/lineageCli.test.ts src/web/components/LineageDetailModal.test.tsx"
+      - "npm run check"
+      - "npm run e2e -- e2e/output-target-locks.e2e.ts"
+    stop_if:
+      - "Atomic validation and persistence cannot share one SQLite write transaction without changing the public storage contract."
+      - "Same-geometry rerolls or legacy target-map compatibility would regress."
+      - "Required ownership extends outside allowed_files."
+      - "Verification fails twice for reasons not isolated to this remediation."
+    receipt:
+      result: done
+      changed_files:
+        - src/server/generationReceipts.ts
+        - src/server/generationReceipts.test.ts
+        - src/server/generationTargetPersistence.ts
+        - src/web/components/LineageDetailModal.tsx
+        - src/web/components/LineageDetailModal.test.tsx
+      commands:
+        - cmd: "npm test -- src/server/generationReceipts.test.ts src/server/generationTargetPersistence.test.ts src/cli/lineageCli.test.ts src/web/components/LineageDetailModal.test.tsx"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Factored transaction-aware target aggregate persistence and made committed locked-from-node planning acquire BEGIN IMMEDIATE, re-resolve every source, recheck the caller's aggregate digest, materialize from that frozen state, and insert the job/map/groups/slots/source snapshots/receipt before committing. A deterministic race hook changes the node after the first read and proves rejection with zero aggregate rows. Removed the transient requestedDimensions child-plan bypass from rerolls; same-geometry rerolls still inherit immutable current pixels, while canvas directs geometry changes through durable next-target editing and the branch planner. Focused proof passed 92 tests and the end-to-end browser flow remained green."
+      deviations:
+        - "The dedicated GoalBuddy Worker timed out without edits; PM completed the bounded fallback package."
+        - "The CLI and route files required no mutation: CLI never exposed geometry-changing reroll dimensions, and the route now receives a structured 409 from the shared server contract."
+      remaining_blockers: []
+      verification_attempts: 1
+      stopped_because: null
   - id: T006
     type: pm
     assignee: PM
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Run the identity-gated checkout full bridge oracle through canvas, CLI, and a real provider-neutral agent generation/import loop."
     inputs:
