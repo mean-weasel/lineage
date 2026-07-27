@@ -1418,7 +1418,7 @@ export async function runLineageCli(config: LineageCliConfig, args = process.arg
       else console.error(`${config.binName}: ${message}`);
       process.exit(1);
     }
-    process.exit(0);
+    return;
   }
 
   if (command === 'db') {

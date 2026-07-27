@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GenerationJob, GenerationPlanResponse } from '../../shared/generationTypes';
 import type { GenerationSourceTargets, GenerationTargetMap } from '../../shared/outputTargetTypes';
 import type { LineageNode } from '../../shared/types';
@@ -31,6 +31,9 @@ export function LineageGenerationSheet({ onClose, onPlanned, project, rootAssetI
   const [busy, setBusy] = useState(false);
   const [surfaceSearch, setSurfaceSearch] = useState('');
   const params = useMemo(() => new URLSearchParams({ project, rootAssetId }).toString(), [project, rootAssetId]);
+  const sourceAssetIds = sources.map(source => source.asset_id).join('\0');
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +48,7 @@ export function LineageGenerationSheet({ onClose, onPlanned, project, rootAssetI
         height: String(target.height),
       }] : []) ?? [];
       const defaultUnlocked = result.defaults?.targets.some(target => target.kind === 'unlocked') ?? false;
-      setDrafts(sources.map(source => ({
+      setDrafts(sourcesRef.current.map(source => ({
         assetId: source.asset_id,
         customTargets: defaultCustomTargets.map(target => ({ ...target, id: `${source.asset_id}-${target.id}` })),
         counts: Object.fromEntries([
@@ -66,7 +69,7 @@ export function LineageGenerationSheet({ onClose, onPlanned, project, rootAssetI
       })));
     }).catch(reason => !cancelled && setError(reason instanceof Error ? reason.message : String(reason)));
     return () => { cancelled = true; };
-  }, [params, sources]);
+  }, [params, sourceAssetIds]);
 
   function updateDraft(assetId: string, change: (draft: SourceDraft) => SourceDraft) {
     setDrafts(current => current.map(draft => draft.assetId === assetId ? change(draft) : draft));

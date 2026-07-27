@@ -74,7 +74,10 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
   const editingEdge = snapshot?.edges.find(edge => edge.id === edgeEditor?.edgeId);
   const latestNodes = snapshot?.nodes.filter(node => snapshot.latest.includes(node.asset_id)) || [];
-  const selectedNodes = snapshot?.selected.map(assetId => snapshot.nodes.find(node => node.asset_id === assetId)).filter((node): node is LineageNode => Boolean(node)) || [];
+  const selectedNodes = useMemo(
+    () => snapshot?.selected.map(assetId => snapshot.nodes.find(node => node.asset_id === assetId)).filter((node): node is LineageNode => Boolean(node)) || [],
+    [snapshot],
+  );
   const selectedNode = selectedNodes[0];
   const nextVariationLimit = 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;

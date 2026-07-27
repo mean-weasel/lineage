@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -6,7 +7,9 @@ import { defaultProject, repoRoot } from '../server/assetCore';
 import { indexLineageAssets, markLineageRerollRequest, updateSelectedAsset } from '../server/assetLineage';
 import { createLineageWorkspace, lineageWorkspaceId } from '../server/assetLineageWorkspaces';
 import { fileSha256 } from '../server/localReview';
+import { resolveLineageProfile } from '../server/lineageProfiles';
 import { acquireProfileWriterLease, type ProfileWriterLease } from '../server/profileWriterLease';
+import { getLineageCodeIdentity } from '../server/runtimeInfo';
 import type { ResolvedLineageProfile } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import { parseRegistryPackageMetadata } from './lineage-channel';
@@ -18,6 +21,7 @@ const cliDbFile = join(cliScratchDir, 'lineage-cli.sqlite');
 const fixtureRootAssetId = 'demo-meta-short-form-upload-demo-post-static';
 const fixtureChildAssetId = 'demo-linkedin-ledger-catalog-shared';
 let cliTestLease: ProfileWriterLease | undefined;
+const cliCodeIdentity = getLineageCodeIdentity('dev');
 
 afterEach(() => {
   cliTestLease?.release();
@@ -30,18 +34,19 @@ function seedCliDb() {
   cliTestLease = undefined;
   rmSync(cliScratchDir, { force: true, recursive: true });
   mkdirSync(cliScratchDir, { recursive: true });
-  const profile: ResolvedLineageProfile = {
+  const manifest: ResolvedLineageProfile = {
     asset_root: repoRoot,
     database_path: cliDbFile,
     environment: 'development',
-    expected_runtime: { channel: 'dev', code_fingerprint: 'd'.repeat(64), code_origin: 'checkout' },
+    expected_runtime: { channel: 'dev', code_fingerprint: cliCodeIdentity.fingerprint, code_origin: 'checkout' },
     manifest_path: join(cliScratchDir, 'profile.json'),
     profile_fingerprint: 'e'.repeat(64),
     profile_id: 'cli-test-development',
     schema_version: 'lineage.profile.v1',
     service_origin: 'http://127.0.0.1:6198',
   };
-  writeFileSync(profile.manifest_path, `${JSON.stringify(profile)}\n`);
+  writeFileSync(manifest.manifest_path, `${JSON.stringify(manifest)}\n`);
+  const profile = resolveLineageProfile(manifest.manifest_path);
   const database = new DatabaseSync(cliDbFile);
   database.exec('create table lineage_profile_identity (profile_id text primary key, environment text not null, profile_fingerprint text not null, bound_at text not null)');
   database.prepare('insert into lineage_profile_identity (profile_id, environment, profile_fingerprint, bound_at) values (?, ?, ?, ?)')
@@ -634,6 +639,55 @@ describe('lineage CLI handoff commands', () => {
       '--files', outputFile,
       '--confirm-write',
     ])).toThrow('Use --manifest or legacy --files/--parent-files, not both');
+  });
+
+  it('emits a complete persisted generation job larger than 65,536 bytes from an actual CLI subprocess', () => {
+    seedCliDb();
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: fixtureRootAssetId,
+      title: 'Large CLI output workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: fixtureRootAssetId,
+      confirmWrite: true,
+      rootAssetId: fixtureRootAssetId,
+    });
+    const planned = runLineageDataCommand('generate', [
+      'image', 'plan',
+      '--project', defaultProject,
+      '--prompt', 'large-json-output-'.repeat(6_000),
+      '--from-lineage-selection',
+      '--count', '1',
+      '--json',
+    ]) as { job: { id: string } };
+    const persisted = runLineageDataCommand('generate', [
+      'image', 'inspect',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--json',
+    ]);
+
+    const subprocess = spawnSync(process.execPath, [
+      '--import', 'tsx',
+      'src/cli/lineage-dev.ts',
+      'generate', 'image', 'inspect',
+      '--project', defaultProject,
+      '--job-id', planned.job.id,
+      '--profile', join(cliScratchDir, 'profile.json'),
+      '--json',
+    ], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env },
+      maxBuffer: 16 * 1024 * 1024,
+    });
+
+    expect(subprocess.status, subprocess.stderr).toBe(0);
+    expect(Buffer.byteLength(subprocess.stdout)).toBeGreaterThan(65_536);
+    expect(JSON.parse(subprocess.stdout)).toEqual(persisted);
   });
 
   it('discovers targets and persists a target-aware shorthand plan for canvas parity', () => {
