@@ -1,12 +1,9 @@
 {
-  "reviewedFor": "0.1.26",
-  "result": "no-changes",
+  "reviewedFor": "0.1.27",
+  "result": "updated",
   "areas": [
-    "start-here",
-    "concepts",
     "workflows",
     "integrations",
-    "operations",
-    "reference"
+    "reference-cli"
   ]
 }

@@ -1,0 +1,554 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Static image output target adoption"
+  slug: "static-image-output-target-adoption"
+  kind: existing_plan
+  tranche: "Release the merged output-target feature, dogfood its critical workflows, apply evidence-backed UX polish, and prove one provider-neutral agent generation loop."
+  status: active
+  oracle:
+    signal: "A released Lineage build completes the approved dogfood scenarios and one agent plan-to-generation-to-validated-import workflow with recorded evidence and no unresolved critical friction."
+    cadence: "after each Worker package and at final audit"
+    final_proof: "Release receipts, live workflow evidence, focused/full gates, and a final acceptance-to-evidence audit."
+  intake:
+    original_request: "Make a GoalBuddy prep board to knock these out."
+    interpreted_outcome: "Ship and operationalize the merged static-image output-target feature through release, dogfood, targeted polish, and agent-generation integration."
+    input_shape: existing_plan
+    audience: "Lineage users and agents creating platform-specific static-image variants"
+    authority: approved
+    proof_type: demo
+    completion_proof: "The released build and final integrated agent workflow pass live, identity-gated walkthroughs and all required repository gates."
+    likely_misfire: "Declaring adoption complete after a version bump or scripted happy path without learning from real workflow friction or proving the agent-generation-import loop."
+    blind_spots_considered:
+      - "Release work may collide with unrelated version changes already landing on main."
+      - "Dogfood can become theater if it does not record concrete friction and disposition it."
+      - "Agent integration could accidentally put provider calls or mutable defaults inside Lineage."
+      - "A generated file may satisfy prompt intent but still violate the frozen pixel contract."
+      - "Broader video, publishing, transform, or safe-zone work could dilute this tranche."
+    existing_plan_facts:
+      - "Release the merged feature."
+      - "Dogfood ambiguous Instagram, multi-source override, and locked-reroll workflows."
+      - "Use dogfood evidence to improve discoverability and ergonomics."
+      - "Connect frozen plans more directly to image-generation tooling while keeping Lineage provider-neutral."
+      - "Keep video, transforms, automated safe-zone validation, publishing, and scheduling deferred."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
+    command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
+
+active_task: T003
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Validate the approved adoption sequence against current GitHub main, release policy, active worktrees, and existing verification boundaries before any execution."
+    inputs:
+      - "Merged PR #119 and merge commit 4fe7e34a0c75019d11cc202b82446de9aa07ae30"
+      - "Repository release policy and current package versions"
+      - "Completed static-image-output-target-locks GoalBuddy receipts"
+      - "Current branches, worktrees, CI, and release state"
+    constraints:
+      - "Read-only; do not implement, release, tag, merge, or edit the board."
+      - "Preserve the approved sequence but correct stale release assumptions."
+      - "Require a fresh execution worktree from current GitHub origin/main."
+    expected_output:
+      - "Current main/release/worktree identity receipt"
+      - "Validated dependency order"
+      - "Exact Worker/PM task scopes, allowed_files, verify commands, and stop conditions"
+      - "Required approval points for release or external effects"
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "GitHub main is exactly merged PR #119 at 4fe7e34 with all eight post-merge checks green, no open PR, and no 0.1.27 tag/package/release collision. The latest stable release is 0.1.26, so the fully verified feature is eligible for stable 0.1.27. Execution must first move to a fresh origin/main worktree. T002 has exact release metadata/documentation scope and verification; post-release dogfood and agent integration remain required."
+      worker_package:
+        objective: "Prepare the stable 0.1.27 release metadata and public documentation for the merged static-image output-target feature without publishing, tagging, merging, or mutating external release state."
+        allowed_files:
+          - package.json
+          - package-lock.json
+          - plugins/lineage-codex-plugin/package.json
+          - plugins/lineage-codex-plugin/.codex-plugin/plugin.json
+          - CHANGELOG.md
+          - docs-site/docs-review.json
+          - docs-site/src/content/docs/workflows/generate-import-variations.md
+          - docs-site/src/content/docs/integrations/image-generation.md
+          - docs-site/src/content/docs/reference/cli.md
+        verify:
+          - "GITHUB_REF_NAME=v0.1.27 node scripts/tag-release-plan.mjs"
+          - "npm run release:policy:test"
+          - "npm run docs:check"
+          - "npm run plugin:smoke"
+          - "npm run plugin:codex-smoke"
+          - "npm run public:readiness"
+          - "npm run package:smoke"
+          - "npm run ci"
+          - "git diff --check"
+        stop_if:
+          - "Fresh-worktree root, branch, origin, or base no longer matches T013."
+          - "Current GitHub main is not 4fe7e34a0c75019d11cc202b82446de9aa07ae30."
+          - "v0.1.27, npm 0.1.27, a 0.1.27 GitHub Release, or a conflicting release PR appears."
+          - "Any root/plugin/manifest/lock/docs-review version cannot be made exactly 0.1.27."
+          - "The release requires files outside allowed_files."
+          - "A new user change overlaps an allowed file."
+          - "Verification fails twice for the same unexplained reason."
+      evidence:
+        - notes/T001-release-adoption-validation.md
+        - "origin/main=4fe7e34a0c75019d11cc202b82446de9aa07ae30"
+        - "latest_tag=v0.1.26 annotated at eef358ba16f60619f6ba8104d3bed14ab8d58257"
+        - "npm_latest=0.1.26"
+        - "npm_next=0.1.21-rc.3"
+        - "open_pull_requests=[]"
+        - "merge_commit_checks=8 successful"
+      parallel_safety:
+        safe: false
+        reason: "Release preparation, publication, dogfood, adoption remediation, integration, and final publication are ordered risk boundaries with overlapping version and workflow authority."
+      blocked_tasks:
+        - "T002 until T013 proves the fresh worktree identity."
+        - "T003 until T002 passes all release preparation gates."
+        - "T004 until T003 publishes and verifies the released channel."
+      missing_evidence:
+        - "Fresh execution worktree identity."
+        - "0.1.27 release candidate changes and gates."
+        - "Published 0.1.27 runtime."
+        - "Dogfood evidence."
+        - "Provider-neutral agent integration and final released proof."
+      required_board_updates:
+        - "Added and activate T013 before T002."
+        - "Installed exact stable 0.1.27 T002 scope and verification."
+        - "Preserve T011/T012 for a second release only when post-0.1.27 product changes exist."
+      harness: codex
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Prepare the stable 0.1.27 release metadata and public documentation for the merged static-image output-target feature without publishing, tagging, merging, or mutating external release state."
+    inputs:
+      - "T001 release strategy and exact Worker package"
+      - "Current GitHub origin/main"
+      - "Merged PR #119 verification"
+    constraints:
+      - "Do not publish, tag, merge, or mutate npm/GitHub release state."
+      - "Do not guess the next version or overwrite concurrent release work."
+      - "All version locks and changelog entries must agree."
+    expected_output:
+      - "Exact 0.1.27 root/plugin/manifest/lock/docs-review version parity"
+      - "Public workflow, integration, and CLI documentation for locked output targets"
+      - "Release-policy, package, plugin, public-readiness, and CI evidence"
+      - "Exact prospective immutable tag v0.1.27"
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+      - "plugins/lineage-codex-plugin/package.json"
+      - "plugins/lineage-codex-plugin/.codex-plugin/plugin.json"
+      - "CHANGELOG.md"
+      - "docs-site/docs-review.json"
+      - "docs-site/src/content/docs/workflows/generate-import-variations.md"
+      - "docs-site/src/content/docs/integrations/image-generation.md"
+      - "docs-site/src/content/docs/reference/cli.md"
+    verify:
+      - "GITHUB_REF_NAME=v0.1.27 node scripts/tag-release-plan.mjs"
+      - "npm run release:policy:test"
+      - "npm run docs:check"
+      - "npm run plugin:smoke"
+      - "npm run plugin:codex-smoke"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "npm run ci"
+      - "git diff --check"
+    stop_if:
+      - "Fresh-worktree root, branch, origin, or base no longer matches T013."
+      - "Current GitHub main is not 4fe7e34a0c75019d11cc202b82446de9aa07ae30."
+      - "v0.1.27, npm 0.1.27, a 0.1.27 GitHub Release, or a conflicting release PR appears."
+      - "Any root/plugin/manifest/lock/docs-review version cannot be made exactly 0.1.27."
+      - "The release requires files outside allowed_files."
+      - "A new user change overlaps an allowed file."
+      - "Verification fails twice for the same unexplained reason."
+    receipt:
+      result: done
+      summary: "Prepared the stable 0.1.27 release metadata and public documentation for static-image output targets with exact root, lock, plugin, manifest, and Lineage compatibility parity."
+      changed_files:
+        - package.json
+        - package-lock.json
+        - plugins/lineage-codex-plugin/package.json
+        - plugins/lineage-codex-plugin/.codex-plugin/plugin.json
+        - CHANGELOG.md
+        - docs-site/docs-review.json
+        - docs-site/src/content/docs/workflows/generate-import-variations.md
+        - docs-site/src/content/docs/integrations/image-generation.md
+        - docs-site/src/content/docs/reference/cli.md
+      commands:
+        - command: "GITHUB_REF_NAME=v0.1.27 node scripts/tag-release-plan.mjs"
+          status: pass
+        - command: "npm run release:policy:test"
+          status: pass
+        - command: "npm run docs:check"
+          status: pass
+        - command: "npm run plugin:smoke"
+          status: pass
+        - command: "npm run plugin:codex-smoke"
+          status: pass
+        - command: "npm run public:readiness"
+          status: pass
+        - command: "npm run package:smoke"
+          status: pass
+        - command: "npm run ci"
+          status: pass
+        - command: "git diff --check"
+          status: pass
+      version_contract:
+        root: 0.1.27
+        lock: 0.1.27
+        lock_root: 0.1.27
+        plugin: 0.1.27
+        manifest: 0.1.27
+        lineage_compatibility: 0.1.27
+        prospective_tag: v0.1.27
+      notes:
+        - "Fresh-worktree dependencies were installed with npm ci before the documentation and full gates."
+        - "The first package smoke correctly required a build; npm run build then package smoke passed."
+        - "The first full CI run had one transient canvas click-interception failure in qa-rich-seed-visible.e2e.ts; that focused test passed immediately, and the second complete uninterrupted npm run ci passed all 14 browser tests."
+        - "No publish, tag, merge, npm mutation, or GitHub release mutation occurred in T002."
+      user_facing_claim: "The 0.1.27 release candidate consistently describes and packages static-image output-target locking across the CLI, canvas workflow documentation, plugin metadata, and public release surfaces."
+      top_failure_modes:
+        - "A version-lock mismatch could make the immutable tag workflow fail closed."
+        - "Documentation could omit ambiguity resolution or hard decoded-pixel validation and mislead users."
+        - "A browser or package regression could be hidden by a narrow verification run."
+      evidence:
+        - "Exact six-field version parity inspection"
+        - "Full uninterrupted npm run ci"
+        - "Public readiness, package smoke, plugin smoke, and Codex plugin smoke"
+        - "Release policy and prospective tag plan"
+        - "Nine-file scope inspection and git diff --check"
+  - id: T003
+    type: pm
+    assignee: PM
+    status: active
+    reasoning_hint: high
+    objective: "Publish the first approved release candidate through reviewed main, the immutable tag workflow, and complete npm/GitHub/plugin/runtime verification."
+    inputs:
+      - "T002 release-preparation receipt and PR"
+      - "T001 release authority and channel decision"
+      - "Repository release policy"
+    constraints:
+      - "Re-read main, version, tag, CI, and release identities immediately before every external write."
+      - "Never move or reuse a tag."
+      - "Merge only when required checks are green and the reviewed head SHA is unchanged."
+      - "Require the tag workflow to produce matching npm dist-tag, GitHub Release, plugin archive, and checksum."
+    expected_output:
+      - "Merged release PR"
+      - "Immutable annotated tag"
+      - "Successful release workflow"
+      - "Verified package, GitHub Release, plugin assets, and runtime channel"
+    receipt: null
+  - id: T004
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Dogfood the released feature through the ambiguous-platform, multi-source override, and locked-reroll scenarios and record actionable friction."
+    inputs:
+      - "T003 released version and runtime receipt"
+      - "Completed static-image-output-target-locks oracle"
+    constraints:
+      - "Use the matching released channel, a dedicated named profile, isolated non-production database, and synthetic media."
+      - "Run runtime doctor, profile doctor, and db info before operational commands and confirm service identity."
+      - "Do not edit product files during dogfood."
+      - "Record every material friction item with severity, reproduction, expected behavior, evidence, and disposition."
+    expected_output:
+      - "Ambiguous Instagram choice walkthrough"
+      - "Multi-source independent override/group/split/count walkthrough"
+      - "Locked reroll inheritance and child-variation walkthrough"
+      - "Screenshots, command receipts, persisted-state evidence, and ranked friction list"
+    receipt: null
+  - id: T005
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Judge the dogfood evidence, reject theater, and define the largest bounded UX adoption package required before integration and final release."
+    inputs:
+      - "T004 dogfood receipt and evidence"
+      - "Approved output-target design and shipped behavior"
+      - "Current implementation and test boundaries"
+    constraints:
+      - "Read-only; do not implement."
+      - "Do not create work from aesthetic preference without dogfood evidence."
+      - "Critical or high-severity friction must be fixed or explicitly dispositioned before final release."
+    expected_output:
+      - "Proceed, remediate, or block decision"
+      - "Friction severity/disposition matrix"
+      - "Exact T006 objective, allowed_files, verify commands, and stop conditions"
+      - "Explicit no-op disposition if no code change is justified"
+    receipt: null
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the evidence-backed UX adoption package selected by T005 without weakening the frozen target contract."
+    inputs:
+      - "T005 decision and exact Worker package"
+      - "T004 dogfood evidence"
+    constraints:
+      - "Preserve one backend planner and persisted contract as source of truth."
+      - "Do not add provider calls, publishing, transforms, agent mutation of defaults, or mismatch overrides."
+      - "Keep legacy unlocked workflows compatible."
+    expected_output:
+      - "Resolved material dogfood friction"
+      - "Focused component/browser regression coverage"
+      - "Passing exact verification from T005"
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T005 has not installed exact allowed_files and verify commands."
+      - "The work requires files outside allowed_files."
+      - "A proposed UX shortcut changes persisted target semantics."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+  - id: T007
+    type: scout
+    assignee: Scout
+    status: queued
+    reasoning_hint: low
+    objective: "Map the current agent/operator, CLI handoff, image-generation tool, scratch-file, manifest, and import boundaries for a provider-neutral plan-to-generation workflow."
+    inputs:
+      - "Shipped output-target CLI/protocol contracts"
+      - "Lineage operator skill and agent-facing documentation"
+      - "Available static-image generation tooling"
+      - "T004 and T006 adoption evidence"
+    constraints:
+      - "Read-only; do not implement or generate assets."
+      - "Do not place provider calls inside the Lineage server."
+      - "Preserve exact target-map and decoded-pixel enforcement."
+    expected_output:
+      - "Current end-to-end agent workflow map"
+      - "Boundary and failure-mode analysis"
+      - "Candidate integration slices ranked by usefulness, reversibility, and proof strength"
+      - "Recommended live oracle for generated files"
+    receipt: null
+  - id: T008
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Choose and specify the smallest complete provider-neutral agent integration that materially reduces handoff friction."
+    inputs:
+      - "T007 boundary map"
+      - "T004/T006 adoption evidence"
+      - "Current protocol and compatibility constraints"
+    constraints:
+      - "Read-only; do not implement."
+      - "Reject provider-specific server code, hidden surface inference, mutable canvas defaults, or validation bypass."
+      - "The selected slice must end in a generated file validated and imported through the existing hard contract."
+    expected_output:
+      - "Architecture decision"
+      - "Exact T009 objective, allowed_files, verify commands, and stop conditions"
+      - "Protocol compatibility and rollout assessment"
+      - "Live acceptance transcript"
+    receipt: null
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the provider-neutral agent plan-to-generation-to-manifest/import bridge selected by T008."
+    inputs:
+      - "T008 architecture and exact Worker package"
+      - "Existing output-target and import contracts"
+    constraints:
+      - "Lineage server remains provider-neutral and does not invoke generation providers."
+      - "The agent must resolve ambiguity, materialize exact target geometry, and use the existing immutable manifest/import path."
+      - "Generated output must pass byte-based type and exact-pixel validation."
+      - "Preserve CLI/canvas parity and legacy compatibility."
+    expected_output:
+      - "One coherent agent-facing workflow from request through imported locked node"
+      - "Machine-readable errors and retry guidance"
+      - "Focused protocol/operator/integration tests"
+      - "Passing exact verification from T008"
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T008 has not installed exact allowed_files and verify commands."
+      - "The work requires files outside allowed_files."
+      - "Provider credentials or calls would enter the Lineage server."
+      - "The bridge can bypass frozen dimensions or atomic import."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+  - id: T010
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Run the integrated agent-generation oracle and prove request resolution, exact generation geometry, manifest handoff, atomic import, and canvas visibility."
+    inputs:
+      - "T009 implementation receipt"
+      - "T003 released baseline"
+      - "T004 dogfood fixtures and profile discipline"
+    constraints:
+      - "Use a fresh dedicated development or preview profile and synthetic non-private media."
+      - "Complete the repository identity gate before operational commands."
+      - "Prove one successful exact-size flow and at least one generated mismatch/corrupt failure with zero partial state."
+    expected_output:
+      - "Agent transcript from ambiguous or explicit request through surface choice"
+      - "Persisted plan and output-spec evidence"
+      - "Generated static-image manifest and successful import"
+      - "Rejected invalid output with zero partial state"
+      - "Canvas/CLI visibility evidence and screenshots"
+    receipt: null
+  - id: T011
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Prepare the final release delta containing justified adoption polish and agent integration after the integrated oracle passes."
+    inputs:
+      - "T006, T009, and T010 receipts"
+      - "Current GitHub main and release state"
+      - "T001 release rules"
+    constraints:
+      - "Do not publish, tag, merge, or mutate release state."
+      - "Skip with a receipt only if T001/T005/T008 prove no post-release code delta exists."
+      - "All package/plugin/version/changelog locks must agree."
+    expected_output:
+      - "Reviewable final release commit and PR, or a proven no-delta disposition"
+      - "Full CI, public-readiness, package, plugin, and release-policy evidence"
+      - "Exact prospective immutable tag when a release is required"
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "The exact release scope and version have not been revalidated against current main."
+      - "GitHub main, package versions, tags, or release state changed unexpectedly."
+      - "The release requires files outside allowed_files."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+  - id: T012
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Publish and verify the final adoption release when T011 proves a release delta is required."
+    inputs:
+      - "T011 release-preparation receipt"
+      - "T010 integrated proof"
+      - "Current repository release policy"
+    constraints:
+      - "If T011 proves no release is required, record an explicit no-op receipt rather than inventing a version."
+      - "Re-read main, version, tag, CI, and release identities before external writes."
+      - "Use a new immutable annotated tag and never bypass release workflow gates."
+    expected_output:
+      - "Merged final release PR and immutable tag, or proven no-op disposition"
+      - "Green release workflow and exact npm/GitHub/plugin artifact parity"
+      - "Identity-gated released-runtime replay of the integrated oracle"
+    receipt: null
+  - id: T013
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Create the dedicated execution worktree from exact current GitHub main, migrate the GoalBuddy control files, and prove clean branch/origin/base identity before T002."
+    inputs:
+      - "T001 validation receipt"
+      - "GitHub origin/main 4fe7e34a0c75019d11cc202b82446de9aa07ae30"
+      - "Current GoalBuddy control files"
+    constraints:
+      - "Create exactly /Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-adoption on codex/static-image-output-target-adoption."
+      - "Do not modify or clean the primary checkout or any existing worktree."
+      - "Copy only docs/goals/static-image-output-target-adoption control files."
+      - "Stop on any branch/path/origin/base collision or mismatch."
+    expected_output:
+      - "Fresh worktree and branch at exact origin/main"
+      - "GoalBuddy board registered against the new canonical path"
+      - "Clean identity receipt and committed planning/control files"
+      - "T002 activated only after all identity checks agree"
+    receipt:
+      result: done
+      summary: "Created the dedicated codex/static-image-output-target-adoption worktree directly from freshly fetched GitHub origin/main 4fe7e34, migrated only the GoalBuddy control files, registered the new canonical live board, and left the primary checkout and all existing worktrees untouched. Branch, origin, HEAD, merge base, and product-tree identity agree; T002 may start."
+      evidence:
+        - notes/T013-execution-worktree.md
+        - "root=/Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-adoption"
+        - "branch=codex/static-image-output-target-adoption"
+        - "origin=git@github.com:mean-weasel/lineage.git"
+        - "head_and_merge_base=4fe7e34a0c75019d11cc202b82446de9aa07ae30"
+        - "board=http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
+      facts:
+        - "The target branch, remote branch, and worktree path did not exist before creation."
+        - "No product file differs from origin/main."
+        - "Only docs/goals/static-image-output-target-adoption control files were migrated."
+      contradictions: []
+      ambiguity_requiring_judge: []
+      commands:
+        - cmd: "git worktree add -b codex/static-image-output-target-adoption /Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-adoption origin/main"
+          status: pass
+        - cmd: "git rev-parse HEAD; git branch --show-current; git remote get-url origin; git merge-base HEAD origin/main"
+          status: pass
+        - cmd: "GoalBuddy local board registration against the new canonical goal path"
+          status: pass
+      note_needed: true
+      harness: codex
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether release, dogfood, adoption polish, agent integration, final publication, and deferred-scope discipline satisfy the complete owner outcome."
+    inputs:
+      - "All done task receipts"
+      - "Release and runtime evidence"
+      - "Dogfood friction/disposition matrix"
+      - "Integrated agent-generation oracle"
+      - "Current diff, CI, and board state"
+    constraints:
+      - "Read-only; do not implement."
+      - "Reject completion if any required task is queued, active, blocked without disposition, or weakly proven."
+      - "Reject completion if critical dogfood friction remains unresolved."
+      - "Reject completion if the final integrated behavior is not available in the verified release channel."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Acceptance-criterion-to-evidence map"
+      - "Top realistic failure modes and evidence"
+      - "Missing evidence and exact next task when incomplete"
+    receipt: null
+
+checks:
+  dirty_fingerprint: "Board prepared in the clean merged-feature worktree because the primary checkout contains unrelated documentation work; T001 must create/validate a fresh origin/main execution worktree."
+  last_verification:
+    result: unknown
+    task: null
+    commands: []

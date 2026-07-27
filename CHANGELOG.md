@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.27
+
+- Add provider-neutral static-image output targets across agents, the CLI, and the canvas, with explicit surface resolution, shared-geometry consolidation, per-source overrides, custom dimensions, and immutable variant counts.
+- Enforce locked PNG, JPEG, and WebP output specifications from decoded bytes, atomically rejecting corrupt, unsupported, tampered, or wrong-dimension imports without partial lineage state.
+- Keep canvas target defaults explicit and human-managed while preserving unlocked jobs, inherited re-roll dimensions, and child variations for geometry changes.
+
 ## 0.1.26
 
 - Prevent GitHub Pages asset paths from contaminating the npm package, restore stable app rendering, and reject mismatched production asset URLs during package smoke verification.
