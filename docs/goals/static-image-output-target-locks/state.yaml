@@ -1,0 +1,310 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Static image output target locks"
+  slug: "static-image-output-target-locks"
+  kind: existing_plan
+  tranche: "Validate the approved design, implement backend, CLI/protocol, import-integrity, and canvas vertical slices, then prove the complete bridge."
+  status: active
+  oracle:
+    signal: "A live checkout walkthrough and receipt-backed tests prove that agent, CLI, and canvas create the same locked static-image jobs and atomically reject every dimension mismatch."
+    cadence: "after each Worker package and at final audit"
+    final_proof: "Every approved behavior maps to passing focused tests, full repository gates, and an identity-gated browser/CLI walkthrough."
+  intake:
+    original_request: "Plan implementation using GoalBuddy prep as atomic, verifiable tasks with sharp, measurable acceptance criteria."
+    interpreted_outcome: "A GoalBuddy board carries the approved static-image output-target design through bounded implementation slices to end-to-end proof."
+    input_shape: existing_plan
+    audience: "Lineage users creating and importing static-image variants through agents, CLI, and canvas"
+    authority: approved
+    proof_type: demo
+    completion_proof: "The full oracle passes with no queued required work and a final Judge records full_outcome_complete: true."
+    likely_misfire: "Implementing labels, controls, or schemas without enforcing immutable pixels, atomic import, per-source mapping, and cross-surface parity."
+    blind_spots_considered:
+      - "Incorrect grouping can duplicate, collapse, or cross-apply source targets."
+      - "Validation can be bypassed by corrupt, renamed, animated, or partially imported media."
+      - "Mutable defaults, registry changes, or rerolls can silently alter frozen intent."
+      - "New target-aware behavior can accidentally break legacy unlocked jobs."
+      - "A passing file-level test can hide agent/CLI/canvas disagreement."
+    existing_plan_facts:
+      - "Approved design: docs/superpowers/specs/2026-07-27-static-image-output-target-locks-design.md"
+      - "Static images only; exact pixel dimensions are the v1 hard contract."
+      - "Ambiguous platform-only requests require a surface choice."
+      - "Geometry and delivery surfaces are separate; shared dimensions consolidate unless explicitly split."
+      - "Target-aware multi-source jobs require explicit per-source mapping."
+      - "Canvas defaults are explicit and human-managed; agents and CLI have read-only access."
+      - "Rerolls inherit locks; geometry changes create child variations."
+      - "Custom sizes are bounded to 16..16384 per side and 100000000 decoded pixels."
+      - "PNG, JPEG, and WebP are supported; other, corrupt, renamed, or tampered media fail closed."
+      - "All import inputs are prevalidated before any persistent write."
+      - "Existing unlocked jobs and protocols remain compatible."
+      - "All execution occurs in /Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks on codex/static-image-output-target-locks, created from freshly fetched GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/static-image-output-target-locks/"
+    command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
+
+active_task: T001
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Validate the approved design against current repository reality and make every queued Worker card executable before implementation."
+    inputs:
+      - "docs/superpowers/specs/2026-07-27-static-image-output-target-locks-design.md"
+      - "docs/goals/static-image-output-target-locks/goal.md"
+      - "AGENTS.md"
+      - "package.json"
+      - "Current branch, worktree, implementation, tests, and protocol boundaries"
+    constraints:
+      - "Read-only; do not implement or edit the board."
+      - "Preserve every approved product decision unless direct repository evidence proves a conflict."
+      - "Prefer the largest safe useful vertical slices; do not split one behavior into type/helper/test microtasks."
+      - "Identify any overlap with user changes or other worktrees and fail closed on unsafe scope."
+      - "Prove the current root is /Users/neonwatty/Desktop/lineage/.worktrees/static-image-output-target-locks, the branch is codex/static-image-output-target-locks, and GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257 is an ancestor before examining implementation."
+    expected_output:
+      - "A requirement-to-owner map covering every approved design behavior."
+      - "A recorded worktree, branch, origin URL, merge-base, and clean-start identity receipt."
+      - "Dependency order and repository-backed architecture notes."
+      - "Non-empty exact allowed_files for T002 through T005."
+      - "Executable focused verify commands for T002 through T005."
+      - "Per-task stop conditions for ambiguity, scope escape, migration risk, and repeated verification failure."
+      - "A board amendment receipt that the PM can apply without interpretation."
+    receipt: null
+
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the durable output-target registry, geometry resolver, immutable job planning, and human-owned canvas-default backend contract."
+    inputs:
+      - "Approved design"
+      - "T001 validated requirement and ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "No canvas component or CLI presentation work in this slice."
+      - "Do not persist a target-aware job until the entire request resolves and validates."
+      - "Agents and CLI may read but must be unable to mutate canvas defaults."
+      - "Preserve legacy unlocked job behavior."
+    expected_output:
+      - "Seed registry covers the approved Instagram, Facebook Story, LinkedIn, Pinterest, X, TikTok carousel, and Google Business surfaces."
+      - "Surface labels map to immutable geometry/version snapshots; shared dimensions consolidate by default and explicit split remains distinct."
+      - "Custom sizes accept both sides in 16..16384 only when decoded area is at most 100000000 pixels."
+      - "Platform-only ambiguity returns a structured surface-choice error and never guesses."
+      - "Target-aware multi-source requests require explicit per-source mapping; each source is locked or explicitly unlocked, never mixed."
+      - "Planned jobs persist frozen target maps/output specs and variant counts per resolved group, defaulting to one."
+      - "Canvas defaults are canvas-scoped, explicit, human-writable, agent/CLI-readable, and snapshotted rather than live-linked."
+      - "Focused positive, negative, immutability, authorization, and legacy-compatibility tests pass."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T001 has not supplied exact allowed_files and focused verify commands."
+      - "A migration can alter or reinterpret existing unlocked jobs."
+      - "The slice requires UI or CLI files owned by a later task."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the agent/CLI discovery and job-planning bridge plus the approved target-aware protocol versions."
+    inputs:
+      - "T002 receipt and persisted contracts"
+      - "T001 validated CLI/protocol ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "No canvas component work in this slice."
+      - "Do not infer a surface from a platform name."
+      - "Do not expose any agent/CLI command that mutates canvas defaults."
+      - "Keep legacy unlocked receipt, handoff, manifest, and count paths compatible."
+    expected_output:
+      - "Agent and CLI can natively discover the versioned registry and exact dimensions in machine-readable JSON."
+      - "Agent and CLI can plan locked jobs from explicit surfaces, multiple platforms, per-source mappings, explicit splits, or custom dimensions."
+      - "Ambiguous platform requests fail with selectable surfaces; invalid multi-source or count combinations fail before persistence."
+      - "Target-aware jobs emit exactly generation-receipts-v3, lineage.generation_handoff.v3, lineage.generation_output_manifest.v2, lineage.generation_target_map.v1, lineage.output_spec.v1, and lineage.output_target_registry.v1."
+      - "Variant count defaults to one per resolved group; per-group overrides work; legacy count flags are rejected only for target-aware jobs."
+      - "CLI-created jobs expose enough durable state for the canvas to render the same resolved targets."
+      - "Focused CLI snapshots, protocol round trips, negative cases, and legacy regression tests pass."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T001 has not supplied exact allowed_files and focused verify commands."
+      - "T002 contracts or migrations are incomplete."
+      - "A proposed CLI flag or JSON field contradicts the approved versioned schemas."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement decoded-media validation, all-or-nothing output import, selection-packet dimensions, and immutable reroll propagation."
+    inputs:
+      - "T002 and T003 receipts"
+      - "T001 validated import and lineage ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "No resizing, cropping, mismatch override, provider call, or publishing behavior."
+      - "Preflight the complete batch before file indexing, lineage edges, or database writes."
+      - "Validate decoded media rather than extension or declared metadata."
+    expected_output:
+      - "PNG, JPEG, and WebP with exact locked pixels import successfully."
+      - "Wrong width, wrong height, corrupt content, renamed formats, SVG, GIF, and video fail closed with actionable errors."
+      - "A batch containing any invalid item produces zero new assets, files, lineage edges, manifest rows, or partial job state."
+      - "Locked selection packets contain dimensions; legacy packets retain their warning behavior."
+      - "Rerolls inherit and cannot mutate the parent lock; a requested geometry change creates a child variation."
+      - "Registry/default changes after job creation do not alter frozen output specs."
+      - "Focused decoder, tamper, atomicity, selection-packet, reroll, and legacy tests pass."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T001 has not supplied exact allowed_files and focused verify commands."
+      - "Atomic rollback cannot be proven for every persistent side effect."
+      - "The implementation would silently transform user media."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: medium
+    objective: "Implement the canvas planning, defaults, per-branch overrides, status, and reroll UX over the same durable contracts."
+    inputs:
+      - "T002 through T004 receipts"
+      - "T001 validated canvas ownership map"
+    constraints:
+      - "T001 must replace provisional scope and verify lists before activation."
+      - "Canvas must create the same durable planned job as CLI; no parallel UI-only state model."
+      - "Defaults change only through explicit human settings."
+      - "Do not show safe-zone guidance as machine-enforced validation."
+    expected_output:
+      - "Canvas settings let a human explicitly set, change, and clear canvas-scoped defaults while showing that agents cannot change them."
+      - "Branch planning supports per-source target overrides, explicit unlocked sources, multi-platform selection, shared-geometry grouping, explicit split, and per-group counts."
+      - "The pre-submit summary shows exact dimensions and resolved groups; ambiguous or invalid states cannot submit."
+      - "Agent/CLI-created jobs appear in canvas with identical target mapping, lock status, source association, and import status."
+      - "Reroll controls display inherited dimensions as read-only; choosing different geometry creates a child variation."
+      - "Locked and explicitly unlocked states are visually distinct without implying safe zones are enforced."
+      - "Focused component/integration tests and the target-lock browser workflow pass."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T001 has not supplied exact allowed_files and focused verify commands."
+      - "The UI needs a second source of truth outside persisted job contracts."
+      - "A default can be mutated by an agent/CLI path."
+      - "Verification fails twice for the same unexplained reason."
+    receipt: null
+
+  - id: T006
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Adversarially review the integrated implementation at the risk boundary and define any required remediation before live proof."
+    inputs:
+      - "T002 through T005 receipts"
+      - "Approved design"
+      - "Current diff and focused test results"
+    constraints:
+      - "Read-only; do not implement or mark the goal complete."
+      - "Audit the three primary failure modes: incorrect grouping, validation bypass/partial writes, and mutable frozen intent."
+      - "Create a concrete Worker follow-up when a required behavior is missing; do not hand-wave gaps into T007."
+    expected_output:
+      - "Requirement-by-requirement pass/fail matrix."
+      - "Top-three-failure-mode evidence assessment."
+      - "Compatibility and protocol-version assessment."
+      - "Proceed-to-live-proof decision or exact remediation Worker card."
+    receipt: null
+
+  - id: T007
+    type: pm
+    assignee: PM
+    status: queued
+    reasoning_hint: high
+    objective: "Run fresh repository gates and an identity-gated checkout walkthrough that exercises the complete two-way bridge and failure oracle."
+    inputs:
+      - "T006 proceed decision"
+      - "All implementation receipts"
+      - "AGENTS.md runtime channel gate"
+    constraints:
+      - "Use checkout-only npm run lineage:dev -- with a dedicated development profile; never use stable or preview data."
+      - "Before any operational command, prove runtime doctor, profile doctor, and db info agree on code, profile, database, environment, and service identity."
+      - "Use the fresh-profile bootstrap exception only when necessary, then repeat the full gate."
+      - "Stop on any identity mismatch."
+      - "Use only synthetic non-private media and do not commit generated databases or fixtures containing private data."
+    expected_output:
+      - "npm run check, npm run lint, npm run ci, npm run e2e, npm run public:readiness, and npm run package:smoke pass freshly, or every failure is proven pre-existing and dispositioned by a new task."
+      - "CLI/agent and canvas create equivalent locked jobs whose persisted mappings and exact dimensions match."
+      - "A valid exact-size static image imports and becomes visible in both surfaces."
+      - "Wrong dimensions, corrupt/renamed content, unsupported formats, and one-invalid-item batches are rejected with zero partial state."
+      - "Multi-source overrides, shared-dimension consolidation, explicit split, count semantics, defaults authorization, reroll inheritance, and child variation behavior are demonstrated."
+      - "Screenshots, command output, and/or traces are linked in the receipt without private data."
+    receipt: null
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the complete implementation satisfies the original user outcome and live oracle."
+    inputs:
+      - "All done task receipts"
+      - "T007 fresh verification evidence"
+      - "Current diff"
+      - "Approved design and goal charter"
+    constraints:
+      - "Read-only; do not implement."
+      - "Reject completion if required Worker work is queued, active, blocked without disposition, or weakly proven."
+      - "Reject completion if any approved behavior lacks direct evidence."
+      - "State the user-facing claim, top three realistic failure modes, and evidence for each."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Acceptance-criterion-to-evidence map"
+      - "Missing evidence and exact next task when incomplete"
+    receipt: null
+
+checks:
+  dirty_fingerprint: "execution branch codex/static-image-output-target-locks starts from GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257 plus approved spec commit; product tree clean"
+  last_verification:
+    result: unknown
+    task: null
+    commands: []
