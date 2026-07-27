@@ -4,6 +4,7 @@ import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssetReviewState, LineageNode, LineageSnapshot } from '../../shared/types';
+import { api } from '../api';
 import { LineageDetailModal } from './LineageDetailModal';
 
 vi.mock('../api', () => ({
@@ -153,6 +154,78 @@ describe('LineageDetailModal', () => {
     expect(events).toEqual(['review:approved:local-node']);
     expect(menu?.open).toBe(true);
   });
+
+  it('shows identical durable mapping proof and keeps inherited reroll dimensions read-only', async () => {
+    const events: string[] = [];
+    vi.mocked(api).mockReset();
+    vi.mocked(api)
+      .mockResolvedValueOnce({
+        fetchedAt: '2026-07-27T00:00:00.000Z',
+        jobs: [{
+          id: 'job-locked',
+          prompt: 'Story variant',
+          status: 'planned',
+          receipts: [],
+          inputs: [{ asset_id: node.asset_id }],
+          outputs: [],
+          target_plan: {
+            groups: [{
+              id: 'group-story',
+              parent_asset_id: node.asset_id,
+              width: 1080,
+              height: 1920,
+              unlocked: false,
+              variant_count: 1,
+              grouping_mode: 'consolidated',
+              delivery_surfaces: [{ platform: 'Instagram', surface: 'Story' }],
+              guidance: ['Keep key text centered'],
+            }],
+            slots: [],
+          },
+        }],
+        project: 'demo-project',
+      } as never)
+      .mockResolvedValueOnce({ job: { id: 'job-child', source_mode: 'lineage_selection' } } as never);
+    const rerollNode = {
+      ...node,
+      reroll_request: {
+        id: 'reroll-request',
+        project_id: 'demo-project',
+        root_asset_id: snapshot.root_asset_id,
+        node_asset_id: node.asset_id,
+        status: 'pending',
+        requested_by: 'human',
+        created_at: '2026-07-27T00:00:00.000Z',
+      },
+    } satisfies LineageNode;
+    renderModal({ node: rerollNode, onToast: (type, message) => events.push(`${type}:${message}`) });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+    expect(container!.textContent).toContain('Locked 1080 × 1920 px');
+    expect(container!.textContent).toContain('Instagram Story');
+    expect(container!.textContent).toContain('Guidance only');
+    const inherited = container!.querySelector<HTMLInputElement>('input[aria-label="Inherited reroll dimensions"]')!;
+    expect(inherited.readOnly).toBe(true);
+    expect(inherited.value).toBe('1080 × 1920 px');
+
+    setInput(container!.querySelector<HTMLTextAreaElement>('.lineage-reroll-target textarea')!, 'Try a taller child');
+    const numeric = container!.querySelectorAll<HTMLInputElement>('.lineage-reroll-target input[type="number"]');
+    setInput(numeric[0], '1200');
+    setInput(numeric[1], '1500');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(button('Plan re-roll or child variation')!.disabled).toBe(false);
+    await act(async () => {
+      button('Plan re-roll or child variation')!.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    const rerollCall = vi.mocked(api).mock.calls.find(call => call[0] === '/api/generation/targets/reroll')!;
+    expect(rerollCall[0]).toBe('/api/generation/targets/reroll');
+    expect(JSON.parse(String((rerollCall[1] as RequestInit).body))).toMatchObject({
+      requestedDimensions: { width: 1200, height: 1500 },
+      confirmWrite: true,
+    });
+    expect(events).toContain('ok:Planned child variation job-child');
+  });
 });
 
 function renderModal(props: Partial<Parameters<typeof LineageDetailModal>[0]> = {}) {
@@ -188,6 +261,15 @@ function button(label: string): HTMLButtonElement | undefined {
 
 function expandImageButton(): HTMLButtonElement | null {
   return container!.querySelector<HTMLButtonElement>('button[aria-label="Expand image"]');
+}
+
+function setInput(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  act(() => {
+    const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 }
 
 function actionProps(events: string[]): Pick<Parameters<typeof LineageDetailModal>[0], 'onClearAllNext' | 'onClearNext' | 'onOpenNode' | 'onRemoveFromLineage' | 'onReplaceNext' | 'onReview' | 'onSelectNext' | 'onToast'> {

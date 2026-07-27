@@ -49,6 +49,10 @@ export function LineageDetailModal({
   const [proofError, setProofError] = useState<string | null>(null);
   const [proofLoading, setProofLoading] = useState(false);
   const [imageExpanded, setImageExpanded] = useState(false);
+  const [rerollPrompt, setRerollPrompt] = useState('');
+  const [variationWidth, setVariationWidth] = useState('');
+  const [variationHeight, setVariationHeight] = useState('');
+  const [rerollBusy, setRerollBusy] = useState(false);
   const hasExpandablePreview = Boolean(node.preview_url && (node.media_type === 'image' || node.media_type === 'gif'));
 
   useEffect(() => {
@@ -86,6 +90,47 @@ export function LineageDetailModal({
 
   function openNode(assetId: string) {
     onOpenNode(assetId);
+  }
+
+  const targetJob = proof?.jobs.find(job => job.target_plan && (
+    job.inputs.some(input => input.asset_id === node.asset_id)
+    || job.outputs.some(output => output.imported_asset_id === node.asset_id)
+  ));
+  const targetOutput = targetJob?.outputs.find(output => output.imported_asset_id === node.asset_id);
+  const targetSlot = targetOutput && targetJob?.target_plan?.slots.find(slot => slot.output_index === targetOutput.output_index);
+  const inheritedGroup = targetJob?.target_plan?.groups.find(group =>
+    targetSlot ? group.id === targetSlot.group_id : group.parent_asset_id === node.asset_id,
+  );
+
+  async function planReroll() {
+    if (!rerollPrompt.trim() || !node.reroll_request || !inheritedGroup) return;
+    const changedGeometry = variationWidth !== '' || variationHeight !== '';
+    const requestedDimensions = changedGeometry
+      ? { width: Number(variationWidth), height: Number(variationHeight) }
+      : undefined;
+    if (requestedDimensions && (!Number.isInteger(requestedDimensions.width) || !Number.isInteger(requestedDimensions.height))) return;
+    setRerollBusy(true);
+    try {
+      const result = await api<{ job: { id: string; source_mode: string } }>('/api/generation/targets/reroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: snapshot.project,
+          rootAssetId: snapshot.root_asset_id,
+          targetAssetId: node.asset_id,
+          prompt: rerollPrompt,
+          requestedDimensions,
+          confirmWrite: true,
+        }),
+      });
+      onToast('ok', requestedDimensions && (requestedDimensions.width !== inheritedGroup.width || requestedDimensions.height !== inheritedGroup.height)
+        ? `Planned child variation ${result.job.id}`
+        : `Planned locked re-roll ${result.job.id}`);
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setRerollBusy(false);
+    }
   }
 
   return (
@@ -187,7 +232,20 @@ export function LineageDetailModal({
                       <div><dt>Receipts</dt><dd>{[...job.receipts].sort((a, b) => receiptOrder[a.receipt_type] - receiptOrder[b.receipt_type]).map(receipt => `${receipt.receipt_type}: ${receipt.status}`).join(' · ') || 'none'}</dd></div>
                       <div><dt>Parents</dt><dd>{job.inputs.map(input => input.asset_id).join(', ')}</dd></div>
                       <div><dt>Outputs</dt><dd>{job.outputs.length || 'none yet'}</dd></div>
+                      <div><dt>Import state</dt><dd>{job.status === 'imported' ? 'imported and verified' : job.status}</dd></div>
                     </dl>
+                    {job.target_plan && (
+                      <div className="lineage-proof-targets">
+                        {job.target_plan.groups.map(group => (
+                          <div className={group.unlocked ? 'unlocked' : 'locked'} key={group.id}>
+                            <strong>{group.unlocked ? 'Explicitly unlocked' : `Locked ${group.width} × ${group.height} px`}</strong>
+                            <span>source {group.parent_asset_id} · {group.variant_count} output{group.variant_count === 1 ? '' : 's'} · {group.grouping_mode}</span>
+                            <small>{group.delivery_surfaces.map(surface => `${surface.platform} ${surface.surface}`).join(', ') || 'No destination'}</small>
+                            {group.guidance.length > 0 && <small>Guidance only: {group.guidance.join(' · ')}</small>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {job.outputs.length > 0 && (
                       <div className="lineage-proof-output-list">
                         {job.outputs.map(output => (
@@ -204,6 +262,22 @@ export function LineageDetailModal({
                 ))}
               </div>
             </details>
+            {node.reroll_request?.status === 'pending' && inheritedGroup && !inheritedGroup.unlocked && (
+              <details className="lineage-detail-proof" open>
+                <summary><span>Plan locked re-roll</span><small>Dimensions inherit</small></summary>
+                <div className="lineage-detail-proof-content lineage-reroll-target">
+                  <label>Inherited dimensions<input aria-label="Inherited reroll dimensions" readOnly value={`${inheritedGroup.width} × ${inheritedGroup.height} px`} /></label>
+                  <label>Prompt<textarea onChange={event => setRerollPrompt(event.target.value)} value={rerollPrompt} /></label>
+                  <fieldset>
+                    <legend>Different geometry creates a child variation</legend>
+                    <label>Width<input min={16} onChange={event => setVariationWidth(event.target.value)} placeholder={String(inheritedGroup.width)} type="number" value={variationWidth} /></label>
+                    <label>Height<input min={16} onChange={event => setVariationHeight(event.target.value)} placeholder={String(inheritedGroup.height)} type="number" value={variationHeight} /></label>
+                  </fieldset>
+                  <p>Leave geometry blank to re-roll this node with its inherited lock. Entering another geometry preserves this node and plans a child variation.</p>
+                  <button disabled={rerollBusy || !rerollPrompt.trim() || ((variationWidth === '') !== (variationHeight === ''))} onClick={() => void planReroll()} type="button">Plan re-roll or child variation</button>
+                </div>
+              </details>
+            )}
           </aside>
         </div>
         {imageExpanded && hasExpandablePreview && (

@@ -4,6 +4,7 @@ import '@xyflow/react/dist/style.css';
 import './LineageView.css';
 import './LineageFocus.css';
 import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageEdgeSummaryMutationResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
+import type { GenerationJob, GenerationJobListResponse } from '../../shared/generationTypes';
 import { api, ApiError } from '../api';
 import { readHoverPreviewsEnabled } from '../lineagePreferences';
 import type { AssetFlowNode } from './LineageAssetNode';
@@ -17,6 +18,8 @@ import { LineageNewWorkspaceModal } from './LineageNewWorkspaceModal';
 import { LineageReplayControls } from './LineageReplayControls';
 import { LineageSidePanel } from './LineageSidePanel';
 import { LineageToolbar } from './LineageToolbar';
+import { LineageGenerationSheet } from './LineageGenerationSheet';
+import { OutputTargetPreferencesDialog } from './OutputTargetPreferencesDialog';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
 import { lineageReviewConflict } from './lineageReviewConflict';
@@ -49,6 +52,9 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const [flowEdges, setFlowEdges] = useEdgesState<Edge>([]);
   const [flowApi, setFlowApi] = useState<ReactFlowInstance<AssetFlowNode, Edge> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([]);
+  const [generationOpen, setGenerationOpen] = useState(false);
+  const [outputDefaultsOpen, setOutputDefaultsOpen] = useState(false);
   const [workspaceProgress, setWorkspaceProgress] = useState<LineageWorkspaceProgress>(null);
   const [menuCloseSignal, setMenuCloseSignal] = useState(0);
   const [replaySnapshot, setReplaySnapshot] = useState<LineageSnapshot | null>(null);
@@ -63,7 +69,8 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   );
   const replayLastStage = replayTimeline.stages.length - 1;
   const replayAtEnd = Boolean(replaySnapshot && replayStageIndex === replayLastStage && replayPhase === 'settled');
-  const graphSnapshot = replaySnapshot && !replayAtEnd ? replaySnapshot : snapshot;
+  const decoratedSnapshot = useMemo(() => snapshot ? decorateSnapshotWithGenerationTargets(snapshot, generationJobs) : null, [generationJobs, snapshot]);
+  const graphSnapshot = replaySnapshot && !replayAtEnd ? replaySnapshot : decoratedSnapshot;
   const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
   const editingEdge = snapshot?.edges.find(edge => edge.id === edgeEditor?.edgeId);
   const latestNodes = snapshot?.nodes.filter(node => snapshot.latest.includes(node.asset_id)) || [];
@@ -90,6 +97,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
     setSnapshot(null);
     setActiveNodeId(null);
     setBrief(null);
+    setGenerationJobs([]);
     setReplaySnapshot(null);
     setReplayPlaying(false);
     setReplayPhase('settled');
@@ -127,6 +135,11 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       ]);
       if (!options.rootAssetId && workspaceRootRef.current !== requestedRoot) return false;
       setSnapshot(next);
+      void api<GenerationJobListResponse>(`/api/generation/jobs?${new URLSearchParams({ project, rootAssetId: requestedRoot, limit: '50' }).toString()}`)
+        .then(result => {
+          if (workspaceRootRef.current === requestedRoot) setGenerationJobs(result.jobs);
+        })
+        .catch(() => undefined);
       setClaims(nextClaims.claims);
       if (!options.quiet) setBrief(null);
       setActiveNodeId(current => activeNodeIdAfterRefresh(current, next.nodes, next.active_asset_id, Boolean(options.quiet)));
@@ -611,6 +624,8 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         onIndexLocal={() => void indexAndRefresh()}
         onGraphDirection={direction => void orientGraph(direction)}
         onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
+        onOpenGeneration={() => setGenerationOpen(true)}
+        onOpenOutputDefaults={() => setOutputDefaultsOpen(true)}
         onRefreshLineage={() => void refresh()}
         onRefreshWorkspaces={() => void refreshWorkspaces()}
         onReplayGrowth={startReplay}
@@ -743,6 +758,16 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         />
       )}
       {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
+      {generationOpen && snapshot && (
+        <LineageGenerationSheet
+          onClose={() => setGenerationOpen(false)}
+          onPlanned={job => { setGenerationJobs(current => [job, ...current.filter(item => item.id !== job.id)]); onToast('ok', `Planned ${job.expected_output_count} exact outputs`); }}
+          project={project}
+          rootAssetId={snapshot.root_asset_id}
+          sources={selectedNodes}
+        />
+      )}
+      {outputDefaultsOpen && snapshot && <OutputTargetPreferencesDialog onClose={() => setOutputDefaultsOpen(false)} project={project} rootAssetId={snapshot.root_asset_id} />}
       {editingEdge && edgeEditor && snapshot && (
         <LineageEdgeSummaryDialog
           childTitle={snapshot.nodes.find(node => node.asset_id === editingEdge.child_asset_id)?.title || editingEdge.child_asset_id}
@@ -756,6 +781,35 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
     </section>
   );
+}
+
+function decorateSnapshotWithGenerationTargets(snapshot: LineageSnapshot, jobs: GenerationJob[]): LineageSnapshot {
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.map(node => {
+      const job = jobs.find(item =>
+        item.inputs.some(input => input.asset_id === node.asset_id)
+        || item.outputs.some(output => output.imported_asset_id === node.asset_id),
+      );
+      const plan = job?.target_plan;
+      if (!job || !plan) return node;
+      const importedOutput = job.outputs.find(output => output.imported_asset_id === node.asset_id);
+      const slot = importedOutput ? plan.slots.find(item => item.output_index === importedOutput.output_index) : undefined;
+      const group = slot
+        ? plan.groups.find(item => item.id === slot.group_id)
+        : plan.groups.find(item => item.parent_asset_id === node.asset_id);
+      if (!group) return node;
+      return {
+        ...node,
+        generation_target: {
+          destinations: group.delivery_surfaces.map(surface => `${surface.platform} ${surface.surface}`),
+          ...(group.unlocked ? {} : { dimensions: `${group.width}×${group.height}` }),
+          imported: Boolean(importedOutput),
+          locked: !group.unlocked,
+        },
+      };
+    }),
+  };
 }
 
 function lineageWorkspaceClaims(claims: AgentClaimSummary[], project: string, rootAssetId: string): AgentClaimSummary[] {

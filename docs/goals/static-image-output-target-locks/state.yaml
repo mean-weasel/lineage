@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T005
+active_task: T006
 
 tasks:
   - id: T001
@@ -436,7 +436,7 @@ tasks:
   - id: T005
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement the canvas planning, defaults, per-branch overrides, status, and reroll UX over the same durable contracts."
     inputs:
@@ -491,12 +491,48 @@ tasks:
       - "A reroll can edit inherited dimensions instead of routing geometry change to a child variation."
       - "A new tracked or untracked user change overlaps an allowed file."
       - "Verification fails twice for the same unexplained reason."
-    receipt: null
-
+    receipt:
+      result: done
+      changed_files:
+        - src/server/generationTargetRoutes.ts
+        - src/server/generationTargetRoutes.test.ts
+        - src/server.ts
+        - src/web/components/OutputTargetPreferencesDialog.tsx
+        - src/web/components/OutputTargetPreferencesDialog.css
+        - src/web/components/OutputTargetPreferencesDialog.test.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageGenerationSheet.css
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - src/web/components/LineageView.tsx
+        - src/web/components/LineageView.css
+        - src/web/components/LineageToolbar.tsx
+        - src/web/components/LineageToolbar.test.tsx
+        - src/web/components/LineageAssetNode.tsx
+        - src/web/components/LineageAssetNode.test.tsx
+        - src/web/components/LineageDetailModal.tsx
+        - src/web/components/LineageDetailModal.css
+        - src/web/components/LineageDetailModal.test.tsx
+        - e2e/output-target-locks.e2e.ts
+      commands:
+        - cmd: "npm test -- src/server/generationTargetRoutes.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/LineageToolbar.test.tsx src/web/components/LineageAssetNode.test.tsx src/web/components/LineageDetailModal.test.tsx src/web/App.test.ts"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run lint"
+          status: pass
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Canvas now creates the same durable target-aware jobs as CLI, with human-only scoped defaults, per-source locked/unlocked mappings, geometry grouping/splits/counts, canonical preview-gated submission, receipt-derived badges and proof, and immutable reroll dimensions with child variations. Independent PM reruns confirmed 7 focused files and 36 tests, TypeScript, lint, exact scope, and the persisted-job browser workflow."
+      deviations:
+        - "The browser test required two locator/assertion corrections for labeled checkboxes and canonical destination ordering; product behavior was unchanged."
+      remaining_blockers: []
+      verification_attempts: 3
   - id: T006
     type: judge
     assignee: Judge
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Adversarially review the integrated implementation at the risk boundary and define any required remediation before live proof."
     inputs:

@@ -198,6 +198,22 @@ describe('AssetNode', () => {
     expect(badges[1].className).toContain('locked');
     expect(container!.textContent).not.toContain('re-roll');
   });
+
+  it('renders locked and explicit unlocked output targets as distinct receipt-derived badges', () => {
+    renderNode({ generation_target: { destinations: ['Instagram Story'], dimensions: '1080×1920', imported: true, locked: true } });
+    const locked = container!.querySelector<HTMLElement>('.lineage-badges .output-target.locked')!;
+    expect(locked.textContent).toBe('locked 1080×1920');
+    expect(locked.title).toContain('Instagram Story');
+    expect(locked.title).toContain('imported');
+
+    act(() => root!.unmount());
+    root = null;
+    container!.remove();
+    renderNode({ generation_target: { destinations: [], imported: false, locked: false } });
+    const unlocked = container!.querySelector<HTMLElement>('.lineage-badges .output-target.unlocked')!;
+    expect(unlocked.textContent).toBe('explicitly unlocked');
+    expect(unlocked.title).toContain('No pixel lock');
+  });
 });
 
 describe('hoverPreviewPosition', () => {

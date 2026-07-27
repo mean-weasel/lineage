@@ -41,6 +41,7 @@ import { contentBatchRouter } from './server/contentBatchRoutes';
 import { isContentBatchError } from './server/contentBatches';
 import { listImageGenerationJobs } from './server/generationReceiptJobs';
 import { isGenerationReceiptError } from './server/generationReceipts';
+import { registerGenerationTargetRoutes } from './server/generationTargetRoutes';
 import { registerLineageTaskRoutes } from './server/lineageTaskRoutes';
 import { registerLineageWorkspaceRoutes } from './server/lineageWorkspaceRoutes';
 import { assertLineageCodeOrigin, getLineageRuntimeInfo, normalizeRuntimeChannel } from './server/runtimeInfo';
@@ -49,6 +50,7 @@ import { isManagedWriterRoutingError, registerManagedWriterRoute } from './serve
 import { acquireProfileWriterLease } from './server/profileWriterLease';
 import { executeDelegatedLineageMutation, lineageCliCanDelegateMutation } from './cli/lineageCli';
 import type { ResolvedLineageProfile } from './shared/lineageProfileTypes';
+import { OutputTargetResolutionError } from './shared/outputTargetTypes';
 import type { AssetContentType, AssetReviewState, PlacementFields, PlacementStatus, UploadFields } from './shared/types';
 const runtimeChannel = normalizeRuntimeChannel(process.env.LINEAGE_CHANNEL || process.env.LINEAGE_RELEASE_CHANNEL);
 const startupCode = assertLineageCodeOrigin(runtimeChannel);
@@ -155,6 +157,7 @@ registerAgentClaimRoutes(app, projectFrom, asyncRoute);
 app.use('/api/content', contentBatchRouter(projectFrom));
 app.use('/api/selections', assetSelectionRouter(projectFrom));
 app.get('/api/generation/jobs', asyncRoute((req, res) => { res.json(listImageGenerationJobs(projectFrom(req), { assetId: typeof req.query.assetId === 'string' ? req.query.assetId : undefined, rootAssetId: typeof req.query.rootAssetId === 'string' ? req.query.rootAssetId : undefined, limit: Number(req.query.limit || 12) })); }));
+registerGenerationTargetRoutes(app, projectFrom, asyncRoute);
 app.get(
   '/api/review/queue',
   asyncRoute((req, res) => {
@@ -527,6 +530,10 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
     return;
   }
   if (isGenerationReceiptError(error)) { res.status(error.status).json({ error: error.message }); return; }
+  if (error instanceof OutputTargetResolutionError) {
+    res.status(400).json({ error: error.code, message: error.message, choices: error.choices });
+    return;
+  }
   if (isManagedWriterRoutingError(error)) { res.status(error.status).json({ error: error.message }); return; }
   if (isAgentClaimError(error)) {
     res.status(error.status).json({ error: error.code, message: error.message, conflicts: error.conflicts });

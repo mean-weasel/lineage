@@ -51,6 +51,23 @@ describe('LineageToolbar', () => {
     expect(container!.querySelector('.lineage-overflow summary')?.textContent).toBe('Actions');
   });
 
+  it('opens target planning from the selected branch and keeps defaults in human settings', () => {
+    const onOpenGeneration = vi.fn();
+    const onOpenOutputDefaults = vi.fn();
+    renderToolbar({
+      onOpenGeneration,
+      onOpenOutputDefaults,
+      snapshot: { ...snapshot, selected: ['child-1'] },
+    });
+
+    const plan = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Plan outputs')!;
+    act(() => plan.click());
+    expect(onOpenGeneration).toHaveBeenCalledOnce();
+    const defaults = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Output target defaults')!;
+    act(() => defaults.click());
+    expect(onOpenOutputDefaults).toHaveBeenCalledOnce();
+  });
+
   it('starts replay from its visible control and disables duplicate entry while active', () => {
     const onReplayGrowth = vi.fn();
     renderToolbar({ onReplayGrowth });
