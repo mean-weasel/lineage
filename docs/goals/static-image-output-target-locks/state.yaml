@@ -8,7 +8,7 @@ goal:
   slug: "static-image-output-target-locks"
   kind: existing_plan
   tranche: "Validate the approved design, implement backend, CLI/protocol, import-integrity, and canvas vertical slices, then prove the complete bridge."
-  status: active
+  status: done
   oracle:
     signal: "A live checkout walkthrough and receipt-backed tests prove that agent, CLI, and canvas create the same locked static-image jobs and atomically reject every dimension mismatch."
     cadence: "after each Worker package and at final audit"
@@ -75,7 +75,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-locks-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-locks"
 
-active_task: T999
+active_task: null
 
 tasks:
   - id: T001
@@ -899,7 +899,7 @@ tasks:
   - id: T999
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Audit whether the complete implementation satisfies the original user outcome and live oracle."
     inputs:
@@ -917,13 +917,35 @@ tasks:
       - "full_outcome_complete: true | false"
       - "Acceptance-criterion-to-evidence map"
       - "Missing evidence and exact next task when incomplete"
-    receipt: null
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      rationale: "Every approved behavior maps to direct code, focused-test, full-gate, and/or identity-gated live evidence. Independently created canvas and CLI jobs persisted the same canonical target digest and exact geometry; decoded-byte import accepted the exact PNG and rejected the wrong-size PNG with zero outputs. Grouping/source isolation, byte/type/tamper/atomicity defenses, immutable defaults/specifications/rerolls, legacy compatibility, and V1 scope boundaries are all explicitly proven. No required Worker work or evidence remains."
+      commands:
+        - cmd: "Goal/spec-to-receipt and implementation audit"
+          status: pass
+        - cmd: "GoalBuddy task-state and completion-invariant audit"
+          status: pass
+        - cmd: "git merge-base --is-ancestor eef358ba16f60619f6ba8104d3bed14ab8d58257 HEAD"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      evidence:
+        - notes/T999-final-audit.md
+        - notes/T007-live-proof.md
+        - notes/T006-integrated-review.md
+        - "T002-T005 and T008-T011 receipts"
+        - "Final uninterrupted npm run ci plus independent e2e, public-readiness, package-smoke, and focused test runs"
+        - "Identity-gated live canvas/CLI/import walkthrough"
+      missing_evidence: []
+      next_task: null
 
 checks:
   dirty_fingerprint: "execution branch codex/static-image-output-target-locks starts from GitHub origin/main eef358ba16f60619f6ba8104d3bed14ab8d58257 plus approved spec commit; product tree clean"
   last_verification:
     result: pass
-    task: T007
+    task: T999
     commands:
       - "npm run check"
       - "npm run lint"
@@ -933,3 +955,4 @@ checks:
       - "npm run package:smoke"
       - "Focused 50-test adversarial suite"
       - "Identity-gated canvas/CLI/import walkthrough"
+      - "Final acceptance-to-evidence and GoalBuddy completion audit"
