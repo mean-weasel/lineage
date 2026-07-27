@@ -155,6 +155,75 @@ describe('LineageDetailModal', () => {
     expect(menu?.open).toBe(true);
   });
 
+  it('opens the future-child target editor without conflating it with current asset details', () => {
+    const onEditOutputTargets = vi.fn();
+    renderModal({ onEditOutputTargets });
+
+    act(() => button('Inspect or edit next output targets')?.click());
+
+    expect(onEditOutputTargets).toHaveBeenCalledTimes(1);
+    expect(container!.textContent).toContain('Generation proof');
+  });
+
+  it('shows immutable source-resolution proof and cancels a planned job explicitly', async () => {
+    const events: string[] = [];
+    const plannedJob = {
+      id: 'job-frozen',
+      prompt: 'Static child',
+      status: 'planned',
+      receipts: [],
+      inputs: [{ asset_id: node.asset_id }],
+      outputs: [],
+      source_target_resolutions: [{
+        parent_asset_id: node.asset_id,
+        origin: 'node_override',
+        setting_revision: 7,
+        resolution_digest_sha256: 'frozen-resolution-digest',
+        targets: [{ kind: 'custom', width: 1080, height: 1350 }],
+        resolved_targets: [],
+      }],
+      target_plan: {
+        groups: [{
+          id: 'group-feed',
+          parent_asset_id: node.asset_id,
+          width: 1080,
+          height: 1350,
+          unlocked: false,
+          variant_count: 1,
+          grouping_mode: 'consolidated',
+          delivery_surfaces: [],
+          guidance: [],
+        }],
+        slots: [],
+      },
+    };
+    vi.mocked(api).mockReset();
+    vi.mocked(api)
+      .mockResolvedValueOnce({ fetchedAt: '2026-07-27T00:00:00.000Z', jobs: [plannedJob], project: 'demo-project' } as never)
+      .mockResolvedValueOnce({ job: { ...plannedJob, status: 'cancelled' } } as never);
+    renderModal({ onToast: (type, message) => events.push(`${type}:${message}`) });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+    expect(container!.textContent).toContain('Frozen source target resolution');
+    expect(container!.textContent).toContain('node_override');
+    expect(container!.textContent).toContain('frozen-resolution-digest');
+    expect(container!.textContent).toContain('Planned output geometry · Locked 1080 × 1350 px');
+    await act(async () => {
+      button('Cancel planned job')!.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    const cancelCall = vi.mocked(api).mock.calls.find(call => call[0] === '/api/generation/targets/cancel')!;
+    expect(JSON.parse(String((cancelCall[1] as RequestInit).body))).toMatchObject({
+      confirmWrite: true,
+      jobId: 'job-frozen',
+      project: 'demo-project',
+    });
+    expect(container!.textContent).toContain('cancelled');
+    expect(button('Cancel planned job')).toBeUndefined();
+    expect(events).toContain('ok:Cancelled planned job job-frozen');
+  });
+
   it('shows identical durable mapping proof and keeps inherited reroll dimensions read-only', async () => {
     const events: string[] = [];
     vi.mocked(api).mockReset();

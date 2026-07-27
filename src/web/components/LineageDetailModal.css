@@ -52,6 +52,32 @@
   font-weight: 800;
 }
 
+.lineage-next-output-action,
+.lineage-cancel-generation {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  border: 1px solid #8aa7bd;
+  border-radius: 7px;
+  background: #edf7fb;
+  color: #174c66;
+  font-weight: 800;
+}
+
+.lineage-proof-source-resolutions {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px;
+}
+
+.lineage-proof-source-resolutions code {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
 .lineage-detail-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);

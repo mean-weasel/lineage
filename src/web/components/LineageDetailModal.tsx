@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { AssetReviewState, LineageNode, LineageSnapshot } from '../../shared/types';
-import type { GenerationJobListResponse } from '../../shared/generationTypes';
+import type { GenerationCancelResponse, GenerationJobListResponse } from '../../shared/generationTypes';
 import { storageStateFor } from '../assetUi';
 import { api } from '../api';
 import { LineageNodeActionFooter } from './LineageNodeActionFooter';
@@ -15,6 +15,7 @@ export function LineageDetailModal({
   onClearAllNext,
   onClearNext,
   onClose,
+  onEditOutputTargets,
   onOpenNode,
   onRemoveFromLineage,
   onReplaceNext,
@@ -30,6 +31,7 @@ export function LineageDetailModal({
   onClearAllNext: () => void;
   onClearNext: () => void;
   onClose: () => void;
+  onEditOutputTargets?: () => void;
   onOpenNode: (assetId: string) => void;
   onRemoveFromLineage: (node: LineageNode) => void;
   onReplaceNext: (node: LineageNode) => void;
@@ -53,6 +55,7 @@ export function LineageDetailModal({
   const [variationWidth, setVariationWidth] = useState('');
   const [variationHeight, setVariationHeight] = useState('');
   const [rerollBusy, setRerollBusy] = useState(false);
+  const [cancelBusyId, setCancelBusyId] = useState('');
   const hasExpandablePreview = Boolean(node.preview_url && (node.media_type === 'image' || node.media_type === 'gif'));
 
   useEffect(() => {
@@ -183,6 +186,11 @@ export function LineageDetailModal({
                 {node.selection_note && <div><dt>Rationale</dt><dd>{node.selection_note}</dd></div>}
                 {node.review_notes && <div><dt>Notes</dt><dd>{node.review_notes}</dd></div>}
               </dl>
+              {onEditOutputTargets && (
+                <button className="lineage-next-output-action" onClick={onEditOutputTargets} type="button">
+                  Inspect or edit next output targets
+                </button>
+              )}
             </details>
             <details className="lineage-detail-disclosure">
               <summary>
@@ -234,16 +242,35 @@ export function LineageDetailModal({
                       <div><dt>Outputs</dt><dd>{job.outputs.length || 'none yet'}</dd></div>
                       <div><dt>Import state</dt><dd>{job.status === 'imported' ? 'imported and verified' : job.status}</dd></div>
                     </dl>
+                    {job.source_target_resolutions && job.source_target_resolutions.length > 0 && (
+                      <div className="lineage-proof-source-resolutions">
+                        <strong>Frozen source target resolution</strong>
+                        {job.source_target_resolutions.map(source => (
+                          <dl key={source.parent_asset_id}>
+                            <div><dt>Source</dt><dd>{source.parent_asset_id}</dd></div>
+                            <div><dt>Origin</dt><dd>{source.origin}</dd></div>
+                            <div><dt>Revision</dt><dd>{source.setting_revision ?? 'dynamic default'}</dd></div>
+                            <div><dt>Resolution digest</dt><dd><code>{source.resolution_digest_sha256}</code></dd></div>
+                          </dl>
+                        ))}
+                      </div>
+                    )}
                     {job.target_plan && (
                       <div className="lineage-proof-targets">
-                        {job.target_plan.groups.map(group => (
+                        {job.target_plan.groups.map(group => {
+                          const isCurrentProducedGeometry = job.outputs.some(output => {
+                            if (output.imported_asset_id !== node.asset_id) return false;
+                            return job.target_plan?.slots.some(slot => slot.output_index === output.output_index && slot.group_id === group.id);
+                          });
+                          return (
                           <div className={group.unlocked ? 'unlocked' : 'locked'} key={group.id}>
-                            <strong>{group.unlocked ? 'Explicitly unlocked' : `Locked ${group.width} × ${group.height} px`}</strong>
+                            <strong>{isCurrentProducedGeometry ? 'Current produced geometry · ' : 'Planned output geometry · '}{group.unlocked ? 'Explicitly unlocked' : `Locked ${group.width} × ${group.height} px`}</strong>
                             <span>source {group.parent_asset_id} · {group.variant_count} output{group.variant_count === 1 ? '' : 's'} · {group.grouping_mode}</span>
                             <small>{group.delivery_surfaces.map(surface => `${surface.platform} ${surface.surface}`).join(', ') || 'No destination'}</small>
                             {group.guidance.length > 0 && <small>Guidance only: {group.guidance.join(' · ')}</small>}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                     {job.outputs.length > 0 && (
@@ -257,6 +284,16 @@ export function LineageDetailModal({
                           </div>
                         ))}
                       </div>
+                    )}
+                    {job.status === 'planned' && (
+                      <button
+                        className="lineage-cancel-generation"
+                        disabled={cancelBusyId === job.id}
+                        onClick={() => void cancelPlannedJob(job.id)}
+                        type="button"
+                      >
+                        Cancel planned job
+                      </button>
                     )}
                   </article>
                 ))}
@@ -306,4 +343,28 @@ export function LineageDetailModal({
       </section>
     </div>
   );
+
+  async function cancelPlannedJob(jobId: string) {
+    setCancelBusyId(jobId);
+    try {
+      const result = await api<GenerationCancelResponse>('/api/generation/targets/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: snapshot.project,
+          jobId,
+          confirmWrite: true,
+        }),
+      });
+      setProof(current => current ? {
+        ...current,
+        jobs: current.jobs.map(job => job.id === result.job.id ? result.job : job),
+      } : current);
+      onToast('ok', `Cancelled planned job ${jobId}`);
+    } catch (error) {
+      onToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setCancelBusyId('');
+    }
+  }
 }

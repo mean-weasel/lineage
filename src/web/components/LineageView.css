@@ -1274,3 +1274,6 @@
   }
 }
 .lineage-badges .output-target.locked{background:#dbeafe;color:#17457d;border:1px solid #6ea0dc}.lineage-badges .output-target.unlocked{background:#fff7df;color:#74510d;border:1px dashed #b58a34}
+.lineage-badges .next-output-target{background:#e9f7ef;color:#17633a;border:1px solid #76b990}
+.lineage-badges .next-output-target.origin-node_override{background:#e8e5ff;color:#49348a;border-color:#9f91d8}
+.lineage-badges .next-output-target.origin-unresolved{background:#fff0ed;color:#9f2d20;border:1px dashed #d37b70}

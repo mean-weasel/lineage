@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T004
+active_task: T005
 
 tasks:
   - id: T001
@@ -312,7 +312,7 @@ tasks:
   - id: T004
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Implement the canvas node next-output experience on the shared backend contract, including inherited/explicit/unresolved states, sticky multi-target editing, clear-to-default, immutable older-job visibility, and exact branch planning."
     inputs:
@@ -358,11 +358,45 @@ tasks:
       - "The implementation would mutate canvas defaults through an agent-accessible route."
       - "Required UI ownership extends outside allowed_files without T001 or PM revision."
       - "Browser verification fails twice for reasons not isolated to this Worker package."
-    receipt: null
+    receipt:
+      result: done
+      changed_files:
+        - e2e/output-target-locks.e2e.ts
+        - src/web/components/LineageAssetNode.test.tsx
+        - src/web/components/LineageAssetNode.tsx
+        - src/web/components/LineageContextMenu.tsx
+        - src/web/components/LineageDetailModal.css
+        - src/web/components/LineageDetailModal.test.tsx
+        - src/web/components/LineageDetailModal.tsx
+        - src/web/components/LineageGenerationSheet.css
+        - src/web/components/LineageGenerationSheet.test.tsx
+        - src/web/components/LineageGenerationSheet.tsx
+        - src/web/components/LineageView.css
+        - src/web/components/LineageView.test.ts
+        - src/web/components/LineageView.tsx
+        - src/web/components/NodeNextOutputTargets.css
+        - src/web/components/NodeNextOutputTargets.test.tsx
+        - src/web/components/NodeNextOutputTargets.tsx
+      commands:
+        - cmd: "npm test -- src/web/components/LineageAssetNode.test.tsx src/web/components/LineageDetailModal.test.tsx src/web/components/LineageGenerationSheet.test.tsx src/web/components/LineageView.test.ts src/web/components/OutputTargetPreferencesDialog.test.tsx src/web/components/NodeNextOutputTargets.test.tsx"
+          status: pass
+        - cmd: "npm run check"
+          status: pass
+        - cmd: "npm run e2e -- e2e/output-target-locks.e2e.ts"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added compact per-node future-target badges; accessible context/detail editors for inherited, sticky, derived, and unresolved states; exact-revision replace/clear; deferred embedded source editors; multi-source planning exclusively from the persisted aggregate resolution digest; job-time-only variation counts; frozen source-resolution proof; and explicit planned-job cancellation. Current asset geometry remains separately labeled. Component proof passed 34 tests and the real-browser scenario proved independent default/override targets, exact immutable planning, canvas badges, persisted source snapshots, and cancellation."
+      deviations:
+        - "The dedicated GoalBuddy Worker timed out without edits; PM completed the bounded fallback package."
+        - "The focused component command also includes NodeNextOutputTargets.test.tsx to prove exact-revision replace and clear behavior."
+      remaining_blockers: []
+      verification_attempts: 3
+      stopped_because: null
   - id: T005
     type: judge
     assignee: Judge
-    status: queued
+    status: active
     reasoning_hint: high
     objective: "Review the integrated backend, CLI/agent, and canvas implementation against every approved decision before live proof."
     inputs:

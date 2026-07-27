@@ -214,6 +214,36 @@ describe('AssetNode', () => {
     expect(unlocked.textContent).toBe('explicitly unlocked');
     expect(unlocked.title).toContain('No pixel lock');
   });
+
+  it('keeps future-child target intent distinct from the current asset receipt badge', () => {
+    renderNode({
+      generation_target: { destinations: ['Instagram Story'], dimensions: '1080×1920', imported: true, locked: true },
+      next_output_target: {
+        dimensions: ['1080×1350'],
+        label: 'Sticky next 1080×1350',
+        origin: 'node_override',
+      },
+    });
+
+    expect(container!.querySelector('.output-target')?.textContent).toBe('locked 1080×1920');
+    const next = container!.querySelector<HTMLElement>('.next-output-target')!;
+    expect(next.textContent).toBe('next 1080×1350');
+    expect(next.title).toContain('Future children only');
+    expect(next.className).toContain('origin-node_override');
+  });
+
+  it('makes unresolved future geometry visible without changing the current node geometry', () => {
+    renderNode({
+      next_output_target: {
+        dimensions: [],
+        label: 'Next targets unresolved',
+        origin: 'unresolved',
+      },
+    });
+
+    expect(container!.querySelector('.next-output-target')?.textContent).toBe('next unresolved');
+    expect(container!.querySelector('.output-target')).toBeNull();
+  });
 });
 
 describe('hoverPreviewPosition', () => {

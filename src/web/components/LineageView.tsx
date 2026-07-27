@@ -19,6 +19,7 @@ import { LineageReplayControls } from './LineageReplayControls';
 import { LineageSidePanel } from './LineageSidePanel';
 import { LineageToolbar } from './LineageToolbar';
 import { LineageGenerationSheet } from './LineageGenerationSheet';
+import { loadNodeNextOutputTargets, NodeNextOutputTargetsEditor, nodeTargetStateLabel, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargets';
 import { OutputTargetPreferencesDialog } from './OutputTargetPreferencesDialog';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
@@ -35,6 +36,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [childAssetId, setChildAssetId] = useState('');
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
+  const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyAttempts, setHistoryAttempts] = useState<LineageAttempt[]>([]);
   const [hoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
@@ -53,6 +55,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const [flowApi, setFlowApi] = useState<ReactFlowInstance<AssetFlowNode, Edge> | null>(null);
   const [loading, setLoading] = useState(false);
   const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([]);
+  const [nodeTargetStates, setNodeTargetStates] = useState<Record<string, NodeNextOutputTargetsResponse>>({});
   const [generationOpen, setGenerationOpen] = useState(false);
   const [outputDefaultsOpen, setOutputDefaultsOpen] = useState(false);
   const [workspaceProgress, setWorkspaceProgress] = useState<LineageWorkspaceProgress>(null);
@@ -69,7 +72,10 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   );
   const replayLastStage = replayTimeline.stages.length - 1;
   const replayAtEnd = Boolean(replaySnapshot && replayStageIndex === replayLastStage && replayPhase === 'settled');
-  const decoratedSnapshot = useMemo(() => snapshot ? decorateSnapshotWithGenerationTargets(snapshot, generationJobs) : null, [generationJobs, snapshot]);
+  const decoratedSnapshot = useMemo(
+    () => snapshot ? decorateSnapshotWithGenerationTargets(snapshot, generationJobs, nodeTargetStates) : null,
+    [generationJobs, nodeTargetStates, snapshot],
+  );
   const graphSnapshot = replaySnapshot && !replayAtEnd ? replaySnapshot : decoratedSnapshot;
   const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
   const editingEdge = snapshot?.edges.find(edge => edge.id === edgeEditor?.edgeId);
@@ -81,7 +87,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const selectedNode = selectedNodes[0];
   const nextVariationLimit = 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;
-  const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId);
+  const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId), targetNode = snapshot?.nodes.find(node => node.asset_id === targetNodeId) || null;
   const canvasHoverPreviewsEnabled = hoverPreviewsEnabled && !detailNode && !historyNode && !editingEdge && (!replaySnapshot || replayAtEnd);
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
   const collapseTimer = useRef<number | null>(null);
@@ -101,11 +107,31 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
     setActiveNodeId(null);
     setBrief(null);
     setGenerationJobs([]);
+    setNodeTargetStates({});
+    setTargetNodeId(null);
     setReplaySnapshot(null);
     setReplayPlaying(false);
     setReplayPhase('settled');
     setReplayStageIndex(-1);
   }, []);
+  const refreshNodeTargets = useCallback(async (targetSnapshot: LineageSnapshot | null = snapshot) => {
+    if (!targetSnapshot) return;
+    const results = await Promise.allSettled(targetSnapshot.nodes.map(node =>
+      loadNodeNextOutputTargets(project, targetSnapshot.root_asset_id, node.asset_id)));
+    const next: Record<string, NodeNextOutputTargetsResponse> = {};
+    results.forEach(result => {
+      if (result.status === 'fulfilled') next[result.value.node_asset_id] = result.value;
+    });
+    setNodeTargetStates(next);
+  }, [project, snapshot]);
+  const snapshotTargetKey = useMemo(
+    () => snapshot ? `${snapshot.root_asset_id}\0${snapshot.nodes.map(node => node.asset_id).sort().join('\0')}` : '',
+    [snapshot],
+  );
+  useEffect(() => {
+    if (!snapshot) return;
+    void refreshNodeTargets(snapshot);
+  }, [refreshNodeTargets, snapshotTargetKey]);
   const {
     activateWorkspace,
     activeWorkspace,
@@ -735,7 +761,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             snapshot={snapshot}
           />
         )}
-        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onMarkReroll={() => void markReroll(menuNode)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} onToggleSocial={() => void toggleSocial(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
+        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onEditOutputTargets={() => setTargetNodeId(menuNode.asset_id)} onMarkReroll={() => void markReroll(menuNode)} onOpenDetail={() => setDetailNodeId(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => replaceNextVariation(menuNode)} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => selectNextBase(menuNode)} onToggleSocial={() => void toggleSocial(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
       </div>
       {historyNode && snapshot && (
         <LineageAttemptHistoryModal
@@ -760,7 +786,17 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
           project={project}
         />
       )}
-      {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
+      {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onEditOutputTargets={() => setTargetNodeId(detailNode.asset_id)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={replaceNextVariation} onReview={markReview} onSelectNext={selectNextBase} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
+      {targetNode && snapshot && (
+        <NodeNextOutputTargetsEditor
+          nodeAssetId={targetNode.asset_id}
+          nodeTitle={targetNode.title}
+          onClose={() => setTargetNodeId(null)}
+          onSaved={() => { void refreshNodeTargets(snapshot); }}
+          project={project}
+          rootAssetId={snapshot.root_asset_id}
+        />
+      )}
       {generationOpen && snapshot && (
         <LineageGenerationSheet
           onClose={() => setGenerationOpen(false)}
@@ -770,7 +806,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
           sources={selectedNodes}
         />
       )}
-      {outputDefaultsOpen && snapshot && <OutputTargetPreferencesDialog onClose={() => setOutputDefaultsOpen(false)} project={project} rootAssetId={snapshot.root_asset_id} />}
+      {outputDefaultsOpen && snapshot && <OutputTargetPreferencesDialog onClose={() => setOutputDefaultsOpen(false)} onSaved={() => { void refreshNodeTargets(snapshot); }} project={project} rootAssetId={snapshot.root_asset_id} />}
       {editingEdge && edgeEditor && snapshot && (
         <LineageEdgeSummaryDialog
           childTitle={snapshot.nodes.find(node => node.asset_id === editingEdge.child_asset_id)?.title || editingEdge.child_asset_id}
@@ -786,7 +822,11 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   );
 }
 
-function decorateSnapshotWithGenerationTargets(snapshot: LineageSnapshot, jobs: GenerationJob[]): LineageSnapshot {
+export function decorateSnapshotWithGenerationTargets(
+  snapshot: LineageSnapshot,
+  jobs: GenerationJob[],
+  nodeTargets: Record<string, NodeNextOutputTargetsResponse> = {},
+): LineageSnapshot {
   return {
     ...snapshot,
     nodes: snapshot.nodes.map(node => {
@@ -795,13 +835,19 @@ function decorateSnapshotWithGenerationTargets(snapshot: LineageSnapshot, jobs: 
         || item.outputs.some(output => output.imported_asset_id === node.asset_id),
       );
       const plan = job?.target_plan;
-      if (!job || !plan) return node;
+      const nextTarget = nodeTargets[node.asset_id];
+      const nextOutputTarget = nextTarget ? {
+        dimensions: nextTarget.effective.resolved_targets.map(target => `${target.width}×${target.height}`),
+        label: nodeTargetStateLabel(nextTarget.effective),
+        origin: nextTarget.effective.origin,
+      } : undefined;
+      if (!job || !plan) return nextOutputTarget ? { ...node, next_output_target: nextOutputTarget } : node;
       const importedOutput = job.outputs.find(output => output.imported_asset_id === node.asset_id);
       const slot = importedOutput ? plan.slots.find(item => item.output_index === importedOutput.output_index) : undefined;
       const group = slot
         ? plan.groups.find(item => item.id === slot.group_id)
         : plan.groups.find(item => item.parent_asset_id === node.asset_id);
-      if (!group) return node;
+      if (!group) return nextOutputTarget ? { ...node, next_output_target: nextOutputTarget } : node;
       return {
         ...node,
         generation_target: {
@@ -810,6 +856,7 @@ function decorateSnapshotWithGenerationTargets(snapshot: LineageSnapshot, jobs: 
           imported: Boolean(importedOutput),
           locked: !group.unlocked,
         },
+        ...(nextOutputTarget ? { next_output_target: nextOutputTarget } : {}),
       };
     }),
   };

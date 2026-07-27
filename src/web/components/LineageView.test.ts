@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+import type { GenerationJob } from '../../shared/generationTypes';
+import type { LineageSnapshot } from '../../shared/types';
+import type { NodeNextOutputTargetsResponse } from './NodeNextOutputTargets';
+import { decorateSnapshotWithGenerationTargets } from './LineageView';
+
+describe('decorateSnapshotWithGenerationTargets', () => {
+  it('keeps current produced geometry separate from the node future-child target state', () => {
+    const decorated = decorateSnapshotWithGenerationTargets(snapshot, [job], {
+      child: nodeTarget('child', 'node_override', 1080, 1350),
+    });
+    const child = decorated.nodes.find(node => node.asset_id === 'child') as typeof decorated.nodes[number] & {
+      generation_target: { dimensions: string };
+      next_output_target: { dimensions: string[]; origin: string };
+    };
+
+    expect(child.generation_target.dimensions).toBe('1080×1920');
+    expect(child.next_output_target).toEqual(expect.objectContaining({
+      dimensions: ['1080×1350'],
+      origin: 'node_override',
+    }));
+  });
+
+  it('decorates unresolved future intent even when the node has no generation receipt', () => {
+    const unresolved = nodeTarget('root', 'unresolved');
+    const decorated = decorateSnapshotWithGenerationTargets(snapshot, [], { root: unresolved });
+    const root = decorated.nodes.find(node => node.asset_id === 'root') as typeof decorated.nodes[number] & {
+      next_output_target: { dimensions: string[]; label: string; origin: string };
+    };
+
+    expect(root.next_output_target).toEqual({
+      dimensions: [],
+      label: 'Next targets unresolved',
+      origin: 'unresolved',
+    });
+  });
+});
+
+const snapshot = {
+  active_asset_id: 'child',
+  edges: [],
+  fetchedAt: '2026-07-27T00:00:00.000Z',
+  latest: ['child'],
+  nodes: [
+    { asset_id: 'root', title: 'Root', project: 'project', source: 'local', status: 'working', review_state: 'unreviewed', media_type: 'image', is_latest: false, user_selected: false },
+    { asset_id: 'child', title: 'Child', project: 'project', source: 'local', status: 'working', review_state: 'unreviewed', media_type: 'image', is_latest: true, user_selected: false },
+  ],
+  project: 'project',
+  root_asset_id: 'root',
+  selected: [],
+  selection: null,
+  selections: [],
+} as LineageSnapshot;
+
+const job = {
+  id: 'job',
+  inputs: [{ asset_id: 'root' }],
+  outputs: [{ imported_asset_id: 'child', output_index: 0 }],
+  target_plan: {
+    groups: [{
+      delivery_surfaces: [{ platform: 'Instagram', surface: 'Story' }],
+      grouping_mode: 'consolidated',
+      guidance: [],
+      height: 1920,
+      id: 'group',
+      parent_asset_id: 'root',
+      unlocked: false,
+      variant_count: 1,
+      width: 1080,
+    }],
+    slots: [{ group_id: 'group', output_index: 0 }],
+  },
+} as unknown as GenerationJob;
+
+function nodeTarget(
+  nodeAssetId: string,
+  origin: NodeNextOutputTargetsResponse['effective']['origin'],
+  width?: number,
+  height?: number,
+): NodeNextOutputTargetsResponse {
+  return {
+    ok: true,
+    project: 'project',
+    root_asset_id: 'root',
+    node_asset_id: nodeAssetId,
+    setting: null,
+    effective: {
+      node_asset_id: nodeAssetId,
+      origin,
+      project_id: 'project',
+      resolution_digest_sha256: 'digest',
+      resolved_targets: width && height ? [{ delivery_surfaces: [], height, media_kind: 'static_image', width }] : [],
+      root_asset_id: 'root',
+      schema_version: 'lineage.node_next_output_targets.v1',
+      targets: width && height ? [{ kind: 'custom', width, height }] : [],
+    },
+  };
+}

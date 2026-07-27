@@ -13,6 +13,7 @@ export function LineageContextMenu({
   canRemoveFromLineage,
   onClearNext,
   onClose,
+  onEditOutputTargets,
   onOpenDetail,
   onRemoveFromLineage,
   onReplaceNext,
@@ -32,6 +33,7 @@ export function LineageContextMenu({
   onClaimControl?: (action: ClaimControlAction, claim: AgentClaimSummary, body: ClaimControlBody) => void;
   onClearNext: () => void;
   onClose: () => void;
+  onEditOutputTargets?: () => void;
   onOpenDetail: () => void;
   onRemoveFromLineage: () => void;
   onReplaceNext: () => void;
@@ -76,6 +78,7 @@ export function LineageContextMenu({
           )}
         </div>
       )}
+      {onEditOutputTargets && <button onClick={() => run(onEditOutputTargets)} role="menuitem">Edit next output targets</button>}
       <button onClick={() => run(onOpenDetail)} role="menuitem">Open detail</button>
       <button className="danger" disabled={!canRemoveFromLineage} onClick={() => run(onRemoveFromLineage)} role="menuitem">
         {canRemoveFromLineage ? 'Remove from lineage' : 'Root cannot be removed'}

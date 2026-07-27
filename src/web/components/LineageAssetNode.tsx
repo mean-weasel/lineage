@@ -29,6 +29,11 @@ type AssetNodeData = LineageNode & {
     imported: boolean;
     locked: boolean;
   };
+  next_output_target?: {
+    dimensions: string[];
+    label: string;
+    origin: 'canvas_default' | 'derived_child' | 'node_override' | 'unresolved';
+  };
 } & Record<string, unknown>;
 export type AssetFlowNode = Node<AssetNodeData, 'assetNode'>;
 
@@ -136,6 +141,16 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
               ].filter(Boolean).join(' · ')}
             >
               {data.generation_target.locked ? `locked ${data.generation_target.dimensions}` : 'explicitly unlocked'}
+            </span>
+          )}
+          {data.next_output_target && (
+            <span
+              className={`next-output-target origin-${data.next_output_target.origin}`}
+              title={`Future children only · ${data.next_output_target.label}`}
+            >
+              {data.next_output_target.origin === 'unresolved'
+                ? 'next unresolved'
+                : `next ${data.next_output_target.dimensions.join(', ')}`}
             </span>
           )}
         </div>
