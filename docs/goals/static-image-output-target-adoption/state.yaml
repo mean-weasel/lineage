@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/static-image-output-target-adoption-2/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/static-image-output-target-adoption"
 
-active_task: T010
+active_task: T011
 
 tasks:
   - id: T001
@@ -773,7 +773,7 @@ tasks:
   - id: T010
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Run the integrated agent-generation oracle and prove request resolution, exact generation geometry, manifest handoff, atomic import, and canvas visibility."
     inputs:
@@ -790,11 +790,58 @@ tasks:
       - "Generated static-image manifest and successful import"
       - "Rejected invalid output with zero partial state"
       - "Canvas/CLI visibility evidence and screenshots"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Proved the integrated provider-neutral agent loop in a dedicated identity-gated dev profile: exact 1024x1536 planning, deterministic no-clobber scaffold, real generated PNG handoff, atomic import, and locked canvas visibility. A second real 1254x1254 generated PNG was rejected against the frozen 1024x1536 contract with zero partial database or graph state."
+      evidence:
+        - notes/T010-agent-generation-oracle.md
+        - notes/T010-agent-generated-child.png
+        - notes/T010-generation-proof.png
+        - notes/T010-generation-proof-detail.png
+        - "job=gen-ms3la7dj-eeb5763c imported node=local-25d0fa2d7d93 decoded=1024x1536"
+        - "job=gen-ms3lcoq6-6a43035c rejected decoded=1254x1254 required=1024x1536"
+        - "negative-state assets=0 edges=0 generation_job_outputs=0 asset_output_specs=0"
+      identity:
+        channel: dev
+        profile: output-target-agent-oracle-dev-1
+        service: "http://lineage-dev.localhost:5298"
+        git_commit: 61347d06edd08f113d2668abd440c8836cccad5b
+        code_fingerprint: 221f976e77ac2037f90e34e70efa7d42d225616b9841331d23c54a12a394891d
+        profile_fingerprint: 707ad853cee9b31935e7fd4e331c13c1ba196d6ee4c36e61b2590fda6301a970
+      success_contract:
+        job_id: gen-ms3la7dj-eeb5763c
+        output_node_id: local-25d0fa2d7d93
+        dimensions: 1024x1536
+        sha256: 25d0fa2d7d9388088d857c11fa2e212d055d63b45ce85ee19f8b7c213dea1ce6
+        target_plan_digest: 383758f95a2107003da8689f1b1e3f8e0158d18172c93c364e0589cdd752db4a
+        output_spec_digest: 417e17fd88dbb9235ffbc2c6fa8f04fbc860cef5ad4fc1b4b180fc4c8550ba16
+      negative_contract:
+        job_id: gen-ms3lcoq6-6a43035c
+        required_dimensions: 1024x1536
+        decoded_dimensions: 1254x1254
+        sha256: 950d99fc847c0b85a4846c86f5fe6c9071f16e81b20dfef8f80bb124573eae3a
+        partial_state: false
+      commands:
+        - command: "npm run lineage:dev -- runtime doctor --json; profile doctor --profile output-target-agent-oracle-dev-1 --json; db info --profile output-target-agent-oracle-dev-1 --json; make status-dev LINEAGE_DEV_PROFILE=output-target-agent-oracle-dev-1"
+          status: pass
+        - command: "generate variations plan; generate image scaffold; external image generation; generate variations import"
+          status: pass
+        - command: "wrong-size generated PNG import plus CLI/graph/direct-SQL zero-partial-state inspection"
+          status: pass
+      scope:
+        provider_calls_inside_lineage: false
+        static_images_only: true
+        deferred:
+          - video
+          - transforms
+          - "safe-zone validation"
+          - publishing
+          - scheduling
+      harness: codex
   - id: T011
     type: worker
     assignee: Worker
-    status: queued
+    status: active
     reasoning_hint: medium
     objective: "Prepare the final release delta containing justified adoption polish and agent integration after the integrated oracle passes."
     inputs:
@@ -809,11 +856,40 @@ tasks:
       - "Reviewable final release commit and PR, or a proven no-delta disposition"
       - "Full CI, public-readiness, package, plugin, and release-policy evidence"
       - "Exact prospective immutable tag when a release is required"
-    allowed_files: []
-    verify: []
+    allowed_files:
+      - "package.json"
+      - "package-lock.json"
+      - "plugins/lineage-codex-plugin/package.json"
+      - "plugins/lineage-codex-plugin/.codex-plugin/plugin.json"
+      - "CHANGELOG.md"
+      - "docs-site/docs-review.json"
+      - "docs-site/src/content/docs/workflows/generate-import-variations.md"
+      - "docs-site/src/content/docs/integrations/image-generation.md"
+      - "docs-site/src/content/docs/reference/cli.md"
+      - "plugins/lineage-codex-plugin/skills/lineage-package-operator/SKILL.md"
+      - "src/cli/lineageCli.ts"
+      - "src/cli/lineageCli.test.ts"
+      - "src/web/components/LineageGenerationSheet.tsx"
+      - "src/web/components/LineageGenerationSheet.test.tsx"
+      - "src/web/components/LineageView.tsx"
+      - "e2e/output-target-locks.e2e.ts"
+    verify:
+      - "GITHUB_REF_NAME=v0.1.28 node scripts/tag-release-plan.mjs"
+      - "npm run release:policy:test"
+      - "npm run docs:check"
+      - "npm run plugin:smoke"
+      - "npm run plugin:codex-smoke"
+      - "npm run public:readiness"
+      - "npm run package:smoke"
+      - "npm run runtime:oracle"
+      - "npm run e2e"
+      - "npm run ci"
+      - "git diff --check"
     stop_if:
-      - "The exact release scope and version have not been revalidated against current main."
-      - "GitHub main, package versions, tags, or release state changed unexpectedly."
+      - "GitHub origin/main is not d1c680928e7006cc1a9d51026d494cb1752324a1 or no longer merges cleanly with the adoption branch."
+      - "v0.1.28, npm @mean-weasel/lineage 0.1.28, a 0.1.28 GitHub Release, or a conflicting release PR appears."
+      - "Any root/plugin/manifest/lock/docs-review version cannot be made exactly 0.1.28."
+      - "The post-0.1.27 product delta differs from the T006 and T009 receipts or includes unrelated work."
       - "The release requires files outside allowed_files."
       - "Verification fails twice for the same unexplained reason."
     receipt: null
