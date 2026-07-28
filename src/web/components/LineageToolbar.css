@@ -50,7 +50,7 @@
   z-index: 25;
   display: grid;
   gap: 6px;
-  min-width: 190px;
+  min-width: 220px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -86,9 +86,9 @@
 }
 
 .lineage-action-select {
+  display: grid;
   gap: 4px;
-  border-bottom: 1px solid var(--line);
-  padding: 3px 3px 8px;
+  padding: 0;
 }
 
 .lineage-action-select span {
@@ -106,6 +106,25 @@
   padding: 6px 8px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.lineage-canvas-appearance-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-block: 1px solid var(--line);
+  padding: 9px 3px 10px;
+}
+
+.lineage-canvas-appearance-controls > strong {
+  grid-column: 1 / -1;
+  color: #26343d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.lineage-canvas-appearance-controls select {
+  width: 100%;
 }
 
 @media (max-width: 960px) {

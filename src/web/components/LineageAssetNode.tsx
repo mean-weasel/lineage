@@ -6,9 +6,12 @@ import { hoverPreviewPosition, type HoverPreviewPosition } from './lineageHoverP
 export type LineageFocusRole = 'active' | 'child' | 'none' | 'parent';
 
 export type LineagePreviewSource = 'focus' | 'hover';
+export type LineageCanvasPresentation = 'compact' | 'portrait';
+export type LineageSemanticZoomTier = 'far' | 'medium' | 'near';
 
 type AssetNodeData = LineageNode & {
   active: boolean;
+  canvasPresentation?: LineageCanvasPresentation;
   focusRole: LineageFocusRole;
   hoverPreviewsEnabled?: boolean;
   onOpenDetail?: (assetId: string) => void;
@@ -21,6 +24,7 @@ type AssetNodeData = LineageNode & {
   root: boolean;
   replayInteractive?: boolean;
   replayState?: 'entering' | 'future' | 'visible';
+  semanticZoomTier?: LineageSemanticZoomTier;
   sourcePosition: Position;
   targetPosition: Position;
   generation_target?: {
@@ -42,6 +46,9 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const taskBadges = lineageTaskBadges(data.lineage_tasks);
   const replayState = data.replayState;
   const replayInteractive = data.replayInteractive !== false;
+  const portrait = data.canvasPresentation === 'portrait';
+  const semanticZoomTier = data.semanticZoomTier || 'near';
+  const hasWork = taskBadges.length > 0 || (data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll);
   const openFromNode = () => {
     data.onPreviewDismiss?.();
     if ((data.attempt_count || 1) > 1) data.onOpenHistory?.(data.asset_id);
@@ -54,9 +61,11 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
     <div
         aria-label={`${data.title} ${((data.attempt_count || 1) > 1) ? 'attempt history' : 'details'}`}
         aria-hidden={replayState === 'future' ? true : undefined}
-        className={`lineage-node ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
+        className={`lineage-node lineage-node-${portrait ? 'portrait' : 'compact'} lineage-zoom-${semanticZoomTier} lineage-review-${data.review_state} ${hasWork ? 'lineage-has-work' : ''} ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
         data-focus-role={data.focusRole}
+        data-has-work={hasWork ? 'true' : undefined}
         data-lineage-root={data.root ? 'true' : undefined}
+        data-review-state={data.review_state}
         onBlur={data.hoverPreviewsEnabled ? () => data.onPreviewChange?.('focus', data.asset_id, null) : undefined}
         onDoubleClick={event => {
           event.stopPropagation();
@@ -106,6 +115,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
         <Handle className="lineage-handle" isConnectable={false} position={data.targetPosition} type="target" />
         <Handle className="lineage-handle" isConnectable={false} position={data.sourcePosition} type="source" />
         <span aria-hidden="true" className="lineage-node-action">Details</span>
+        {portrait && (
+          <div aria-hidden="true" className="lineage-node-overview-markers">
+            {hasWork && <span className="work">work</span>}
+            <span className={`review review-${data.review_state}`}>{data.review_state.replaceAll('_', ' ')}</span>
+          </div>
+        )}
         <div className="lineage-thumb">
           {data.preview_url && (data.media_type === 'image' || data.media_type === 'gif') ? (
             <img src={data.preview_url} alt="" loading="lazy" />
@@ -115,46 +130,64 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
             <span>{data.media_type}</span>
           )}
         </div>
-        <strong>{data.title}</strong>
-        <small>{data.asset_id}</small>
-        <div className="lineage-badges">
-          <span className={storage.kind}>{storage.label}</span>
-          <span>{data.review_state}</span>
-          {data.root && <span className="root">root</span>}
-          {data.is_latest && <span className="latest">latest</span>}
-          {data.user_selected && <span className="selected">next variation</span>}
-          {(data.attempt_count || 1) > 1 && <span className="attempt-stack">v{data.attempt_count}</span>}
-          {taskBadges.map(task => (
-            <span className={`lineage-task-badge ${task.task_type} ${task.status === 'pending' ? 'pending' : 'locked'}`} key={task.id}>
-              {task.task_type} {task.status === 'pending' ? 'pending' : 'locked'}
-            </span>
-          ))}
-          {data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll && <span className="reroll">re-roll</span>}
-          {data.social_mark?.active && <span className="social">social</span>}
-          {data.generation_target && (
-            <span
-              className={`output-target ${data.generation_target.locked ? 'locked' : 'unlocked'}`}
-              title={[
-                data.generation_target.locked ? data.generation_target.dimensions : 'No pixel lock',
-                ...data.generation_target.destinations,
-                data.generation_target.imported ? 'imported' : 'planned',
-              ].filter(Boolean).join(' · ')}
-            >
-              {data.generation_target.locked ? `locked ${data.generation_target.dimensions}` : 'explicitly unlocked'}
-            </span>
-          )}
-          {data.next_output_target && (
-            <span
-              className={`next-output-target origin-${data.next_output_target.origin}`}
-              title={`Future children only · ${data.next_output_target.label}`}
-            >
-              {data.next_output_target.origin === 'unresolved'
-                ? 'next unresolved'
-                : `next ${data.next_output_target.dimensions.join(', ')}`}
-            </span>
-          )}
-        </div>
-        <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
+        {portrait ? (
+          <div className="lineage-node-portrait-footer">
+            <strong>{data.title}</strong>
+            <div aria-label="Asset state" className="lineage-node-portrait-state">
+              {data.root && <span className="root">root</span>}
+              {data.is_latest && <span className="latest">latest</span>}
+              {data.user_selected && <span className="selected">selected</span>}
+              {(data.attempt_count || 1) > 1 && <span className="attempt-stack">v{data.attempt_count}</span>}
+              {taskBadges.length > 0 && <span className="lineage-task-badge">work</span>}
+              {data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll && <span className="reroll">re-roll</span>}
+              {data.social_mark?.active && <span className="social">social</span>}
+            </div>
+            <small>{data.review_state.replaceAll('_', ' ')}</small>
+          </div>
+        ) : (
+          <>
+            <strong>{data.title}</strong>
+            <small>{data.asset_id}</small>
+            <div className="lineage-badges">
+              <span className={storage.kind}>{storage.label}</span>
+              <span>{data.review_state}</span>
+              {data.root && <span className="root">root</span>}
+              {data.is_latest && <span className="latest">latest</span>}
+              {data.user_selected && <span className="selected">next variation</span>}
+              {(data.attempt_count || 1) > 1 && <span className="attempt-stack">v{data.attempt_count}</span>}
+              {taskBadges.map(task => (
+                <span className={`lineage-task-badge ${task.task_type} ${task.status === 'pending' ? 'pending' : 'locked'}`} key={task.id}>
+                  {task.task_type} {task.status === 'pending' ? 'pending' : 'locked'}
+                </span>
+              ))}
+              {data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll && <span className="reroll">re-roll</span>}
+              {data.social_mark?.active && <span className="social">social</span>}
+              {data.generation_target && (
+                <span
+                  className={`output-target ${data.generation_target.locked ? 'locked' : 'unlocked'}`}
+                  title={[
+                    data.generation_target.locked ? data.generation_target.dimensions : 'No pixel lock',
+                    ...data.generation_target.destinations,
+                    data.generation_target.imported ? 'imported' : 'planned',
+                  ].filter(Boolean).join(' · ')}
+                >
+                  {data.generation_target.locked ? `locked ${data.generation_target.dimensions}` : 'explicitly unlocked'}
+                </span>
+              )}
+              {data.next_output_target && (
+                <span
+                  className={`next-output-target origin-${data.next_output_target.origin}`}
+                  title={`Future children only · ${data.next_output_target.label}`}
+                >
+                  {data.next_output_target.origin === 'unresolved'
+                    ? 'next unresolved'
+                    : `next ${data.next_output_target.dimensions.join(', ')}`}
+                </span>
+              )}
+            </div>
+            <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
+          </>
+        )}
     </div>
   );
 }

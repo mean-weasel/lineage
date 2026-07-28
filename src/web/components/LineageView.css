@@ -34,6 +34,7 @@
 }
 
 .lineage-header {
+  position: relative;
   z-index: 32;
   display: flex;
   flex-wrap: wrap;
@@ -88,6 +89,7 @@
 }
 
 .lineage-canvas {
+  --lineage-edge-width: 2px;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -96,6 +98,18 @@
     linear-gradient(90deg, #eef3f6 1px, transparent 1px),
     #fbfdff;
   background-size: 28px 28px;
+}
+
+.lineage-canvas.lineage-edges-fine {
+  --lineage-edge-width: 1px;
+}
+
+.lineage-canvas.lineage-edges-standard {
+  --lineage-edge-width: 2px;
+}
+
+.lineage-canvas.lineage-edges-bold {
+  --lineage-edge-width: 4px;
 }
 
 .lineage-side {
@@ -778,7 +792,7 @@
 
 .lineage-canvas .react-flow__edge-path {
   stroke: #91a5b1;
-  stroke-width: 2;
+  stroke-width: var(--lineage-edge-width);
 }
 
 .lineage-canvas .react-flow__edge.lineage-edge-summary .react-flow__edge-text {
@@ -970,6 +984,175 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.lineage-node.lineage-node-portrait {
+  display: grid;
+  width: 224px;
+  height: 400px;
+  box-sizing: border-box;
+  grid-template-rows: 306px minmax(0, 1fr);
+  gap: 8px;
+  border-radius: 14px;
+  padding: 8px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.lineage-node-portrait .lineage-thumb {
+  width: 100%;
+  height: 100%;
+  border-color: #c9d4da;
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(315deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0 0 / 18px 18px,
+    #15222a;
+  margin: 0;
+}
+
+.lineage-node-portrait .lineage-thumb img,
+.lineage-node-portrait .lineage-thumb video {
+  object-fit: contain;
+}
+
+.lineage-node-overview-markers {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  max-width: calc(100% - 16px);
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.lineage-node-overview-markers span {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 999px;
+  box-shadow: 0 1px 5px rgba(16, 28, 36, 0.28);
+  padding: 3px 6px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lineage-node-overview-markers .work {
+  background: #1f7a43;
+}
+
+.lineage-node-overview-markers .review {
+  background: #596a76;
+}
+
+.lineage-node-overview-markers .review-approved {
+  background: #237447;
+}
+
+.lineage-node-overview-markers .review-needs_revision,
+.lineage-node-overview-markers .review-rejected {
+  background: #a13d2d;
+}
+
+.lineage-node-portrait.lineage-zoom-medium .lineage-node-overview-markers,
+.lineage-node-portrait.lineage-zoom-far .lineage-node-overview-markers {
+  opacity: 1;
+  visibility: visible;
+}
+
+.lineage-node-portrait-footer {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.lineage-node-portrait-footer strong {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineage-node-portrait-footer small {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1;
+  text-transform: capitalize;
+}
+
+.lineage-node-portrait-state {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.lineage-node-portrait-state span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef3f6;
+  color: #44515b;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.lineage-node-portrait-state .root {
+  background: #fff2d8;
+  color: #74490c;
+}
+
+.lineage-node-portrait-state .latest {
+  background: #fff2d8;
+  color: #8a570f;
+}
+
+.lineage-node-portrait-state .selected,
+.lineage-node-portrait-state .lineage-task-badge {
+  background: #e8f7ee;
+  color: #1f6b3a;
+}
+
+.lineage-node-portrait-state .attempt-stack {
+  background: #f2ecff;
+  color: #5b3a8d;
+}
+
+.lineage-node-portrait-state .reroll {
+  background: #fff0e8;
+  color: #8a4526;
+}
+
+.lineage-node-portrait-state .social {
+  background: #e9f1ff;
+  color: #315f98;
+}
+
+.lineage-node-portrait.lineage-zoom-medium .lineage-node-action,
+.lineage-node-portrait.lineage-zoom-medium .lineage-node-portrait-footer small {
+  opacity: 0;
+}
+
+.lineage-node-portrait.lineage-zoom-far {
+  grid-template-rows: minmax(0, 1fr) 0;
+  gap: 0;
+  padding: 6px;
+}
+
+.lineage-node-portrait.lineage-zoom-far .lineage-node-action,
+.lineage-node-portrait.lineage-zoom-far .lineage-node-portrait-footer {
+  visibility: hidden;
+  opacity: 0;
 }
 
 .lineage-thumb span {

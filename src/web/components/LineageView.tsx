@@ -6,8 +6,16 @@ import './LineageFocus.css';
 import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageEdgeSummaryMutationResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
 import type { GenerationJob, GenerationJobListResponse } from '../../shared/generationTypes';
 import { api, ApiError } from '../api';
-import { readHoverPreviewsEnabled } from '../lineagePreferences';
-import type { AssetFlowNode } from './LineageAssetNode';
+import {
+  readHoverPreviewsEnabled,
+  readLineageCanvasPresentation,
+  readLineageEdgeWeight,
+  writeHoverPreviewsEnabled,
+  writeLineageCanvasPresentation,
+  writeLineageEdgeWeight,
+  type LineageEdgeWeight,
+} from '../lineagePreferences';
+import type { AssetFlowNode, LineageCanvasPresentation } from './LineageAssetNode';
 import { LineageCanvas, type LineageWorkspaceProgress } from './LineageCanvas';
 import { LineageContextMenu } from './LineageContextMenu';
 import { activeNodeIdAfterRefresh } from './lineageRefreshState';
@@ -31,9 +39,24 @@ import { buildLineageReplayTimeline, isLineageReplayable, projectLineageReplay, 
 import { useEscapeClear } from './useEscapeClear';
 import { useLineageWorkspaces } from './useLineageWorkspaces';
 import { useLineageViewportFit } from './useLineageViewportFit';
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure URL contract shared with regression tests
+export function lineageCanvasPresentationFromSearch(
+  search: string,
+  fallback: LineageCanvasPresentation = 'compact',
+): LineageCanvasPresentation {
+  const requested = new URLSearchParams(search).get('lineageCanvas');
+  return requested === 'portrait' || requested === 'compact' ? requested : fallback;
+}
+
 export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsChanged, project, onSelectedAsset, onToast }: {
   actionsOpen: boolean; asset?: GrowthAsset; onActionsOpenChange: (open: boolean) => void; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
 }) {
+  const [canvasPresentation, setCanvasPresentation] = useState<LineageCanvasPresentation>(() =>
+    lineageCanvasPresentationFromSearch(
+      typeof window === 'undefined' ? '' : window.location.search,
+      readLineageCanvasPresentation(),
+    ));
   const [snapshot, setSnapshot] = useState<LineageSnapshot | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [childAssetId, setChildAssetId] = useState('');
@@ -41,12 +64,14 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyAttempts, setHistoryAttempts] = useState<LineageAttempt[]>([]);
-  const [hoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
+  const [hoverPreviewsEnabled, setHoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [edgeSummariesVisible, setEdgeSummariesVisible] = useState(true);
+  const [edgeWeight, setEdgeWeight] = useState<LineageEdgeWeight>(readLineageEdgeWeight);
   const [edgeEditor, setEdgeEditor] = useState<{ edgeId: string; returnFocus: HTMLElement | SVGElement | null } | null>(null);
-  const [graphDirection, setGraphDirection] = useState<LineageGraphDirection>('LR');
+  const [compactGraphDirection, setCompactGraphDirection] = useState<LineageGraphDirection>('LR');
+  const [portraitGraphDirection, setPortraitGraphDirection] = useState<LineageGraphDirection>('LR');
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
@@ -92,11 +117,17 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId), targetNode = snapshot?.nodes.find(node => node.asset_id === targetNodeId) || null;
   const canvasHoverPreviewsEnabled = hoverPreviewsEnabled && !detailNode && !historyNode && !editingEdge && (!replaySnapshot || replayAtEnd);
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
+  const graphDirection = canvasPresentation === 'portrait' ? portraitGraphDirection : compactGraphDirection;
   const collapseTimer = useRef<number | null>(null);
   const authoritativeEdges = useRef<Edge[]>([]);
   const renderedGraphKey = useRef('');
   const workspaceRootRef = useRef('');
-  const { fitGraph, markViewportInteraction } = useLineageViewportFit(flowApi, snapshot?.root_asset_id, sideOpen);
+  const { fitGraph, markViewportInteraction } = useLineageViewportFit(
+    flowApi,
+    snapshot?.root_asset_id,
+    sideOpen,
+    `${canvasPresentation}:${graphDirection}`,
+  );
   const closeTransientMenus = useCallback(() => {
     setMenuCloseSignal(value => value + 1);
     setNodeMenu(null);
@@ -465,12 +496,17 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   }
   async function tidyGraph() {
     if (!snapshot) return;
-    const positions = [...layoutLineageTree(snapshot, graphDirection)].map(([assetId, position]) => ({ assetId, ...position }));
-    applySnapshotPositions(positions);
+    const positions = [...layoutLineageTree(snapshot, graphDirection, canvasPresentation)].map(([assetId, position]) => ({ assetId, ...position }));
     setFlowNodes(current => current.map(node => ({
       ...node,
       position: positions.find(position => position.assetId === node.id) || node.position,
     })));
+    if (canvasPresentation === 'portrait') {
+      onToast('ok', `Tidied ${positions.length} portrait cards without changing compact positions`);
+      fitGraph(80);
+      return;
+    }
+    applySnapshotPositions(positions);
     try {
       await saveLineagePositions(project, snapshot.root_asset_id, positions);
       onToast('ok', `Tidied ${positions.length} lineage nodes`);
@@ -482,17 +518,22 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   }
   async function orientGraph(direction: LineageGraphDirection) {
     if (!snapshot) return;
-    const positions = [...layoutLineageTree(snapshot, direction)].map(([assetId, position]) => ({ assetId, ...position }));
-    applySnapshotPositions(positions);
-    setGraphDirection(direction);
+    const positions = [...layoutLineageTree(snapshot, direction, canvasPresentation)].map(([assetId, position]) => ({ assetId, ...position }));
+    setFlowApi(null);
+    if (canvasPresentation === 'portrait') setPortraitGraphDirection(direction);
+    else setCompactGraphDirection(direction);
     setFlowNodes(current => current.map(node => ({
       ...node,
       position: positions.find(position => position.assetId === node.id) || node.position,
     })));
+    if (canvasPresentation === 'portrait') {
+      onToast('ok', `Rotated portrait cards ${graphDirectionLabel(direction).toLowerCase()} without changing compact positions`);
+      return;
+    }
+    applySnapshotPositions(positions);
     try {
       await saveLineagePositions(project, snapshot.root_asset_id, positions);
       onToast('ok', `Rotated lineage graph ${graphDirectionLabel(direction).toLowerCase()}`);
-      fitGraph(80);
       await refresh({ quiet: true });
     } catch (error) {
       onToast('error', error instanceof Error ? error.message : String(error));
@@ -507,6 +548,31 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         position: positionMap.get(node.asset_id) || node.position,
       })),
     } : current);
+  }
+  function selectCanvasPresentation(presentation: LineageCanvasPresentation) {
+    setFlowApi(null);
+    setCanvasPresentation(presentation);
+    if (!writeLineageCanvasPresentation(presentation)) {
+      onToast('error', 'Card style changed for this session, but browser storage is unavailable so it could not be saved');
+    }
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (presentation === 'portrait') url.searchParams.set('lineageCanvas', 'portrait');
+      else url.searchParams.delete('lineageCanvas');
+      window.history.replaceState(window.history.state, '', url);
+    }
+  }
+  function selectEdgeWeight(weight: LineageEdgeWeight) {
+    setEdgeWeight(weight);
+    if (!writeLineageEdgeWeight(weight)) {
+      onToast('error', 'Edge weight changed for this session, but browser storage is unavailable so it could not be saved');
+    }
+  }
+  function selectHoverPreviews(enabled: boolean) {
+    setHoverPreviewsEnabled(enabled);
+    if (!writeHoverPreviewsEnabled(enabled)) {
+      onToast('error', 'Hover previews changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
   }
   async function refreshBrief() {
     if (!snapshot) return;
@@ -595,14 +661,17 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   }, [reduceReplayMotion, replayLastStage, replayPhase, replayPlaying, replaySnapshot, replaySpeed, replayStageIndex, replayTimeline.stages]);
 
   const baseGraph = useMemo(
-    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible),
-    [activeNodeId, edgeSummariesVisible, graphDirection, graphSnapshot],
+    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation),
+    [activeNodeId, canvasPresentation, edgeSummariesVisible, graphDirection, graphSnapshot],
   );
   const graph = useMemo(() => replaySnapshot && !replayAtEnd
     ? projectLineageReplay(baseGraph.nodes, baseGraph.edges, replayTimeline, replayStageIndex, replayPhase)
     : baseGraph,
   [baseGraph, replayAtEnd, replayPhase, replaySnapshot, replayStageIndex, replayTimeline]);
-  const graphKey = useMemo(() => lineageGraphKey(graphSnapshot, graphDirection), [graphDirection, graphSnapshot]);
+  const graphKey = useMemo(
+    () => lineageGraphKey(graphSnapshot, graphDirection, canvasPresentation),
+    [canvasPresentation, graphDirection, graphSnapshot],
+  );
   authoritativeEdges.current = graph.edges;
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
@@ -645,16 +714,21 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       <LineageToolbar
         actionsOpen={actionsOpen}
         activeWorkspace={activeWorkspace}
+        canvasPresentation={canvasPresentation}
         closeSignal={menuCloseSignal}
         edgeSummariesVisible={edgeSummariesVisible}
+        edgeWeight={edgeWeight}
         loading={loading}
         graphDirection={graphDirection}
+        hoverPreviewsEnabled={hoverPreviewsEnabled}
         demoSeedStatus={demoSeedStatus}
         onArchiveWorkspace={() => { setWorkspaceProgress(null); void archiveWorkspace(); }}
         onActionsOpenChange={onActionsOpenChange}
+        onCanvasPresentation={selectCanvasPresentation}
         onFitGraph={() => fitGraph()}
         onIndexLocal={() => void indexAndRefresh()}
         onGraphDirection={direction => void orientGraph(direction)}
+        onHoverPreviewsEnabled={selectHoverPreviews}
         onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
         onOpenGeneration={() => setGenerationOpen(true)}
         onOpenOutputDefaults={() => setOutputDefaultsOpen(true)}
@@ -664,7 +738,8 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
         onRestoreDemoMedia={() => void restoreDemoSeedMedia()}
         onRestoreSwissifierMedia={() => void restoreSwissifierDemoMedia()}
         onDownloadSwissifierMedia={() => void downloadSwissifierAndTrack()}
-        onEdgeSummariesVisible={() => setEdgeSummariesVisible(visible => !visible)}
+        onEdgeSummariesVisible={setEdgeSummariesVisible}
+        onEdgeWeight={selectEdgeWeight}
         onSeedDemo={() => void seedDemoAndRefreshAssets()}
         onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
         onSelectWorkspace={workspaceId => { setWorkspaceProgress(null); void activateWorkspace(workspaceId); }}
@@ -681,7 +756,9 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       />
       <div className="lineage-workbench" data-testid="lineage-workbench">
         <div
-          className={`lineage-canvas ${activeNodeId ? 'focus-active' : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
+          className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
+          data-lineage-canvas-presentation={canvasPresentation}
+          data-lineage-edge-weight={edgeWeight}
           style={replaySnapshot ? {
             '--lineage-replay-edge-duration': `${reduceReplayMotion ? 1 : 320 / replaySpeed}ms`,
             '--lineage-replay-node-duration': `${reduceReplayMotion ? 1 : 200 / replaySpeed}ms`,
@@ -702,6 +779,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             />
           )}
           <LineageCanvas
+            canvasPresentation={canvasPresentation}
             flowEdges={graphSnapshot ? flowEdges : []}
             flowNodes={graphSnapshot ? flowNodes : []}
             graphKey={graphKey}
@@ -717,7 +795,9 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
             onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}
             onNodeOpenDetail={setDetailNodeId}
             onNodeOpenHistory={assetId => void openAttemptHistory(assetId)}
-            onNodePosition={node => void saveNodePosition(node)}
+            onNodePosition={node => {
+              if (canvasPresentation === 'compact') void saveNodePosition(node);
+            }}
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
             onSelectedAsset={onSelectedAsset}

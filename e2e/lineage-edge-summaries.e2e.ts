@@ -138,16 +138,14 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);
 
     await openLineageActions(page);
-    const hideLabels = page.getByRole('button', { name: 'Hide edge labels' });
-    await expect(hideLabels).toHaveAttribute('aria-pressed', 'true');
-    await hideLabels.click();
+    const edgeLabels = page.getByLabel('Canvas edge labels');
+    await expect(edgeLabels).toHaveValue('show');
+    await edgeLabels.selectOption('hide');
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(0);
     await expect(edgeById(page, drillEdgeId)).toHaveAttribute('aria-label', 'swissifier linkedin root v1 to swissifier vertical drill v1: My edit');
 
-    await openLineageActions(page);
-    const showLabels = page.getByRole('button', { name: 'Show edge labels' });
-    await expect(showLabels).toHaveAttribute('aria-pressed', 'false');
-    await showLabels.click();
+    await expect(edgeLabels).toHaveValue('hide');
+    await edgeLabels.selectOption('show');
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(12);
 
     const rootNode = page.locator('.react-flow__node').filter({ hasText: 'swissifier linkedin root v1' });

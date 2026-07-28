@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GenerationJob } from '../../shared/generationTypes';
 import type { LineageSnapshot } from '../../shared/types';
 import { decorateSnapshotWithGenerationTargets } from './LineageGenerationTargets';
+import { lineageCanvasPresentationFromSearch } from './LineageView';
 import type { NodeNextOutputTargetsResponse } from './NodeNextOutputTargetsModel';
 
 describe('decorateSnapshotWithGenerationTargets', () => {
@@ -33,6 +34,16 @@ describe('decorateSnapshotWithGenerationTargets', () => {
       label: 'Next targets unresolved',
       origin: 'unresolved',
     });
+  });
+});
+
+describe('canvas presentation URL selection', () => {
+  it('uses an explicit card style and otherwise preserves the supplied preference', () => {
+    expect(lineageCanvasPresentationFromSearch('?project=demo-project')).toBe('compact');
+    expect(lineageCanvasPresentationFromSearch('?project=demo-project&lineageCanvas=portrait')).toBe('portrait');
+    expect(lineageCanvasPresentationFromSearch('?lineageCanvas=compact', 'portrait')).toBe('compact');
+    expect(lineageCanvasPresentationFromSearch('?project=demo-project', 'portrait')).toBe('portrait');
+    expect(lineageCanvasPresentationFromSearch('?lineageCanvas=other')).toBe('compact');
   });
 });
 
