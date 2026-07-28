@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.29
+
+- Add durable, revisioned next-output target settings for static-image lineage nodes, with human canvas-default inheritance, explicit agent/CLI overrides, same-geometry surface consolidation, and separate current-versus-future geometry in selection packets and the canvas.
+- Require every node-target generation to atomically re-resolve and freeze the selected sources' exact-pixel targets before provider work, rejecting ambiguous surfaces, conflicting edits, stale digests, and transient geometry-changing re-roll bypasses.
+- Initialize each imported child from only its own frozen output geometry, preserve older job snapshots after future settings change, and reject cancellation, tampering, corrupt files, and wrong dimensions without partial lineage state.
+
 ## 0.1.28
 
 - Preserve independent canvas generation drafts across interactions and parent rerenders, and flush complete machine-readable CLI output even when receipts exceed the process stdout buffer.

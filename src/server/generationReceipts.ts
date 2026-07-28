@@ -34,13 +34,22 @@ import { generationTargetMapFromShorthand, type OutputTargetShorthand } from '..
 import { planGenerationTargets } from './generationTargetPlanning';
 import {
   loadAssetOutputSpec,
+  loadGenerationJobTargetResolutions,
   loadGenerationTargetPlan,
   persistAssetOutputSpec,
   persistTargetAwareGenerationAggregate,
+  persistTargetAwareGenerationAggregateInTransaction,
 } from './generationTargetPersistence';
+import {
+  initializeChildNextOutputTargetsInTransaction,
+  materializeNodeTargetPlan,
+  nodeTargetResolutionsDigest,
+  resolveEffectiveNodeNextOutputTargets,
+} from './nodeNextOutputTargets';
 import { readStaticImageMetadata, type StaticImageMetadata } from './staticImageMetadata';
 import type {
   GenerationHandoffPacket,
+  GenerationCancelResponse,
   GenerationImportResponse,
   GenerationInspectResponse,
   GenerationJob,
@@ -333,6 +342,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
   const outputs = (database.prepare('select * from generation_job_outputs where job_id = ? order by output_index').all(id) as Array<Record<string, unknown>>).map(outputFrom);
   const receipts = (database.prepare('select * from generation_job_receipts where job_id = ? order by created_at, id').all(id) as Array<Record<string, unknown>>).map(receiptFrom);
   const targetPlan = loadGenerationTargetPlan(database, id);
+  const sourceTargetResolutions = loadGenerationJobTargetResolutions(database, id);
   return {
     id: String(row.id),
     project_id: String(row.project_id),
@@ -349,6 +359,7 @@ export function loadGenerationJob(database: DatabaseSync, project: string, id: s
     updated_at: String(row.updated_at),
     imported_at: typeof row.imported_at === 'string' ? row.imported_at : undefined,
     ...(targetPlan ? { target_plan: targetPlan } : {}),
+    ...(sourceTargetResolutions.length > 0 ? { source_target_resolutions: sourceTargetResolutions } : {}),
     inputs,
     outputs,
     receipts,
@@ -362,6 +373,62 @@ function insertReceipt(database: DatabaseSync, id: string, type: 'plan' | 'impor
   `).run(`${id}:receipt:${type}:${Date.now()}`, id, type, command, JSON.stringify(payload), nowIso());
 }
 
+function assertPlannedGenerationJobInTransaction(
+  database: DatabaseSync,
+  project: string,
+  id: string,
+): void {
+  const row = database.prepare(
+    'select status from generation_jobs where project_id = ? and id = ?',
+  ).get(project, id) as { status?: string } | undefined;
+  if (row?.status !== 'planned') {
+    throw new GenerationReceiptError(`Generation job is not importable from status: ${row?.status ?? 'missing'}`, 409);
+  }
+}
+
+export function cancelImageGeneration(
+  project = defaultProject,
+  fields: { jobId: string; confirmWrite: boolean },
+): GenerationCancelResponse {
+  if (!fields.jobId) throw new GenerationReceiptError('Missing --job-id');
+  if (!fields.confirmWrite) throw new GenerationReceiptError('Generation cancellation requires --confirm-write');
+  const database = lineageDb();
+  try {
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const job = loadGenerationJob(database, project, fields.jobId);
+      if (job.status === 'cancelled') {
+        database.exec('COMMIT');
+        return { ok: true, command: 'generate image cancel', project, job, idempotent: true };
+      }
+      if (job.status !== 'planned') {
+        throw new GenerationReceiptError(`Generation job is not cancellable from status: ${job.status}`, 409);
+      }
+      const timestamp = nowIso();
+      const result = database.prepare(`
+        update generation_jobs
+        set status = 'cancelled', updated_at = ?
+        where project_id = ? and id = ? and status = 'planned'
+      `).run(timestamp, project, fields.jobId);
+      if (Number(result.changes) !== 1) {
+        throw new GenerationReceiptError('Generation job changed while cancellation was being applied', 409);
+      }
+      database.exec('COMMIT');
+      return {
+        ok: true,
+        command: 'generate image cancel',
+        project,
+        job: loadGenerationJob(database, project, fields.jobId),
+      };
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+  } finally {
+    database.close();
+  }
+}
+
 export function planImageGeneration(project = defaultProject, fields: {
   prompt: string;
   count?: number;
@@ -370,6 +437,10 @@ export function planImageGeneration(project = defaultProject, fields: {
   perBaseCount?: number;
   targetMap?: GenerationTargetMap;
   targetShorthand?: OutputTargetShorthand;
+  fromNodeTargets?: boolean;
+  expectedTargetResolutionDigest?: string;
+  variantsPerTarget?: number;
+  beforePersistForTesting?: () => void;
 }): GenerationPlanResponse {
   const prompt = fields.prompt.trim();
   if (!prompt) throw new GenerationReceiptError('Missing --prompt');
@@ -378,6 +449,36 @@ export function planImageGeneration(project = defaultProject, fields: {
   const parentCount = selectedParents(next).length;
   const id = jobId();
   const inputs = inputsFrom(id, project, next);
+  if (fields.fromNodeTargets && (fields.targetMap || fields.targetShorthand !== undefined)) {
+    throw new GenerationReceiptError('Use locked node targets or an explicit target map, not both');
+  }
+  let sourceTargetResolutions: NonNullable<GenerationJob['source_target_resolutions']> | undefined;
+  if (fields.fromNodeTargets) {
+    if (!fields.expectedTargetResolutionDigest) {
+      throw new GenerationReceiptError('Locked-from-node planning requires expectedTargetResolutionDigest from selection packet v3');
+    }
+    if (fields.variantsPerTarget !== undefined && !positiveInteger(fields.variantsPerTarget)) {
+      throw new GenerationReceiptError('variantsPerTarget must be a positive integer');
+    }
+    const targetDatabase = lineageDb();
+    try {
+      sourceTargetResolutions = resolveNodeTargetSources(
+        targetDatabase,
+        project,
+        next.root_asset_id,
+        inputs,
+      );
+    } finally {
+      targetDatabase.close();
+    }
+    const resolutionDigest = nodeTargetResolutionsDigest(sourceTargetResolutions);
+    if (fields.expectedTargetResolutionDigest !== resolutionDigest) {
+      throw new GenerationReceiptError(
+        `Node target resolution changed: expected ${fields.expectedTargetResolutionDigest}, current ${resolutionDigest}`,
+        409,
+      );
+    }
+  }
   const shorthandRequested = fields.targetShorthand !== undefined;
   if (fields.targetMap && shorthandRequested) {
     throw new GenerationReceiptError('Use --target-map or destination/custom-dimension flags, not both');
@@ -388,9 +489,11 @@ export function planImageGeneration(project = defaultProject, fields: {
   const targetMap = fields.targetMap ?? (shorthandRequested
     ? generationTargetMapFromShorthand(inputs[0].asset_id, fields.targetShorthand ?? {})
     : undefined);
-  const targetPlan = targetMap
-    ? planGenerationTargets({ jobId: id, sourceAssetIds: inputs.map(input => input.asset_id), targetMap })
-    : undefined;
+  const targetPlan = sourceTargetResolutions
+    ? materializeNodeTargetPlan(id, sourceTargetResolutions, fields.variantsPerTarget ?? 1)
+    : targetMap
+      ? planGenerationTargets({ jobId: id, sourceAssetIds: inputs.map(input => input.asset_id), targetMap })
+      : undefined;
   if (targetPlan && (fields.count !== undefined || fields.perBaseCount !== undefined)) {
     throw new GenerationReceiptError('Target-aware generation does not accept legacy --count or --per-base-count; use --variants-per-target or target-map variant_count');
   }
@@ -423,6 +526,7 @@ export function planImageGeneration(project = defaultProject, fields: {
     created_at: timestamp,
     updated_at: timestamp,
     ...(targetPlan ? { target_plan: targetPlan } : {}),
+    ...(sourceTargetResolutions ? { source_target_resolutions: structuredClone(sourceTargetResolutions) } : {}),
     inputs,
     outputs: [],
     receipts: [{
@@ -441,6 +545,10 @@ export function planImageGeneration(project = defaultProject, fields: {
           target_map_digest: targetPlan.digest_sha256,
           target_groups: targetPlan.groups,
           output_slots: targetPlan.slots,
+          ...(sourceTargetResolutions ? {
+            source_target_resolutions: sourceTargetResolutions,
+            source_target_resolution_digest: nodeTargetResolutionsDigest(sourceTargetResolutions),
+          } : {}),
         } : {}),
       },
       created_at: timestamp,
@@ -451,6 +559,80 @@ export function planImageGeneration(project = defaultProject, fields: {
   const database = lineageDb();
   try {
     if (targetPlan) {
+      if (sourceTargetResolutions) {
+        fields.beforePersistForTesting?.();
+        database.exec('BEGIN IMMEDIATE');
+        try {
+          const transactionalResolutions = resolveNodeTargetSources(
+            database,
+            project,
+            next.root_asset_id,
+            inputs,
+          );
+          const transactionalDigest = nodeTargetResolutionsDigest(transactionalResolutions);
+          if (fields.expectedTargetResolutionDigest !== transactionalDigest) {
+            throw new GenerationReceiptError(
+              `Node target resolution changed: expected ${fields.expectedTargetResolutionDigest}, current ${transactionalDigest}`,
+              409,
+            );
+          }
+          const transactionalPlan = materializeNodeTargetPlan(
+            id,
+            transactionalResolutions,
+            fields.variantsPerTarget ?? 1,
+          );
+          const transactionalHandoff = buildHandoff(
+            project,
+            id,
+            prompt,
+            transactionalPlan.expected_output_count,
+            perBaseCount,
+            next,
+            inputs,
+            transactionalPlan.slots.map(slot => slot.parent_asset_id),
+            transactionalPlan,
+          );
+          persistTargetAwareGenerationAggregateInTransaction(database, {
+            job: {
+              id,
+              project_id: project,
+              provider,
+              adapter_version: 'generation-receipts-v3',
+              source_mode: 'lineage_selection',
+              root_asset_id: next.root_asset_id,
+              prompt,
+              expected_output_count: transactionalPlan.expected_output_count,
+              status: 'planned',
+              output_dir: '.asset-scratch',
+              handoff: transactionalHandoff,
+              created_at: timestamp,
+              updated_at: timestamp,
+              inputs,
+            },
+            inputs,
+            plan: transactionalPlan,
+            sourceTargetResolutions: transactionalResolutions,
+            receipt: {
+              id: `${id}:receipt:plan:${Date.now()}`,
+              command: 'generate image plan',
+              payload: {
+                ...(preview.receipts[0].payload as Record<string, unknown>),
+                target_map_digest: transactionalPlan.digest_sha256,
+                target_groups: transactionalPlan.groups,
+                output_slots: transactionalPlan.slots,
+                source_target_resolutions: transactionalResolutions,
+                source_target_resolution_digest: transactionalDigest,
+              },
+              created_at: timestamp,
+            },
+          });
+          database.exec('COMMIT');
+          return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(database, project, id) };
+        } catch (error) {
+          database.exec('ROLLBACK');
+          throw error;
+        }
+      }
       persistTargetAwareGenerationAggregate(database, {
         job: {
           id,
@@ -470,6 +652,7 @@ export function planImageGeneration(project = defaultProject, fields: {
         },
         inputs,
         plan: targetPlan,
+        ...(sourceTargetResolutions ? { sourceTargetResolutions } : {}),
         receipt: {
           id: `${id}:receipt:plan:${Date.now()}`,
           command: 'generate image plan',
@@ -499,6 +682,39 @@ export function planImageGeneration(project = defaultProject, fields: {
   } finally {
     database.close();
   }
+}
+
+function resolveNodeTargetSources(
+  database: DatabaseSync,
+  project: string,
+  rootAssetId: string,
+  inputs: readonly GenerationJobInput[],
+): NonNullable<GenerationJob['source_target_resolutions']> {
+  return inputs.map(input => {
+    const effective = resolveEffectiveNodeNextOutputTargets(
+      database,
+      project,
+      rootAssetId,
+      input.asset_id,
+    );
+    if (effective.origin === 'unresolved') {
+      throw new GenerationReceiptError(
+        `Node ${input.asset_id} has no resolvable next-output targets; set explicit node targets or human canvas defaults first`,
+      );
+    }
+    return {
+      parent_asset_id: input.asset_id,
+      origin: effective.origin,
+      ...(effective.setting_revision === undefined ? {} : { setting_revision: effective.setting_revision }),
+      ...(effective.setting_digest_sha256 ? { setting_digest_sha256: effective.setting_digest_sha256 } : {}),
+      ...(effective.canvas_default_digest_sha256
+        ? { canvas_default_digest_sha256: effective.canvas_default_digest_sha256 }
+        : {}),
+      resolution_digest_sha256: effective.resolution_digest_sha256,
+      targets: structuredClone(effective.targets),
+      resolved_targets: structuredClone(effective.resolved_targets),
+    };
+  });
 }
 
 export function planImageReroll(project = defaultProject, fields: {
@@ -534,114 +750,10 @@ export function planImageReroll(project = defaultProject, fields: {
       || fields.requestedDimensions.height !== inheritedSpec.output_spec.height
     )
   ) {
-    const variationMap: GenerationTargetMap = {
-      schema_version: 'lineage.generation_target_map.v1',
-      sources: [{
-        asset_id: target.asset_id,
-        targets: [{
-          kind: 'custom',
-          width: fields.requestedDimensions.width,
-          height: fields.requestedDimensions.height,
-        }],
-      }],
-    };
-    const variationPlan = planGenerationTargets({
-      jobId: id,
-      sourceAssetIds: [target.asset_id],
-      targetMap: variationMap,
-    });
-    if (!variationPlan) throw new GenerationReceiptError('Geometry-change variation requires a locked target plan');
-    const next: LineageNextResponse = {
-      project,
-      root_asset_id: snapshot.root_asset_id,
-      strategy: 'selected',
-      selection_mode: 'single',
-      recommended_action: 'evolve_variations',
-      reason: 'user_selected',
-      next_asset: target,
-      next_assets: [target],
-      latest: snapshot.latest,
-      selected: [target.asset_id],
-      selection: null,
-      selections: [],
-      candidates: snapshot.nodes,
-      warnings: ['Geometry changes create a child variation; the locked source node is unchanged.'],
-      fetchedAt: timestamp,
-    };
-    const variationInput = inputsFrom(id, project, next)[0];
-    const handoff = buildHandoff(project, id, prompt, 1, 1, next, [variationInput], [target.asset_id], variationPlan);
-    const preview: GenerationJob = {
-      id,
-      project_id: project,
-      provider,
-      adapter_version: 'generation-receipts-v3',
-      source_mode: 'lineage_selection',
-      root_asset_id: snapshot.root_asset_id,
-      prompt,
-      expected_output_count: 1,
-      status: 'planned',
-      output_dir: '.asset-scratch',
-      handoff,
-      created_at: timestamp,
-      updated_at: timestamp,
-      target_plan: variationPlan,
-      inputs: [variationInput],
-      outputs: [],
-      receipts: [{
-        id: `${id}:receipt:plan:preview`,
-        job_id: id,
-        receipt_type: 'plan',
-        status: 'ok',
-        command: 'generate image plan',
-        payload: {
-          geometry_change: {
-            from: {
-              height: inheritedSpec.output_spec.height,
-              width: inheritedSpec.output_spec.width,
-            },
-            representation: 'child_variation',
-            to: structuredClone(fields.requestedDimensions),
-          },
-          target_groups: variationPlan.groups,
-        },
-        created_at: timestamp,
-      }],
-    };
-    if (fields.dryRun) {
-      return { ok: true, command: 'generate image plan', project, dryRun: true, wouldWrite: true, job: preview };
-    }
-    const variationDatabase = lineageDb();
-    try {
-      persistTargetAwareGenerationAggregate(variationDatabase, {
-        job: {
-          id,
-          project_id: project,
-          provider,
-          adapter_version: 'generation-receipts-v3',
-          source_mode: 'lineage_selection',
-          root_asset_id: snapshot.root_asset_id,
-          prompt,
-          expected_output_count: 1,
-          status: 'planned',
-          output_dir: '.asset-scratch',
-          handoff,
-          created_at: timestamp,
-          updated_at: timestamp,
-          inputs: [variationInput],
-        },
-        inputs: [variationInput],
-        plan: variationPlan,
-        receipt: {
-          id: `${id}:receipt:plan:${Date.now()}`,
-          command: 'generate image plan',
-          payload: preview.receipts[0].payload,
-          created_at: timestamp,
-        },
-      });
-      return { ok: true, command: 'generate image plan', project, job: loadGenerationJob(variationDatabase, project, id) };
-    } finally {
-      variationDatabase.close();
-    }
+    throw new GenerationReceiptError(
+      'Geometry changes are child variations and must use durable node next-output targets. Set or replace the node targets, then use the branch planner.',
+      409,
+    );
   }
   const targetPlan = inheritedSpec ? inheritedRerollTargetPlan(id, target.asset_id, inheritedSpec) : undefined;
   const handoff = buildRerollHandoff(project, id, prompt, snapshot.root_asset_id, target, request, targetPlan);
@@ -1011,6 +1123,7 @@ export function importImageGenerationOutputs(
     const timestamp = nowIso();
     writeDb.exec('BEGIN IMMEDIATE');
     try {
+      assertPlannedGenerationJobInTransaction(writeDb, project, fields.jobId);
       for (const [index, file] of resolved.entries()) {
         if (targetAware) {
           indexImportedLineageAssetInTransaction(writeDb, project, {
@@ -1076,13 +1189,23 @@ export function importImageGenerationOutputs(
             target_group_id: file.slot.group_id,
             variant_index: file.slot.variant_index,
           });
+          initializeChildNextOutputTargetsInTransaction(writeDb, {
+            projectId: project,
+            rootAssetId: job.root_asset_id,
+            nodeAssetId: file.assetId,
+            outputSpec: file.slot.output_spec,
+            timestamp,
+          });
         }
       }
-      writeDb.prepare(`
+      const jobUpdate = writeDb.prepare(`
         update generation_jobs
         set status = 'imported', imported_at = ?, updated_at = ?
-        where project_id = ? and id = ?
+        where project_id = ? and id = ? and status = 'planned'
       `).run(timestamp, timestamp, project, fields.jobId);
+      if (Number(jobUpdate.changes) !== 1) {
+        throw new GenerationReceiptError('Generation job changed while import was being applied', 409);
+      }
       insertReceipt(writeDb, fields.jobId, 'import', 'generate image import', {
         mapping_strategy: mappingStrategy,
         files: resolved.map((file, index) => ({
@@ -1173,6 +1296,7 @@ export function importImageRerollOutput(project = defaultProject, fields: { jobI
     const timestamp = nowIso();
     writeDb.exec('BEGIN IMMEDIATE');
     try {
+      assertPlannedGenerationJobInTransaction(writeDb, project, fields.jobId);
       if (targetAware) {
         indexImportedLineageAssetInTransaction(writeDb, project, {
           assetId: resolved.assetId,
@@ -1188,11 +1312,14 @@ export function importImageRerollOutput(project = defaultProject, fields: { jobI
       writeDb.prepare(`insert into generation_job_outputs (
         id, job_id, project_id, output_index, file_path, checksum_sha256, size_bytes, content_type, imported_asset_id, parent_asset_id, imported_at
       ) values (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`).run(outputId, fields.jobId, project, resolved.relativePath, resolved.checksum, resolved.size, resolved.contentType, resolved.assetId, target[0].asset_id, timestamp);
-      writeDb.prepare(`
+      const jobUpdate = writeDb.prepare(`
         update generation_jobs
         set status = 'imported', imported_at = ?, updated_at = ?
-        where project_id = ? and id = ?
+        where project_id = ? and id = ? and status = 'planned'
       `).run(timestamp, timestamp, project, fields.jobId);
+      if (Number(jobUpdate.changes) !== 1) {
+        throw new GenerationReceiptError('Generation job changed while import was being applied', 409);
+      }
       insertReceipt(writeDb, fields.jobId, 'import', 'reroll import', {
         file: { output_index: 0, file_path: resolved.relativePath, imported_asset_id: resolved.assetId, parent_asset_id: target[0].asset_id },
         reroll: { root_asset_id: job.root_asset_id, node_asset_id: target[0].asset_id },

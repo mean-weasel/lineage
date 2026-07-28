@@ -121,6 +121,10 @@ export type {
   LineageSelectionPacketV2Asset,
   LineageSelectionPacketV2Attempt,
   LineageSelectionPacketV2IdentityProjection,
+  LineageSelectionPacketCurrentGeometry,
+  LineageSelectionPacketV3,
+  LineageSelectionPacketV3Asset,
+  LineageSelectionPacketV3IdentityProjection,
 } from './lineageSelectionPacketTypes';
 
 export interface ReviewableAsset extends GrowthAsset {
@@ -479,7 +483,7 @@ export interface LineageBriefResponse {
   };
   fetchedAt: string;
 }
-export type { GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider, GenerationSourceMode } from './generationTypes';
+export type { GenerationCancelResponse, GenerationHandoffPacket, GenerationImportResponse, GenerationInspectResponse, GenerationJob, GenerationJobInput, GenerationJobListResponse, GenerationJobOutput, GenerationJobReceipt, GenerationPlanResponse, GenerationProvider, GenerationSourceMode } from './generationTypes';
 export type { LineageWorkspace, LineageWorkspaceActor, LineageWorkspaceFields, LineageWorkspaceSnapshot, LineageWorkspaceStatus, LineageWorkspaceUpdateFields } from './lineageWorkspaceTypes';
 
 type AgentClaimScopeType = 'lineage_workspace' | 'lineage_task' | 'content_post' | 'content_queue_lane' | 'selection_set' | 'project_channel';

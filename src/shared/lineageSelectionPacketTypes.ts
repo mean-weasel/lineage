@@ -1,3 +1,8 @@
+import type {
+  DeliverySurfaceSnapshot,
+  EffectiveNodeNextOutputTargets,
+} from './outputTargetTypes';
+
 export type LineageSelectionPacketStorageState = 'local_and_s3' | 'local_only' | 's3_backed' | 'unresolved';
 
 interface LineageSelectionPacketContext {
@@ -129,6 +134,27 @@ export interface LineageSelectionPacketV2 extends LineageSelectionPacketBase {
   schema_version: 'lineage.selection_packet.v2';
 }
 
+export interface LineageSelectionPacketCurrentGeometry {
+  media_kind: 'static_image';
+  width: number;
+  height: number;
+  output_spec_digest: string;
+  delivery_surfaces: DeliverySurfaceSnapshot[];
+}
+
+export interface LineageSelectionPacketV3Asset extends LineageSelectionPacketV2Asset {
+  current_geometry: LineageSelectionPacketCurrentGeometry | null;
+  next_output_targets: EffectiveNodeNextOutputTargets;
+}
+
+export interface LineageSelectionPacketV3 extends LineageSelectionPacketBase {
+  assets: LineageSelectionPacketV3Asset[];
+  diagnostics: LineageSelectionPacketDiagnostic[];
+  identity_sha256: string;
+  schema_version: 'lineage.selection_packet.v3';
+  selected_source_resolution_digest_sha256: string;
+}
+
 export interface LineageSelectionPacketV2IdentityProjection {
   context: LineageSelectionPacketContext;
   diagnostics: LineageSelectionPacketDiagnostic[];
@@ -156,4 +182,30 @@ export interface LineageSelectionPacketV2IdentityProjection {
   };
 }
 
-export type LineageSelectionPacket = LineageSelectionPacketV1 | LineageSelectionPacketV2;
+export interface LineageSelectionPacketV3IdentityProjection {
+  context: LineageSelectionPacketContext;
+  diagnostics: LineageSelectionPacketDiagnostic[];
+  product: string;
+  project: string;
+  schema_version: 'lineage.selection_packet.v3';
+  selected_source_resolution_digest_sha256: string;
+  selection: Array<{
+    asset_id: string;
+    campaign?: string;
+    channel?: string;
+    current_attempt: Pick<LineageSelectionPacketV2Attempt, 'asset_id' | 'attempt_index' | 'checksum_sha256' | 'id' | 'source'>;
+    current_geometry: LineageSelectionPacketCurrentGeometry | null;
+    media_type?: string;
+    mime_type?: string;
+    next_output_targets: EffectiveNodeNextOutputTargets;
+    position: number;
+    selection_note?: string;
+    title: string;
+  }>;
+  workspace: {
+    id: string;
+    root_asset_id: string;
+  };
+}
+
+export type LineageSelectionPacket = LineageSelectionPacketV1 | LineageSelectionPacketV2 | LineageSelectionPacketV3;

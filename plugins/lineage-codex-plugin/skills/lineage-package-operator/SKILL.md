@@ -133,8 +133,15 @@ lineage-stable link-child --profile "$LINEAGE_PROD_PROFILE" --project demo-proje
 lineage-stable output-targets list --profile "$LINEAGE_PROD_PROFILE" --media image --json
 lineage-stable output-targets resolve --profile "$LINEAGE_PROD_PROFILE" --query "Instagram Feed portrait" --json
 lineage-stable output-targets defaults --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --json
+lineage-stable selection packet --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --schema v3 --json
+lineage-stable output-targets node get --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --node <node-id> --json
+lineage-stable output-targets node set --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --node <node-id> --destination instagram.story --confirm-write --json
+lineage-stable output-targets node replace --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --node <node-id> --expected-revision <revision> --destination instagram.feed_portrait --confirm-write --json
+lineage-stable output-targets node clear --profile "$LINEAGE_PROD_PROFILE" --project demo-project --root <root-id> --node <node-id> --expected-revision <revision> --confirm-write --json
 lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create two variations" --from-lineage-selection --count 2 --json
 lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create locked variants" --from-lineage-selection --destination instagram.feed_portrait --destination instagram.story --variants-per-target 2 --json
+lineage-stable generate image plan --profile "$LINEAGE_PROD_PROFILE" --project demo-project --prompt "Create persisted node variants" --from-lineage-selection --from-node-targets --expected-target-resolution-digest <selection-v3-digest> --variants-per-target 2 --json
+lineage-stable generate image cancel --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --confirm-write --json
 lineage-stable generate image scaffold --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --format png --confirm-write --json
 lineage-stable generate image import --profile "$LINEAGE_PROD_PROFILE" --project demo-project --job-id <job-id> --manifest .asset-scratch/generation/<job-id>/generation-output-manifest.json --confirm-write --json
 lineage-stable agent release --profile "$LINEAGE_PROD_PROFILE" --claim-token "$LINEAGE_CLAIM_TOKEN" --json
@@ -146,25 +153,36 @@ pass the token to claim-scoped writes, and release it before handoff. Use
 `--summary` describing the change from parent to child. Use `reroll mark`, `reroll
 plan`, and `reroll import` for a new attempt on the same node.
 
-For a persisted planned target-aware v3 selection job, use this exact agent
-sequence:
+For a node-target-driven generation, use this exact agent sequence:
 
-1. Run `generate image scaffold --job-id <job-id> [--format
+1. Read `selection packet --schema v3` and inspect every selected asset's
+   separate `current_geometry` and `next_output_targets`. The packet's
+   `selected_source_resolution_digest_sha256` covers every selected source.
+2. If a requested platform is ambiguous, run `output-targets resolve` and ask
+   the user to choose a surface. Never choose one yourself.
+3. If a node is unresolved, use `output-targets node set` only after explicit
+   target intent. If an existing sticky lock conflicts with the request, stop:
+   only the distinct `node replace --expected-revision` operation may change it,
+   and only after explicit user approval. Never mutate canvas defaults.
+4. Persist `generate image plan --from-node-targets
+   --expected-target-resolution-digest <packet-digest>` before invoking any
+   provider. Variation count is job-time intent.
+5. Run `generate image scaffold --job-id <job-id> [--format
    png|jpeg|webp] --confirm-write --profile <profile> --project <project>
    --json`.
-2. Read each returned output index, absolute path, width, height, target group,
+6. Read each returned output index, absolute path, width, height, target group,
    variant, and digest. The scaffold creates only
    `.asset-scratch/generation/<job-id>/generation-output-manifest.json`; require
    every reported image destination to remain absent.
-3. Invoke image generation outside Lineage for each slot at exactly its stored
+7. Invoke image generation outside Lineage for each slot at exactly its stored
    width and height. Do not infer a surface, substitute provider-native
    geometry, resize, or crop.
-4. Copy each generated file to its returned absolute path only after
+8. Copy each generated file to its returned absolute path only after
    `test ! -e "$OUTPUT_ABSOLUTE_PATH"`. Stop on any collision.
-5. Edit only each empty `edge_summary` to a distinct one- or two-word
+9. Edit only each empty `edge_summary` to a distinct one- or two-word
    description. Scaffolding already changed only `file_path`; do not change
    parent, group, variant, output specification, or digest.
-6. Import the job-scoped manifest with the unchanged `generate image import
+10. Import the job-scoped manifest with the unchanged `generate image import
    --confirm-write` command, then inspect the imported job and actual decoded
    dimensions.
 
@@ -178,7 +196,9 @@ permission to choose a surface. One-source target flags may use
 `--destination`, `--custom-dimensions`, `--separate-destination`, and
 `--variants-per-target`; multiple selected sources require `--target-map`.
 Target-aware plans reject legacy count flags. `output-targets defaults` is
-read-only: agents and CLI workflows must never mutate canvas defaults.
+read-only: agents and CLI workflows must never mutate canvas defaults. Node
+settings contain geometry and provenance only; counts remain job-time intent.
+Cancel an abandoned planned job explicitly and never generate after cancellation.
 
 Persistent writes require the profile writer lease and any operation-specific
 `--confirm-write`. Never replace `--profile` with a direct `--db` write.

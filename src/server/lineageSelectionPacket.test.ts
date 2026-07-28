@@ -14,12 +14,16 @@ import {
 } from './assetLineage';
 import { lineageDb } from './assetLineageDb';
 import { createLineageWorkspace } from './assetLineageWorkspaces';
-import type { LineageSelectionPacketV2 } from '../shared/types';
+import type { LineageSelectionPacketV2, LineageSelectionPacketV3 } from '../shared/types';
+import { writeCanvasGenerationTargetDefaults } from './generationTargetDefaults';
+import { writeNodeNextOutputTargetSetting } from './nodeNextOutputTargets';
 import {
   canonicalLineageSelectionPacketIdentityJson,
   getLineageSelectionPacket,
   lineageSelectionPacketV2IdentityProjection,
   lineageSelectionPacketV2IdentitySha256,
+  lineageSelectionPacketV3IdentityProjection,
+  lineageSelectionPacketV3IdentitySha256,
   LineageSelectionPacketError,
 } from './lineageSelectionPacket';
 
@@ -75,6 +79,17 @@ function exportV2(rootAssetId: string): LineageSelectionPacketV2 {
     rootAssetId,
     schema: 'v2',
   }) as LineageSelectionPacketV2;
+}
+
+function exportV3(rootAssetId: string): LineageSelectionPacketV3 {
+  return getLineageSelectionPacket(defaultProject, {
+    campaign: '2026-07-launch',
+    channel: 'linkedin',
+    contextNotes: 'Make GrowthOps posts from selected images.',
+    labels: ['launch', 'agent-ready'],
+    rootAssetId,
+    schema: 'v3',
+  }) as LineageSelectionPacketV3;
 }
 
 function seedCurrentReroll(files: ReturnType<typeof seedSelectedWorkspace>, contents = 'selection-packet-reroll') {
@@ -194,6 +209,77 @@ describe('lineage selection packet', () => {
     expect(v2.schema_version).toBe('lineage.selection_packet.v2');
     expect(v2.identity_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(v2.packet_id).toBe(`lineage_packet_${v2.identity_sha256.slice(0, 24)}`);
+  });
+
+  it('exports v3 with separate current geometry, effective future targets, and a selected-source digest', () => {
+    const files = seedSelectedWorkspace();
+    const unresolved = exportV3(files.rootId);
+    expect(unresolved).toMatchObject({
+      schema_version: 'lineage.selection_packet.v3',
+      assets: [{
+        asset_id: files.childId,
+        current_geometry: null,
+        next_output_targets: {
+          node_asset_id: files.childId,
+          origin: 'unresolved',
+          resolved_targets: [],
+        },
+      }],
+    });
+    expect(unresolved.selected_source_resolution_digest_sha256).toMatch(/^[a-f0-9]{64}$/);
+
+    const database = lineageDb();
+    try {
+      writeCanvasGenerationTargetDefaults(database, defaultProject, files.rootId, {
+        actor: 'human',
+        origin: 'canvas',
+        default_variant_count: 7,
+        targets: [{ kind: 'delivery_surface', surface_id: 'instagram.feed_portrait', surface_version: 1 }],
+      });
+    } finally {
+      database.close();
+    }
+    const inherited = exportV3(files.rootId);
+    expect(inherited.assets[0]).toMatchObject({
+      current_geometry: null,
+      next_output_targets: {
+        origin: 'canvas_default',
+        targets: [{ kind: 'delivery_surface', surface_id: 'instagram.feed_portrait', surface_version: 1 }],
+        resolved_targets: [{ width: 1080, height: 1440 }],
+      },
+    });
+    expect(inherited.assets[0].next_output_targets.targets[0]).not.toHaveProperty('variant_count');
+    expect(inherited.selected_source_resolution_digest_sha256).not.toBe(unresolved.selected_source_resolution_digest_sha256);
+
+    const overrideDatabase = lineageDb();
+    try {
+      writeNodeNextOutputTargetSetting(overrideDatabase, {
+        projectId: defaultProject,
+        rootAssetId: files.rootId,
+        nodeAssetId: files.childId,
+        expectedRevision: null,
+        targets: [
+          { kind: 'delivery_surface', surface_id: 'instagram.story', surface_version: 1 },
+          { kind: 'delivery_surface', surface_id: 'facebook.story', surface_version: 1 },
+        ],
+        provenance: { actor: 'agent', origin: 'cli' },
+      });
+    } finally {
+      overrideDatabase.close();
+    }
+    const overridden = exportV3(files.rootId);
+    expect(overridden.assets[0].next_output_targets).toMatchObject({
+      origin: 'node_override',
+      setting_revision: 1,
+      resolved_targets: [{
+        width: 1080,
+        height: 1920,
+        delivery_surfaces: [{ id: 'facebook.story' }, { id: 'instagram.story' }],
+      }],
+    });
+    expect(overridden.selected_source_resolution_digest_sha256).not.toBe(inherited.selected_source_resolution_digest_sha256);
+    expect(lineageSelectionPacketV3IdentitySha256(overridden)).toBe(overridden.identity_sha256);
+    expect(lineageSelectionPacketV3IdentityProjection(overridden)).not.toHaveProperty('created_at');
   });
 
   it('keeps v2 semantic identity stable across time, path, storage, source, format-like, and human-message envelope changes', () => {

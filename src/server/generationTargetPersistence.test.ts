@@ -6,6 +6,7 @@ import type { GenerationHandoffPacket, GenerationJobInput } from '../shared/gene
 import type { DatabaseSync } from './assetLineageDb';
 import {
   loadGenerationTargetPlan,
+  loadGenerationJobTargetResolutions,
   persistTargetAwareGenerationAggregate,
   type TargetAwareGenerationAggregate,
 } from './generationTargetPersistence';
@@ -49,6 +50,18 @@ function schema(): string {
       id text primary key, job_id text not null references generation_jobs(id) on delete cascade,
       target_group_id text not null references generation_target_groups(id), parent_asset_id text not null references assets(id),
       output_index integer not null, variant_index integer not null, output_spec_json text
+    );
+    create table generation_job_target_resolutions (
+      job_id text not null references generation_jobs(id) on delete cascade,
+      parent_asset_id text not null references assets(id),
+      origin text not null,
+      setting_revision integer,
+      setting_digest_sha256 text,
+      canvas_default_digest_sha256 text,
+      resolution_digest_sha256 text not null,
+      targets_json text not null,
+      resolved_targets_json text not null,
+      primary key(job_id, parent_asset_id)
     );
     insert into projects values ('project');
     insert into assets values ('root', 'project'), ('asset-a', 'project');
@@ -108,6 +121,21 @@ function aggregate(): TargetAwareGenerationAggregate {
     },
     inputs: [input],
     plan,
+    sourceTargetResolutions: [{
+      parent_asset_id: 'asset-a',
+      origin: 'node_override',
+      setting_revision: 2,
+      setting_digest_sha256: 'setting-digest',
+      resolution_digest_sha256: 'resolution-digest',
+      targets: [{ kind: 'delivery_surface', surface_id: 'instagram.feed_square', surface_version: 1 }],
+      resolved_targets: [{
+        media_kind: 'static_image',
+        width: 1080,
+        height: 1080,
+        delivery_surfaces: plan.groups[0].delivery_surfaces,
+        geometry: plan.groups[0].geometry,
+      }],
+    }],
     receipt: { id: 'job:receipt:plan', command: 'generate image plan', payload: { target_map_digest: plan.digest_sha256 }, created_at: timestamp },
   };
 }
@@ -121,13 +149,14 @@ describe('generation target persistence', () => {
     expect(loaded?.groups).toHaveLength(1);
     expect(loaded?.slots).toHaveLength(2);
     expect(loaded?.slots.every(slot => slot.output_spec?.width === 1080)).toBe(true);
+    expect(loadGenerationJobTargetResolutions(database, 'job')).toEqual(value.sourceTargetResolutions);
     expect(database.prepare('select count(*) count from generation_job_receipts').get()).toMatchObject({ count: 1 });
   });
 
   it('rolls back the entire aggregate when its plan receipt cannot commit', () => {
     database.exec(`create trigger reject_plan_receipt before insert on generation_job_receipts begin select raise(abort, 'receipt rejected'); end;`);
     expect(() => persistTargetAwareGenerationAggregate(database, aggregate())).toThrow(/receipt rejected/i);
-    for (const table of ['generation_jobs', 'generation_job_inputs', 'generation_target_maps', 'generation_target_groups', 'generation_output_slots']) {
+    for (const table of ['generation_jobs', 'generation_job_inputs', 'generation_target_maps', 'generation_target_groups', 'generation_output_slots', 'generation_job_target_resolutions']) {
       expect(database.prepare(`select count(*) count from ${table}`).get()).toMatchObject({ count: 0 });
     }
   });

@@ -95,10 +95,13 @@ describe('lineage CLI start options', () => {
 
     expect(help).toContain('lineage tasks cancel --task <task-id> [--confirm-write] [--override] [--project <project>] [--db <path>] [--json]');
     expect(help).toContain('lineage selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>]');
-    expect(help).toContain('[--schema v2]');
+    expect(help).toContain('[--schema v2|v3]');
     expect(help).toContain('lineage link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>"');
     expect(help).toContain('lineage generate image plan --prompt <text> --from-lineage-selection');
     expect(help).toContain('lineage output-targets list --media image [--json]');
+    expect(help).toContain('lineage output-targets node replace');
+    expect(help).toContain('--from-node-targets --expected-target-resolution-digest <sha256>');
+    expect(help).toContain('lineage generate image cancel --job-id <job-id> --confirm-write');
     expect(help).toContain('--target-map <json-file>');
     expect(help).toContain('lineage generate image scaffold --job-id <job-id> [--format png|jpeg|webp] --confirm-write --profile <profile> --project <project> --json');
     expect(help).toContain('lineage generate image import --job-id <job-id> --manifest <json-file> --confirm-write');
@@ -341,7 +344,7 @@ describe('lineage CLI handoff commands', () => {
     expect(packet.assets[0].s3.key).toContain(fixtureRootAssetId);
   });
 
-  it('exports v2 only when explicitly selected and rejects unsupported packet schemas', () => {
+  it('exports versioned packets only when explicitly selected and rejects unsupported packet schemas', () => {
     seedCliDb();
     const localFile = join(cliScratchDir, 'v2-cli-selection.png');
     writeFileSync(localFile, Buffer.from('v2-cli-selection'));
@@ -365,6 +368,17 @@ describe('lineage CLI handoff commands', () => {
     expect(packet.schema_version).toBe('lineage.selection_packet.v2');
     expect(packet.identity_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(packet.packet_id).toBe(`lineage_packet_${packet.identity_sha256.slice(0, 24)}`);
+    const v3 = runLineageDataCommand('selection', [
+      'packet',
+      '--project', defaultProject,
+      '--root', localAssetId,
+      '--db', cliDbFile,
+      '--schema', 'v3',
+      '--json',
+    ]) as { identity_sha256: string; schema_version: string; selected_source_resolution_digest_sha256: string };
+    expect(v3.schema_version).toBe('lineage.selection_packet.v3');
+    expect(v3.identity_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(v3.selected_source_resolution_digest_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(() => runLineageDataCommand('selection', [
       'packet',
       '--project', defaultProject,
@@ -781,6 +795,119 @@ describe('lineage CLI handoff commands', () => {
       '--target-map', malformedTargetMap,
       '--json',
     ])).toThrow('Custom target contains unknown field: inferred_platform');
+  });
+
+  it('bridges v3 selection intent through explicit node mutations, planning, inspect, and cancellation', () => {
+    seedCliDb();
+    const localFile = join(cliScratchDir, 'node-target-v3.png');
+    writeFileSync(localFile, Buffer.from('node-target-v3'));
+    indexLineageAssets(defaultProject);
+    const nodeId = `local-${fileSha256(localFile).slice(0, 12)}`;
+    createLineageWorkspace(defaultProject, {
+      activate: true,
+      confirmWrite: true,
+      createdBy: 'agent',
+      rootAssetId: nodeId,
+      title: 'CLI node-target workspace',
+    });
+    updateSelectedAsset(defaultProject, {
+      assetId: nodeId,
+      confirmWrite: true,
+      rootAssetId: nodeId,
+    });
+    expect(runLineageDataCommand('output-targets', [
+      'node', 'get', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--json',
+    ])).toMatchObject({ setting: null, effective: { origin: 'unresolved' } });
+    expect(() => runLineageDataCommand('output-targets', [
+      'node', 'set', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--destination', 'Instagram', '--confirm-write',
+    ])).toThrow(/requires an explicit delivery surface/i);
+
+    const set = runLineageDataCommand('output-targets', [
+      'node', 'set', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId,
+      '--destination', 'instagram.story',
+      '--destination', 'facebook.story',
+      '--custom-dimensions', '1200x628',
+      '--confirm-write', '--json',
+    ]) as { setting: { revision: number }; effective: { resolved_targets: Array<{ height: number; width: number }> } };
+    expect(set.setting.revision).toBe(1);
+    expect(set.effective.resolved_targets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ width: 1080, height: 1920 }),
+      expect.objectContaining({ width: 1200, height: 628 }),
+    ]));
+    expect(() => runLineageDataCommand('output-targets', [
+      'node', 'set', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--custom-dimensions', '1080x1080', '--confirm-write',
+    ])).toThrow(/revision conflict/i);
+    expect(() => runLineageDataCommand('output-targets', [
+      'node', 'replace', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--expected-revision', '1',
+      '--custom-dimensions', '1080x1080', '--force', '--confirm-write',
+    ])).toThrow(/do not support --force/i);
+    expect(() => runLineageDataCommand('output-targets', [
+      'node', 'replace', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--expected-revision', '1',
+      '--custom-dimensions', '1080x1080', '--variants-per-target', '3', '--confirm-write',
+    ])).toThrow(/job-time options/i);
+
+    const packet = runLineageDataCommand('selection', [
+      'packet', '--project', defaultProject, '--root', nodeId,
+      '--schema', 'v3', '--json',
+    ]) as {
+      assets: Array<{ current_geometry: unknown; next_output_targets: { setting_revision: number } }>;
+      schema_version: string;
+      selected_source_resolution_digest_sha256: string;
+    };
+    expect(packet).toMatchObject({
+      schema_version: 'lineage.selection_packet.v3',
+      assets: [{ current_geometry: null, next_output_targets: { setting_revision: 1 } }],
+    });
+    const planned = runLineageDataCommand('generate', [
+      'image', 'plan', '--project', defaultProject,
+      '--prompt', 'Use the exact persisted next-output targets.',
+      '--from-lineage-selection', '--from-node-targets',
+      '--expected-target-resolution-digest', packet.selected_source_resolution_digest_sha256,
+      '--variants-per-target', '2', '--json',
+    ]) as {
+      job: {
+        expected_output_count: number;
+        id: string;
+        source_target_resolutions: unknown[];
+        status: string;
+      };
+    };
+    expect(planned.job).toMatchObject({
+      expected_output_count: 4,
+      source_target_resolutions: [{ setting_revision: 1 }],
+      status: 'planned',
+    });
+    expect(() => runLineageDataCommand('generate', [
+      'image', 'plan', '--project', defaultProject,
+      '--prompt', 'Refuse missing packet digest.',
+      '--from-lineage-selection', '--from-node-targets',
+    ])).toThrow(/requires --expected-target-resolution-digest/i);
+
+    const replaced = runLineageDataCommand('output-targets', [
+      'node', 'replace', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--expected-revision', '1',
+      '--custom-dimensions', '1080x1080', '--confirm-write', '--json',
+    ]) as { setting: { revision: number } };
+    expect(replaced.setting.revision).toBe(2);
+    const inspected = runLineageDataCommand('generate', [
+      'image', 'inspect', '--project', defaultProject, '--job-id', planned.job.id, '--json',
+    ]) as typeof planned;
+    expect(inspected.job.source_target_resolutions).toEqual(planned.job.source_target_resolutions);
+    expect(runLineageDataCommand('generate', [
+      'image', 'cancel', '--project', defaultProject, '--job-id', planned.job.id,
+      '--confirm-write', '--json',
+    ])).toMatchObject({ job: { status: 'cancelled' } });
+    expect(runLineageDataCommand('output-targets', [
+      'node', 'clear', '--project', defaultProject, '--root', nodeId,
+      '--node', nodeId, '--expected-revision', '2',
+      '--confirm-write', '--json',
+    ])).toMatchObject({ cleared: true, effective: { origin: 'unresolved' } });
   });
 
   it('scaffolds frozen target-aware slots without placeholders or clobbering', () => {

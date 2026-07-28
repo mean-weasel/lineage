@@ -307,6 +307,7 @@ describe('CLI writer classification', () => {
     expect(lineageCliRequiresWriterLease('db', ['info'])).toBe(false);
     expect(lineageCliRequiresWriterLease('next', ['--root', 'root'])).toBe(false);
     expect(lineageCliRequiresWriterLease('selection', ['packet'])).toBe(false);
+    expect(lineageCliRequiresWriterLease('output-targets', ['node', 'get'])).toBe(false);
     expect(lineageCliRequiresWriterLease('generate', ['image', 'inspect'])).toBe(false);
     expect(lineageCliRequiresWriterLease('reroll', ['list'])).toBe(false);
     expect(lineageCliRequiresWriterLease('tasks', ['inspect'])).toBe(false);
@@ -314,6 +315,10 @@ describe('CLI writer classification', () => {
     expect(lineageCliRequiresWriterLease('link-child', ['--confirm-write'])).toBe(true);
     expect(lineageCliRequiresWriterLease('generate', ['image', 'plan'])).toBe(true);
     expect(lineageCliRequiresWriterLease('generate', ['image', 'import'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('generate', ['image', 'cancel'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('output-targets', ['node', 'set'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('output-targets', ['node', 'replace'])).toBe(true);
+    expect(lineageCliRequiresWriterLease('output-targets', ['node', 'clear'])).toBe(true);
     expect(lineageCliRequiresWriterLease('reroll', ['mark'])).toBe(true);
     expect(lineageCliRequiresWriterLease('tasks', ['claim'])).toBe(true);
     expect(lineageCliRequiresWriterLease('agent', ['claim'])).toBe(true);
@@ -322,7 +327,8 @@ describe('CLI writer classification', () => {
   it('allowlists every current delegated mutator and rejects reads or unknown writes', () => {
     for (const [command, args] of [
       ['link-child', ['--confirm-write']],
-      ['generate', ['image', 'plan']], ['generate', ['image', 'import']],
+      ['generate', ['image', 'plan']], ['generate', ['image', 'import']], ['generate', ['image', 'cancel']],
+      ['output-targets', ['node', 'set']], ['output-targets', ['node', 'replace']], ['output-targets', ['node', 'clear']],
       ['reroll', ['mark']], ['reroll', ['cancel']], ['reroll', ['plan']], ['reroll', ['import']],
       ['tasks', ['claim']], ['tasks', ['start']], ['tasks', ['comment']], ['tasks', ['cancel']], ['tasks', ['override']], ['tasks', ['instructions']],
       ['agent', ['claim']], ['agent', ['heartbeat']], ['agent', ['release']], ['agent', ['revoke']], ['agent', ['transfer']],
@@ -331,6 +337,7 @@ describe('CLI writer classification', () => {
     }
     expect(lineageCliCanDelegateMutation('agent', ['status'])).toBe(false);
     expect(lineageCliCanDelegateMutation('generate', ['image', 'inspect'])).toBe(false);
+    expect(lineageCliCanDelegateMutation('output-targets', ['node', 'get'])).toBe(false);
     expect(lineageCliCanDelegateMutation('tasks', ['unknown-write'])).toBe(false);
     expect(lineageCliCanDelegateMutation('unknown', ['write'])).toBe(false);
   });

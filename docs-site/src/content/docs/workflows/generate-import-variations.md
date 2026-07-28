@@ -17,22 +17,25 @@ a surface before planning.
 ## Step-by-step workflow
 
 1. Select one or more parent assets.
-2. Discover or resolve named surfaces with `output-targets list` and
-   `output-targets resolve`.
-3. Choose exact delivery surfaces or custom dimensions for each selected
-   source. Multiple sources require a complete target-map file rather than one
-   shared implicit platform choice.
-4. Inspect the plan's resolved dimensions, consolidated destinations, explicit
+2. Export `selection packet --schema v3` and capture its complete selected-
+   source resolution digest.
+3. Inspect each node with `output-targets node get`. Discover or resolve named
+   surfaces when a node is unresolved. Never infer a surface from a platform.
+4. Create a missing node setting explicitly. Replacing or clearing a sticky
+   setting requires its exact revision; agents cannot mutate canvas defaults.
+5. Persist the job with `--from-node-targets` and the v3 resolution digest
+   before generating externally.
+6. Inspect the plan's resolved dimensions, consolidated destinations, explicit
    splits, variant counts, and total output slots.
-5. Scaffold the persisted target-aware job. Choose `png`, `jpeg`, or `webp`;
+7. Scaffold the persisted target-aware job. Choose `png`, `jpeg`, or `webp`;
    the command creates only the job-scoped manifest and reports exact
    destinations and dimensions.
-6. Generate each slot outside Lineage at its reported exact pixels and copy it
+8. Generate each slot outside Lineage at its reported exact pixels and copy it
    to the reported path without overwriting anything.
-7. Fill only each distinct one- or two-word `edge_summary`. The scaffold has
+9. Fill only each distinct one- or two-word `edge_summary`. The scaffold has
    already filled only `file_path`; leave all frozen fields unchanged.
-8. Import the scaffolded manifest with explicit write confirmation.
-9. Verify the produced nodes, actual decoded dimensions, output specifications,
+10. Import the scaffolded manifest with explicit write confirmation.
+11. Verify the produced nodes, actual decoded dimensions, output specifications,
    and receipts.
 
 Delivery surfaces with identical dimensions consolidate into one creative by

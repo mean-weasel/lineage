@@ -50,6 +50,38 @@ Platform-only resolution returns candidate surfaces and never chooses one
 silently. Defaults are readable by agents and the CLI but are mutated only by a
 confirmed human canvas action.
 
+Read and edit a node's sticky future targets independently from its current
+asset geometry:
+
+```bash
+lineage-stable selection packet --profile team-production --project <project> \
+  --root <root-asset-id> --schema v3 --json
+lineage-stable output-targets node get --profile team-production \
+  --project <project> --root <root-asset-id> --node <node-asset-id> --json
+lineage-stable output-targets node set --profile team-production \
+  --project <project> --root <root-asset-id> --node <node-asset-id> \
+  --destination instagram.story --confirm-write --json
+```
+
+`node set` only creates a missing setting. Changing or clearing an existing
+setting requires `node replace` or `node clear` plus its exact
+`--expected-revision`; conflicts fail without an implicit force option. Agents
+cannot write canvas defaults.
+
+Persist a job from the packet's complete selected-source digest before provider
+generation:
+
+```bash
+lineage-stable generate image plan --profile team-production \
+  --project <project> --from-lineage-selection --from-node-targets \
+  --expected-target-resolution-digest <selection-v3-digest> \
+  --variants-per-target 2 --prompt "Create exact variations" --json
+```
+
+The job freezes each source's origin, setting/default digest, exact pixels, and
+surface metadata. Use `generate image cancel --job-id <job-id> --confirm-write`
+to abandon a planned job; cancellation is idempotent and blocks import.
+
 For exactly one selected source, repeated flags are shorthand:
 
 ```bash

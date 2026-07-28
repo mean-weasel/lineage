@@ -39,6 +39,7 @@ import {
   updateLineageTaskInstructions,
 } from '../server/assetLineageTasks';
 import {
+  cancelImageGeneration,
   importImageGenerationOutputs,
   importImageRerollOutput,
   inspectImageGeneration,
@@ -60,7 +61,8 @@ import {
   resolveLineageProfile,
   upgradeLineageStableProfileRuntime,
 } from '../server/lineageProfiles';
-import { executeManagedWriterCommand } from '../server/managedWriterRouting';
+import { executeManagedWriterCommand, ManagedWriterRoutingError } from '../server/managedWriterRouting';
+import { NodeNextOutputTargetError } from '../server/nodeNextOutputTargets';
 import { acquireProfileWriterLease, ProfileWriterLeaseConflictError } from '../server/profileWriterLease';
 import type {
   LineageProfileAssetsCloneResult,
@@ -74,7 +76,16 @@ import type {
 } from '../shared/lineageProfileTypes';
 import type { LineageRuntimeCodeIdentity, LineageRuntimeInfo } from '../shared/runtimeInfoTypes';
 import { OutputTargetResolutionError, type GenerationTargetMap } from '../shared/outputTargetTypes';
-import { listOutputTargets, readOutputTargetDefaults, resolveOutputTargetQuery } from './outputTargetCli';
+import {
+  clearNodeOutputTargets,
+  listOutputTargets,
+  nodeTargetsFromCli,
+  readNodeOutputTargets,
+  readOutputTargetDefaults,
+  replaceNodeOutputTargets,
+  resolveOutputTargetQuery,
+  setNodeOutputTargets,
+} from './outputTargetCli';
 
 export interface LineageCliConfig {
   binName: 'lineage' | 'lineage-dev' | 'lineage-preview';
@@ -280,15 +291,21 @@ Usage:
   ${config.binName} next [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} brief [--project <project>] [--root <asset-id>] [--db <path>] [--json]
   ${config.binName} inspect --asset-id <asset-id> [--project <project>] [--db <path>] [--json]
-  ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--schema v2] [--out <path>] [--strict] [--db <path>] [--json]
+  ${config.binName} selection packet [--project <project>] [--workspace <id-or-root>|--root <asset-id>] [--channel <channel>] [--campaign <campaign>] [--context-notes <text>] [--label <label>] [--schema v2|v3] [--out <path>] [--strict] [--db <path>] [--json]
   ${config.binName} output-targets list --media image [--json]
   ${config.binName} output-targets resolve --query <platform-or-surface> [--json]
   ${config.binName} output-targets defaults --project <project> --root <asset-id> [--db <path>] [--json]
+  ${config.binName} output-targets node get --project <project> --root <root-id> --node <node-id> [--json]
+  ${config.binName} output-targets node set --project <project> --root <root-id> --node <node-id> (--destination <surface>|--custom-dimensions <width>x<height>)... --confirm-write [--json]
+  ${config.binName} output-targets node replace --project <project> --root <root-id> --node <node-id> --expected-revision <revision> (--destination <surface>|--custom-dimensions <width>x<height>)... --confirm-write [--json]
+  ${config.binName} output-targets node clear --project <project> --root <root-id> --node <node-id> --expected-revision <revision> --confirm-write [--json]
   ${config.binName} link-child --root <asset-id> --child <asset-id> --summary "<one-or-two-words>" [--project <project>] [--claim-token <claim-id.secret>] [--confirm-write] [--db <path>] [--json]
   ${config.binName} generate image plan --prompt <text> --from-lineage-selection [--count <count>|--per-base-count <count>] [--project <project>] [--dry-run] [--db <path>] [--json]
   ${config.binName} generate image plan --prompt <text> --from-lineage-selection (--destination <surface>|--custom-dimensions <width>x<height>)... [--separate-destination <surface>] [--variants-per-target <count>] [--project <project>] [--dry-run] [--db <path>] [--json]
   ${config.binName} generate image plan --prompt <text> --from-lineage-selection --target-map <json-file> [--project <project>] [--dry-run] [--db <path>] [--json]
+  ${config.binName} generate image plan --prompt <text> --from-lineage-selection --from-node-targets --expected-target-resolution-digest <sha256> [--variants-per-target <count>] [--project <project>] [--dry-run] [--json]
   ${config.binName} generate image inspect --job-id <job-id> [--project <project>] [--db <path>] [--json]
+  ${config.binName} generate image cancel --job-id <job-id> --confirm-write [--project <project>] [--json]
   ${config.binName} generate image scaffold --job-id <job-id> [--format png|jpeg|webp] --confirm-write --profile <profile> --project <project> --json
   ${config.binName} generate image import --job-id <job-id> --manifest <json-file> --confirm-write [--project <project>] [--db <path>] [--json]
   ${config.binName} generate image import --job-id <legacy-job-id> (--files <file,file>|--parent-files <parent=file;parent=file>) --confirm-write [--project <project>] [--db <path>] [--json]
@@ -616,7 +633,9 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
     const subcommand = positionalArgs(args)[0] || '';
     if (subcommand !== 'packet') throw new Error(`Unknown selection command: ${subcommand}`);
     const schema = readOption(args, '--schema');
-    if (schema && schema !== 'v2') throw new Error(`Unsupported selection packet schema: ${schema}. Omit --schema for v1 or pass --schema v2.`);
+    if (schema && schema !== 'v2' && schema !== 'v3') {
+      throw new Error(`Unsupported selection packet schema: ${schema}. Omit --schema for v1 or pass --schema v2 or v3.`);
+    }
     const labels = readOptions(args, '--label')
       .flatMap(label => label.split(','))
       .map(label => label.trim())
@@ -630,7 +649,7 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
       labels,
       packageVersion: packageVersion(),
       rootAssetId: options.rootAssetId,
-      schema: schema === 'v2' ? 'v2' : undefined,
+      schema: schema === 'v2' || schema === 'v3' ? schema : undefined,
       strict: args.includes('--strict'),
       workspaceId: readOption(args, '--workspace') || readOption(args, '--workspace-id'),
     });
@@ -643,7 +662,7 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
     return packet;
   }
   if (command === 'output-targets') {
-    const subcommand = positionalArgs(args)[0] || '';
+    const [subcommand, nodeAction] = positionalArgs(args);
     if (subcommand === 'list') return listOutputTargets(readOption(args, '--media'));
     if (subcommand === 'resolve') {
       const query = readOption(args, '--query');
@@ -655,6 +674,77 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
       const database = lineageDb();
       try {
         return readOutputTargetDefaults(database, options.project, options.rootAssetId);
+      } finally {
+        database.close();
+      }
+    }
+    if (subcommand === 'node') {
+      if (!options.rootAssetId) throw new Error(`lineage output-targets node ${nodeAction || 'command'} requires --root`);
+      const nodeAssetId = readOption(args, '--node');
+      if (!nodeAssetId) throw new Error(`lineage output-targets node ${nodeAction || 'command'} requires --node`);
+      const database = lineageDb();
+      try {
+        if (nodeAction === 'get') {
+          return readNodeOutputTargets(database, options.project, options.rootAssetId, nodeAssetId);
+        }
+        if (!options.confirmWrite) {
+          throw new Error(`lineage output-targets node ${nodeAction || 'command'} requires --confirm-write`);
+        }
+        if (hasOption(args, '--force')) {
+          throw new Error('Node output-target mutations do not support --force; use set, replace, or clear with exact revision semantics');
+        }
+        if (
+          hasOption(args, '--variants-per-target')
+          || hasOption(args, '--separate-destination')
+          || hasOption(args, '--split-destination')
+          || hasOption(args, '--count')
+        ) {
+          throw new Error('Node output-target settings contain geometry only; variation counts and creative splits are job-time options');
+        }
+        if (nodeAction === 'clear') {
+          if (hasOption(args, '--destination') || hasOption(args, '--custom-dimensions')) {
+            throw new Error('lineage output-targets node clear does not accept target options');
+          }
+          const expectedRevision = Number(readOption(args, '--expected-revision'));
+          if (!Number.isInteger(expectedRevision) || expectedRevision <= 0) {
+            throw new Error('lineage output-targets node clear requires a positive --expected-revision');
+          }
+          return clearNodeOutputTargets(database, {
+            project: options.project,
+            rootAssetId: options.rootAssetId,
+            nodeAssetId,
+            expectedRevision,
+          });
+        }
+        const targets = nodeTargetsFromCli({
+          destinations: readOptions(args, '--destination'),
+          customDimensions: readOptions(args, '--custom-dimensions'),
+        });
+        if (nodeAction === 'set') {
+          if (hasOption(args, '--expected-revision')) {
+            throw new Error('lineage output-targets node set cannot replace a setting; use node replace with --expected-revision');
+          }
+          return setNodeOutputTargets(database, {
+            project: options.project,
+            rootAssetId: options.rootAssetId,
+            nodeAssetId,
+            targets,
+          });
+        }
+        if (nodeAction === 'replace') {
+          const expectedRevision = Number(readOption(args, '--expected-revision'));
+          if (!Number.isInteger(expectedRevision) || expectedRevision <= 0) {
+            throw new Error('lineage output-targets node replace requires a positive --expected-revision');
+          }
+          return replaceNodeOutputTargets(database, {
+            project: options.project,
+            rootAssetId: options.rootAssetId,
+            nodeAssetId,
+            expectedRevision,
+            targets,
+          });
+        }
+        throw new Error(`Unknown output-targets node command: ${nodeAction || ''}`);
       } finally {
         database.close();
       }
@@ -688,15 +778,34 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
         ...readOptions(args, '--split-destination'),
       ];
       const rawVariantsPerTarget = readOption(args, '--variants-per-target');
-      const shorthandRequested = destinations.length > 0
+      const fromNodeTargets = args.includes('--from-node-targets');
+      const expectedTargetResolutionDigest = readOption(args, '--expected-target-resolution-digest');
+      const shorthandRequested = !fromNodeTargets && (
+        destinations.length > 0
         || customDimensions.length > 0
         || separateDestinations.length > 0
-        || rawVariantsPerTarget !== undefined;
+        || rawVariantsPerTarget !== undefined
+      );
       if (!prompt) throw new Error('lineage generate image plan requires --prompt');
+      if (fromNodeTargets && !expectedTargetResolutionDigest) {
+        throw new Error('lineage generate image plan --from-node-targets requires --expected-target-resolution-digest from selection packet v3');
+      }
+      if (fromNodeTargets && (
+        targetMapPath !== undefined
+        || destinations.length > 0
+        || customDimensions.length > 0
+        || separateDestinations.length > 0
+        || rawCount !== undefined
+        || rawPerBaseCount !== undefined
+      )) {
+        throw new Error('lineage generate image plan --from-node-targets cannot be combined with target-map, destination, custom-dimension, count, or per-base-count options');
+      }
       return planImageGeneration(options.project, {
         count: rawCount === undefined ? undefined : Number(rawCount),
         dryRun: args.includes('--dry-run'),
         fromLineageSelection: args.includes('--from-lineage-selection'),
+        fromNodeTargets,
+        expectedTargetResolutionDigest,
         perBaseCount: rawPerBaseCount === undefined ? undefined : Number(rawPerBaseCount),
         prompt,
         targetMap: targetMapPath === undefined
@@ -708,12 +817,20 @@ export function runLineageDataCommand(command: string, args: string[]): unknown 
           separateDestinations,
           variantsPerTarget: rawVariantsPerTarget === undefined ? undefined : Number(rawVariantsPerTarget),
         } : undefined,
+        variantsPerTarget: fromNodeTargets && rawVariantsPerTarget !== undefined
+          ? Number(rawVariantsPerTarget)
+          : undefined,
       });
     }
     if (subcommand === 'inspect') {
       const jobId = readOption(args, '--job-id');
       if (!jobId) throw new Error('lineage generate image inspect requires --job-id');
       return inspectImageGeneration(options.project, jobId);
+    }
+    if (subcommand === 'cancel') {
+      const jobId = readOption(args, '--job-id');
+      if (!jobId) throw new Error('lineage generate image cancel requires --job-id');
+      return cancelImageGeneration(options.project, { jobId, confirmWrite: options.confirmWrite });
     }
     if (subcommand === 'scaffold') {
       return scaffoldImageGeneration(options.project, args, options.confirmWrite);
@@ -1162,9 +1279,12 @@ function printRuntimeResult(result: LineageRuntimeCodeIdentity, json: boolean): 
 }
 
 export function lineageCliRequiresWriterLease(command: string, args: string[]): boolean {
-  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection' || command === 'output-targets') return false;
+  if (command === 'next' || command === 'brief' || command === 'inspect' || command === 'selection') return false;
   const positions = positionalArgs(args);
   const subcommand = positions[0] || '';
+  if (command === 'output-targets') {
+    return subcommand === 'node' && ['set', 'replace', 'clear'].includes(positions[1] || '');
+  }
   if (command === 'generate') return positions[0] !== 'image' || positions[1] !== 'inspect';
   if (command === 'reroll') return subcommand !== 'list';
   if (command === 'social') return subcommand !== 'list';
@@ -1178,7 +1298,8 @@ export function lineageCliCanDelegateMutation(command: string, args: string[]): 
   const positions = positionalArgs(args);
   const subcommand = positions[0] || '';
   if (command === 'link-child') return true;
-  if (command === 'generate') return positions[0] === 'image' && ['plan', 'scaffold', 'import'].includes(positions[1] || '');
+  if (command === 'output-targets') return subcommand === 'node' && ['set', 'replace', 'clear'].includes(positions[1] || '');
+  if (command === 'generate') return positions[0] === 'image' && ['plan', 'scaffold', 'import', 'cancel'].includes(positions[1] || '');
   if (command === 'reroll') return ['mark', 'cancel', 'plan', 'import'].includes(subcommand);
   if (command === 'social') return ['mark', 'unmark'].includes(subcommand);
   if (command === 'tasks') return ['claim', 'start', 'comment', 'cancel', 'override', 'instructions'].includes(subcommand);
@@ -1202,11 +1323,18 @@ function argsWithoutProfileSelector(args: string[]): string[] {
 
 export function executeDelegatedLineageMutation(command: string, args: string[]): unknown {
   if (!lineageCliCanDelegateMutation(command, args)) throw new Error(`Unsupported managed writer command: ${command}`);
-  if (command === 'agent') {
-    const agentCommand = args[0] || '';
-    return runLineageAgentCommand(agentCommand, args.slice(1));
+  try {
+    if (command === 'agent') {
+      const agentCommand = args[0] || '';
+      return runLineageAgentCommand(agentCommand, args.slice(1));
+    }
+    return runLineageDataCommand(command, args);
+  } catch (error) {
+    if (error instanceof NodeNextOutputTargetError) {
+      throw new ManagedWriterRoutingError(`${error.code}: ${error.message}`, error.status, { cause: error });
+    }
+    throw error;
   }
-  return runLineageDataCommand(command, args);
 }
 
 function printDbResult(command: string, result: unknown, json: boolean): void {
@@ -1575,6 +1703,8 @@ export async function runLineageCli(config: LineageCliConfig, args = process.arg
       if (json) {
         const output = isAgentClaimError(error)
           ? { ok: false, command, error: error.code, message, conflicts: error.conflicts }
+          : error instanceof NodeNextOutputTargetError
+            ? { ok: false, command, error: error.code, message, status: error.status }
           : error instanceof OutputTargetResolutionError
             ? { ok: false, command, error: error.code, message, choices: error.choices }
           : { ok: false, command, error: message };
