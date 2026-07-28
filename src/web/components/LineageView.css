@@ -30,7 +30,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .lineage-header {
