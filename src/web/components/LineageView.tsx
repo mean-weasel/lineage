@@ -86,6 +86,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   const [generationOpen, setGenerationOpen] = useState(false);
   const [outputDefaultsOpen, setOutputDefaultsOpen] = useState(false);
   const [workspaceProgress, setWorkspaceProgress] = useState<LineageWorkspaceProgress>(null);
+  const indexingRefreshStarted = useRef(false);
   const [menuCloseSignal, setMenuCloseSignal] = useState(0);
   const [replaySnapshot, setReplaySnapshot] = useState<LineageSnapshot | null>(null);
   const [replayStageIndex, setReplayStageIndex] = useState(-1);
@@ -290,6 +291,7 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   }
   async function seedSwissifierAndRefreshAssets() {
     closeTransientMenus();
+    indexingRefreshStarted.current = false;
     setWorkspaceProgress('seeding');
     const seeded = await seedSwissifierDemoWorkspace();
     if (!seeded) {
@@ -300,9 +302,14 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
       setWorkspaceProgress('indexing');
       await nextBrowserPaint();
       await onAssetsChanged?.();
+      indexingRefreshStarted.current = true;
       const ready = await refresh({ rootAssetId: seeded.workspace?.root_asset_id || seeded.root_asset_id });
-      if (!ready) setWorkspaceProgress('error');
+      if (!ready) {
+        indexingRefreshStarted.current = false;
+        setWorkspaceProgress('error');
+      }
     } catch (error) {
+      indexingRefreshStarted.current = false;
       setWorkspaceProgress('error');
       onToast('error', error instanceof Error ? error.message : String(error));
     }
@@ -696,8 +703,9 @@ export function LineageView({ actionsOpen, asset, onActionsOpenChange, onAssetsC
   }, [graph.edges, graph.nodes, graphKey, setFlowEdges, setFlowNodes]);
 
   useEffect(() => {
-    if (workspaceProgress !== 'indexing' || !snapshot?.nodes.length) return;
+    if (workspaceProgress !== 'indexing' || !indexingRefreshStarted.current || !snapshot?.nodes.length) return;
     if (renderedGraphKey.current !== graphKey || flowNodes.length !== snapshot.nodes.length) return;
+    indexingRefreshStarted.current = false;
     setWorkspaceProgress('ready');
   }, [flowNodes.length, graphKey, snapshot, workspaceProgress]);
 

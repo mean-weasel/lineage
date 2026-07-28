@@ -51,10 +51,13 @@
   display: grid;
   gap: 6px;
   min-width: 220px;
+  max-height: min(680px, calc(100vh - 164px));
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 16px 42px rgba(18, 31, 45, 0.16);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
 }
 
