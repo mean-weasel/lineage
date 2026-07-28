@@ -147,6 +147,7 @@ function renderPanel(props: Partial<Parameters<typeof LineageSidePanel>[0]> = {}
         latestNodes={snapshot.nodes}
         linkChild={async () => undefined}
         markReview={async () => undefined}
+        mode="selection"
         nextVariationLimit={3}
         noteDirty={false}
         onSelectedAsset={() => undefined}

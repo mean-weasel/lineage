@@ -93,12 +93,34 @@ npm run lineage:dev -- db info --profile team-development --json &&
 npm run dev -- --profile team-development
 ```
 
-Open `http://lineage-dev.localhost:5198`, then choose **Load demo lineage** for
-a small graph or use the workspace menu's **Load rich image demo** for the full
-media-backed example. On later runs, reuse the same healthy profile and run
-only the final start command. If profile initialization reports an existing but
-unhealthy profile, run the exact `profile doctor` command it prints before
-changing anything.
+Open `http://lineage-dev.localhost:5198`, expand **Demo/QA** in the Canvas
+context panel, then choose **Load demo lineage** for a small graph or **Load
+rich image demo** for the full media-backed example. On later runs, reuse the
+same healthy profile and run only the final start command. If profile
+initialization reports an existing but unhealthy profile, run the exact
+`profile doctor` command it prints before changing anything.
+
+### Using the navigation shell
+
+The left rail exposes every destination directly: Canvas, Assets, Content
+batches, Review, Backup queue, Agents, Ledger, and Settings. The adjacent
+context panel contains the current project plus controls that apply to the
+active destination. Collapse that panel when you want more room; its desktop
+state is remembered in this browser. On mobile, the rail becomes a menu button
+that opens the same navigation and context as a drawer.
+
+Canvas uses the remaining viewport without a top toolbar. Its context panel
+contains the workspace picker, node/link count, Replay growth, New lineage,
+Plan outputs, output defaults, and selection management. Maintenance and
+Demo/QA are collapsed by default. Archive current lineage remains under
+**Workspace options** and uses destructive styling.
+
+Use the gear at the lower right of Canvas for presentation and graph controls:
+compact or portrait cards, direction, edge weight, edge labels, hover
+previews, Fit graph, Tidy tree, and Reset appearance. These appearance choices
+are stored in the browser. Canvas settings, selection, and Canvas asset details
+share one right-side panel, so opening one replaces the other; on mobile that
+panel becomes a bottom sheet.
 
 ### Install the published channels
 
@@ -778,7 +800,12 @@ Lineage also includes a lightweight Swissifier rich-demo manifest at `fixtures/d
 
 The package intentionally includes three public-safe synthetic Swissifier re-roll PNG fixtures in `fixtures/demo-project/lineage/swissifier-rerolls/`. They are the only generated PNG media committed with the rich demo, and each file is pinned in the manifest by filename, SHA-256, size, content type, prompt, and demo generation job id so public-readiness and package-smoke checks can prove the fixture is hermetic.
 
-To hydrate the Swissifier demo with real images, use the Demo seed menu's Swissifier `Download media` control. Lineage downloads `swissifier-rich-demo-v1.tar.gz` from the [v0.1.2 GitHub release](https://github.com/mean-weasel/lineage/releases/tag/v0.1.2), verifies the archive checksum, safely unpacks the PNGs into local scratch storage, and then verifies each PNG checksum before loading the rich demo.
+To hydrate the Swissifier demo with real images, expand **Demo/QA** in the
+Canvas context panel and use **Download rich images**. Lineage downloads
+`swissifier-rich-demo-v1.tar.gz` from the [v0.1.2 GitHub
+release](https://github.com/mean-weasel/lineage/releases/tag/v0.1.2), verifies
+the archive checksum, safely unpacks the PNGs into local scratch storage, and
+then verifies each PNG checksum before loading the rich demo.
 
 Future rich-demo media packs should follow the same split unless a small synthetic media exception is explicitly documented and manifest-pinned like the packaged re-roll PNGs: commit lightweight manifest changes, attach generated media archives to the GitHub release for the app version that first references them, then pin the public release URL, archive size, and SHA-256 in the manifest. If a later app release reuses an unchanged media pack, keep the manifest pointed at the original release asset instead of duplicating the archive.
 

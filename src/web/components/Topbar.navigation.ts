@@ -1,15 +1,12 @@
 import type { StudioView } from '../assetUi';
 
-export const primaryViews: Array<{ label: string; view: StudioView }> = [
-  { label: 'Lineage', view: 'lineage' },
-  { label: 'Review', view: 'review' },
+export const navigationViews: Array<{ label: string; view: StudioView }> = [
+  { label: 'Canvas', view: 'lineage' },
   { label: 'Assets', view: 'assets' },
-  { label: 'Agents', view: 'agents' },
-  { label: 'Settings', view: 'settings' },
-];
-
-export const secondaryViews: Array<{ label: string; view: StudioView }> = [
-  { label: 'Ledger', view: 'ledger' },
   { label: 'Content batches', view: 'content' },
+  { label: 'Review', view: 'review' },
   { label: 'Backup queue', view: 'backup' },
+  { label: 'Agents', view: 'agents' },
+  { label: 'Ledger', view: 'ledger' },
+  { label: 'Settings', view: 'settings' },
 ];

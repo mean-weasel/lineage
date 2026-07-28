@@ -11,11 +11,19 @@ function snippetBetween(start: string, end: string): string {
 }
 
 describe('Lineage navigation behavior', () => {
-  it('includes the read-only Agents view in primary navigation', () => {
+  it('includes the read-only Agents view as a direct rail destination', () => {
     const navSource = readFileSync(join(process.cwd(), 'src/web/components/Topbar.navigation.ts'), 'utf8');
 
     expect(navSource).toContain("{ label: 'Agents', view: 'agents' }");
-    expect(navSource.indexOf("{ label: 'Agents', view: 'agents' }")).toBeLessThan(navSource.indexOf('secondaryViews'));
+    expect(navSource.indexOf("{ label: 'Agents', view: 'agents' }")).toBeLessThan(navSource.indexOf("{ label: 'Settings', view: 'settings' }"));
+    expect(navSource).toContain("{ label: 'Canvas', view: 'lineage' }");
+  });
+
+  it('keeps desktop persistence separate from the mobile session disclosure', () => {
+    expect(appSource).toContain('useState(readContextPanelOpen)');
+    expect(appSource).toContain('useState(false)');
+    expect(appSource).toContain('writeContextPanelOpen(open)');
+    expect(appSource).toContain('setMobileContextOpen(false)');
   });
 
   it('keeps Review asset inspection in the current view instead of redirecting to Assets', () => {

@@ -24,6 +24,7 @@ import { canPreview, defaultProject, selectedOrFirst, type PlacementFilter, type
 import { copyToClipboard } from './clipboard';
 import { shouldRevealCopiedText } from './copyFallback';
 import { LineageCliProvider } from './lineageRuntimeCommand';
+import { readContextPanelOpen, writeContextPanelOpen } from './navigationPreferences';
 
 function initialProjectFromUrl(): string {
   if (typeof window === 'undefined') return defaultProject;
@@ -58,12 +59,11 @@ export function App() {
   const [workTargetRefreshKey, setWorkTargetRefreshKey] = useState(0);
   const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
   const [runtimeIdentityUnavailable, setRuntimeIdentityUnavailable] = useState(false);
-  const [openToolbarMenu, setOpenToolbarMenu] = useState<'lineage-actions' | 'topbar-more' | null>(null);
-  const setLineageActionsOpen = useCallback((open: boolean) => {
-    setOpenToolbarMenu(current => open ? 'lineage-actions' : current === 'lineage-actions' ? null : current);
-  }, []);
-  const setTopbarMoreOpen = useCallback((open: boolean) => {
-    setOpenToolbarMenu(current => open ? 'topbar-more' : current === 'topbar-more' ? null : current);
+  const [contextPanelOpen, setContextPanelOpen] = useState(readContextPanelOpen);
+  const [mobileContextOpen, setMobileContextOpen] = useState(false);
+  const setDesktopContextPanelOpen = useCallback((open: boolean) => {
+    setContextPanelOpen(open);
+    writeContextPanelOpen(open);
   }, []);
   const showToast = useCallback((type: Toast['type'], message: string) => {
     setToast({ type, message });
@@ -298,7 +298,8 @@ export function App() {
   }, [view]);
 
   useEffect(() => {
-    setOpenToolbarMenu(null);
+    setMobileContextOpen(false);
+    if (view === 'lineage') setAssetDetailsOpen(false);
   }, [view]);
 
   useEffect(() => {
@@ -306,27 +307,54 @@ export function App() {
     setAssetDetailsOpen(false);
   }, [selectedAssetId]);
 
+  useEffect(() => {
+    if (!mobileContextOpen) return undefined;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMobileContextOpen(false);
+    }
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileContextOpen]);
+
   return (
     <LineageCliProvider runtime={runtime}>
-    <div className={`app-shell ${view === 'lineage' ? 'lineage-mode' : ''}`}>
-      <Sidebar channel={channel} channels={channels} liveSync={liveSync} placementStatus={placementStatus} project={project} projects={projects} setChannel={setChannel} setPlacementStatus={setPlacementStatus} setProject={setProject} setSource={setSource} setStatus={setStatus} setView={setView} showBackupQueue={showBackupQueue} source={source} snapshot={projectSnapshot} status={status} totals={totals} />
-      <main className="workspace">
+    <div className={`app-shell ${view === 'lineage' ? 'lineage-mode' : ''} ${contextPanelOpen ? '' : 'context-panel-collapsed'} ${mobileContextOpen ? 'mobile-context-open' : ''}`}>
+      <Sidebar
+        channel={channel}
+        channels={channels}
+        contextOpen={contextPanelOpen}
+        mobileContextOpen={mobileContextOpen}
+        onContextOpenChange={setDesktopContextPanelOpen}
+        onMobileContextOpenChange={setMobileContextOpen}
+        placementStatus={placementStatus}
+        project={project}
+        projects={projects}
+        runtime={runtime}
+        runtimeIdentityUnavailable={runtimeIdentityUnavailable}
+        setChannel={setChannel}
+        setPlacementStatus={setPlacementStatus}
+        setProject={setProject}
+        setSource={setSource}
+        setStatus={setStatus}
+        setUploadOpen={setUploadOpen}
+        setView={setView}
+        showBackupQueue={showBackupQueue}
+        source={source}
+        status={status}
+        view={view}
+      >
         <Topbar
           assetDetailsOpen={assetDetailsOpen}
           canInspectAsset={Boolean(selected)}
           loading={loading}
-          moreOpen={openToolbarMenu === 'topbar-more'}
-          onMoreOpenChange={setTopbarMoreOpen}
           query={query}
           refresh={refresh}
-          runtime={runtime}
-          runtimeIdentityUnavailable={runtimeIdentityUnavailable}
           setAssetDetailsOpen={setAssetDetailsOpen}
           setQuery={setQuery}
-          setUploadOpen={setUploadOpen}
-          setView={nextView => nextView === 'backup' ? showBackupQueue() : setView(nextView)}
           view={view}
         />
+      </Sidebar>
+      <main className="workspace">
         {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
         {copiedText && <CopiedTextFallback copiedText={copiedText} onDismiss={() => setCopiedText(null)} />}
         <CurrentWorkTarget
@@ -407,9 +435,7 @@ export function App() {
         ) : view === 'settings' ? <SettingsView onToast={showToast} project={project} /> : (
           <LineageView
             asset={selected}
-            actionsOpen={openToolbarMenu === 'lineage-actions'}
             onAssetsChanged={refresh}
-            onActionsOpenChange={setLineageActionsOpen}
             onSelectedAsset={setSelectedId}
             onToast={showToast}
             project={project}

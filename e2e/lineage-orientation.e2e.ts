@@ -10,14 +10,14 @@ test('rotates lineage graph layout and handles without stale saved positions', a
 
   try {
     await page.goto('/');
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const root = lineageNode(page, 'swissifier linkedin root v1');
     const child = lineageNode(page, 'swissifier vertical drill v1');
     await expect(root).toBeVisible();
     await expect(child).toBeVisible();
 
-    await openLineageActions(page);
+    await openCanvasSettings(page);
     await page.getByLabel('Lineage graph direction').selectOption('TB');
     await assertRootAboveChild(root, child);
     const topToBottomPath = await firstEdgePath(page);
@@ -82,9 +82,8 @@ async function firstEdgePath(page: Page): Promise<string> {
   return await page.locator('.react-flow__edge-path').first().getAttribute('d') || '';
 }
 
-async function openLineageActions(page: Page) {
-  const actions = page.locator('header.lineage-header .lineage-overflow');
-  if (await actions.getAttribute('open') === null) {
-    await actions.locator('summary').click();
-  }
+async function openCanvasSettings(page: Page) {
+  const panel = page.getByRole('complementary', { name: 'Canvas settings' });
+  if (!await panel.isVisible()) await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+  await expect(panel).toBeVisible();
 }

@@ -15,7 +15,7 @@ test.beforeEach(async ({ request }) => {
 test('browses and promotes re-roll history without panning the background canvas', async ({ page, request }) => {
   await page.goto(`/?project=${project}`);
 
-  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+  await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
   const node = page.locator('.lineage-node', { hasText: stackedNodeTitle }).first();
   await expect(node).toBeVisible();
   await expect(node.locator('.attempt-stack')).toHaveText('v3');

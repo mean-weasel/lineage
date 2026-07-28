@@ -64,8 +64,8 @@ test('honors project URL params and clears stale project lineage state when swit
   await page.goto(`/?project=${project}`);
 
   const projectSelect = page.locator('select').first();
-  const lineageHeader = page.locator('header.lineage-header');
-  const workspaceTrigger = lineageHeader.locator('.lineage-workspace-trigger');
+  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
+  const workspaceTrigger = canvasTools.locator('.lineage-workspace-trigger');
   await expect(projectSelect).toHaveValue(project);
   await expect(workspaceTrigger.locator('strong')).toHaveText(workspaceTitle);
   await expect(workspaceTrigger.locator('code')).toHaveText(rootAssetId);
