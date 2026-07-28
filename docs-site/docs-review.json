@@ -1,11 +1,8 @@
 {
-  "reviewedFor": "0.1.29",
+  "reviewedFor": "0.1.30",
   "result": "updated",
   "areas": [
-    "workflows",
-    "integrations",
-    "reference-cli",
-    "generation-scaffold",
-    "node-next-output-target-locks"
+    "reference-interface",
+    "lineage-canvas-appearance"
   ]
 }

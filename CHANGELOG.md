@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.30
+
+- Add switchable compact-node and portrait-card lineage presentations, with full-image containment for social artwork and browser-local presentation preferences.
+- Add Canvas appearance controls for graph direction, edge weight, edge labels, and hover previews while preserving stable layouts, compact-node manual positions, and accessible edge editing across every orientation.
+- Keep the Actions menu usable in short viewports and make rich-demo readiness truthful by completing indexing only after the refreshed graph has rendered.
+
 ## 0.1.29
 
 - Add durable, revisioned next-output target settings for static-image lineage nodes, with human canvas-default inheritance, explicit agent/CLI overrides, same-geometry surface consolidation, and separate current-versus-future geometry in selection packets and the canvas.
