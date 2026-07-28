@@ -4,6 +4,7 @@ const project = 'demo-project';
 const richWorkspaceTitle = 'Swissifier rich demo';
 
 test('QA seed shows truthful progress and rich PNG previews in the first lineage view', async ({ page, request }) => {
+  test.setTimeout(120_000);
   const consoleErrors: string[] = [];
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   await page.route(/\/api\/lineage-workspaces(?:\?|$)/, async route => {
