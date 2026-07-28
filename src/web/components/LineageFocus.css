@@ -40,7 +40,7 @@
 
 .lineage-canvas .react-flow__edge.lineage-edge-focus-parent .react-flow__edge-path {
   stroke: #8a6bc9;
-  stroke-width: 3;
+  stroke-width: calc(var(--lineage-edge-width) + 1px);
 }
 
 .lineage-canvas .react-flow__edge.lineage-edge-focus-parent .react-flow__edge-textbg {
@@ -49,7 +49,7 @@
 
 .lineage-canvas .react-flow__edge.lineage-edge-focus-child .react-flow__edge-path {
   stroke: #0d8b93;
-  stroke-width: 3;
+  stroke-width: calc(var(--lineage-edge-width) + 1px);
 }
 
 .lineage-canvas .react-flow__edge.lineage-edge-focus-child .react-flow__edge-textbg {

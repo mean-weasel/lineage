@@ -33,6 +33,14 @@ test('rotates lineage graph layout and handles without stale saved positions', a
 
     await page.getByLabel('Lineage graph direction').selectOption('LR');
     await assertRootLeftOfChild(root, child);
+
+    await page.getByLabel('Canvas card style').selectOption('portrait');
+    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await assertRootAboveChild(root, child);
+
+    await page.getByLabel('Canvas card style').selectOption('compact');
+    await expect(page.getByLabel('Lineage graph direction')).toHaveValue('LR');
+    await assertRootLeftOfChild(root, child);
   } finally {
     if (workspaceId) {
       await request.post(`/api/lineage-workspaces/${encodeURIComponent(workspaceId)}/archive`, {

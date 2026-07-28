@@ -98,6 +98,23 @@ describe('lineage graph layout', () => {
     expect(child).toEqual({ x: 777, y: 333 });
   });
 
+  it('uses portrait dimensions and fresh layout positions in portrait lab mode', () => {
+    const graph = toGraph(
+      snapshot(['root', 'child'], [['root', 'child']], { child: { x: 777, y: 333 } }),
+      null,
+      'LR',
+      true,
+      'portrait',
+    );
+    const root = graph.nodes.find(node => node.id === 'root')!;
+    const child = graph.nodes.find(node => node.id === 'child')!;
+
+    expect(root).toMatchObject({ height: 400, width: 224 });
+    expect(root.data.canvasPresentation).toBe('portrait');
+    expect(child.position).not.toEqual({ x: 777, y: 333 });
+    expect(child.position.x).toBeGreaterThan(root.position.x);
+  });
+
   it('spaces branching nodes so sibling cards do not overlap', () => {
     const positions = layoutLineageTree(snapshot(
       ['root', 'a', 'b', 'c', 'a1', 'a2', 'b1'],

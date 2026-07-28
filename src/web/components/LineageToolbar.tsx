@@ -1,6 +1,9 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from 'react';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
+import type { LineageEdgeWeight } from '../lineagePreferences';
+import type { LineageCanvasPresentation } from './LineageAssetNode';
 import type { LineageWorkspaceProgress } from './LineageCanvas';
+import { LineageCanvasAppearanceControls } from './LineageCanvasAppearanceControls';
 import type { DemoSeedMediaStatus } from './useLineageWorkspaces';
 import type { LineageGraphDirection } from './lineageGraph';
 import { LineageWorkspacePicker } from './LineageWorkspacePicker';
@@ -9,17 +12,23 @@ import './LineageToolbar.css';
 type LineageToolbarProps = {
   activeWorkspace: LineageWorkspace | null;
   actionsOpen: boolean;
+  canvasPresentation: LineageCanvasPresentation;
   closeSignal: number;
   demoSeedStatus: DemoSeedMediaStatus | null;
   edgeSummariesVisible: boolean;
+  edgeWeight: LineageEdgeWeight;
   graphDirection: LineageGraphDirection;
+  hoverPreviewsEnabled: boolean;
   loading: boolean;
   onArchiveWorkspace: () => void;
   onActionsOpenChange: (open: boolean) => void;
+  onCanvasPresentation: (presentation: LineageCanvasPresentation) => void;
   onDownloadSwissifierMedia: () => void;
-  onEdgeSummariesVisible: () => void;
+  onEdgeSummariesVisible: (visible: boolean) => void;
+  onEdgeWeight: (weight: LineageEdgeWeight) => void;
   onFitGraph: () => void;
   onGraphDirection: (direction: LineageGraphDirection) => void;
+  onHoverPreviewsEnabled: (enabled: boolean) => void;
   onIndexLocal: () => void;
   onNewLineage: () => void;
   onOpenGeneration?: () => void;
@@ -47,17 +56,23 @@ type LineageToolbarProps = {
 export function LineageToolbar({
   activeWorkspace,
   actionsOpen,
+  canvasPresentation,
   closeSignal,
   demoSeedStatus,
   edgeSummariesVisible,
+  edgeWeight,
   graphDirection,
+  hoverPreviewsEnabled,
   loading,
   onArchiveWorkspace,
   onActionsOpenChange,
+  onCanvasPresentation,
   onDownloadSwissifierMedia,
   onEdgeSummariesVisible,
+  onEdgeWeight,
   onFitGraph,
   onGraphDirection,
+  onHoverPreviewsEnabled,
   onIndexLocal,
   onNewLineage,
   onOpenGeneration,
@@ -166,28 +181,20 @@ export function LineageToolbar({
           <button disabled={workspaceBusy || !swissifierCanDownload} onClick={onDownloadSwissifierMedia} type="button">Download rich images</button>
           <button disabled={workspaceBusy || swissifierReady} onClick={onRestoreSwissifierMedia} type="button">Restore rich media</button>
           <button disabled={workspaceBusy} onClick={() => runAndClose(onSeedSwissifierDemo)} type="button">Load rich image demo</button>
-          <label className="lineage-action-select">
-            <span>Direction</span>
-            <select
-              aria-label="Lineage graph direction"
-              disabled={!snapshot || loading}
-              onChange={event => onGraphDirection(event.target.value as LineageGraphDirection)}
-              value={graphDirection}
-            >
-              <option value="LR">Left to right</option>
-              <option value="TB">Top to bottom</option>
-              <option value="RL">Right to left</option>
-              <option value="BT">Bottom to top</option>
-            </select>
-          </label>
-          <button
-            aria-pressed={edgeSummariesVisible}
-            disabled={!snapshot}
-            onClick={() => runAndClose(onEdgeSummariesVisible)}
-            type="button"
-          >
-            {edgeSummariesVisible ? 'Hide edge labels' : 'Show edge labels'}
-          </button>
+          <LineageCanvasAppearanceControls
+            canvasPresentation={canvasPresentation}
+            edgeSummariesVisible={edgeSummariesVisible}
+            edgeWeight={edgeWeight}
+            graphDirection={graphDirection}
+            hoverPreviewsEnabled={hoverPreviewsEnabled}
+            loading={loading}
+            onCanvasPresentation={onCanvasPresentation}
+            onEdgeSummariesVisible={onEdgeSummariesVisible}
+            onEdgeWeight={onEdgeWeight}
+            onGraphDirection={onGraphDirection}
+            onHoverPreviewsEnabled={onHoverPreviewsEnabled}
+            snapshotAvailable={Boolean(snapshot)}
+          />
           <button disabled={!snapshot} onClick={() => runAndClose(onFitGraph)} type="button">Fit graph</button>
           <button disabled={!snapshot} onClick={() => runAndClose(onTidyGraph)} type="button">Tidy tree</button>
           {onOpenOutputDefaults && <button disabled={!snapshot} onClick={() => runAndClose(onOpenOutputDefaults)} type="button">Output target defaults</button>}

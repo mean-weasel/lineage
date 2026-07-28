@@ -91,8 +91,13 @@ describe('LineageToolbar', () => {
     expect(actions.textContent).toContain('QA seed media');
     expect(actions.textContent).toContain('Load SVG placeholder demo');
     expect(actions.textContent).toContain('Load rich image demo');
+    expect(actions.textContent).toContain('Canvas appearance');
+    expect(actions.textContent).toContain('Compact nodes');
+    expect(actions.textContent).toContain('Portrait cards');
     expect(actions.textContent).toContain('Direction');
-    expect(actions.textContent).toContain('Hide edge labels');
+    expect(actions.textContent).toContain('Edge labels');
+    expect(actions.textContent).toContain('Hover previews');
+    expect(actions.textContent).toContain('Bold');
     expect(actions.textContent).toContain('Left to right');
     expect(actions.textContent).toContain('Fit graph');
     expect(actions.textContent).toContain('Tidy tree');
@@ -115,18 +120,25 @@ describe('LineageToolbar', () => {
     expect(container!.textContent).not.toContain('No lineage index yet');
   });
 
-  it('exposes a visible-by-default canvas-wide edge-label toggle without persisting it', () => {
+  it('exposes canvas appearance choices and emits card, edge, direction, label, and preview changes', () => {
+    const onCanvasPresentation = vi.fn();
     const onEdgeSummariesVisible = vi.fn();
-    renderToolbar({ onEdgeSummariesVisible });
+    const onEdgeWeight = vi.fn();
+    const onGraphDirection = vi.fn();
+    const onHoverPreviewsEnabled = vi.fn();
+    renderToolbar({ onCanvasPresentation, onEdgeSummariesVisible, onEdgeWeight, onGraphDirection, onHoverPreviewsEnabled });
 
-    const hideButton = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Hide edge labels');
-    expect(hideButton?.getAttribute('aria-pressed')).toBe('true');
-    act(() => hideButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(onEdgeSummariesVisible).toHaveBeenCalledOnce();
+    changeSelect('Canvas card style', 'portrait');
+    changeSelect('Canvas edge weight', 'bold');
+    changeSelect('Lineage graph direction', 'TB');
+    changeSelect('Canvas edge labels', 'hide');
+    changeSelect('Canvas hover previews', 'disabled');
 
-    renderToolbar({ edgeSummariesVisible: false });
-    const showButton = [...container!.querySelectorAll('button')].find(button => button.textContent === 'Show edge labels');
-    expect(showButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(onCanvasPresentation).toHaveBeenCalledWith('portrait');
+    expect(onEdgeWeight).toHaveBeenCalledWith('bold');
+    expect(onGraphDirection).toHaveBeenCalledWith('TB');
+    expect(onEdgeSummariesVisible).toHaveBeenCalledWith(false);
+    expect(onHoverPreviewsEnabled).toHaveBeenCalledWith(false);
   });
 });
 
@@ -134,17 +146,23 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
   const props: Parameters<typeof LineageToolbar>[0] = {
     activeWorkspace: workspace,
     actionsOpen: false,
+    canvasPresentation: 'compact',
     closeSignal: 0,
     demoSeedStatus: demoMediaStatus({ present: 10, total: 10 }),
     edgeSummariesVisible: true,
+    edgeWeight: 'standard',
     graphDirection: 'LR',
+    hoverPreviewsEnabled: true,
     loading: false,
     onArchiveWorkspace: vi.fn(),
     onActionsOpenChange: vi.fn(),
+    onCanvasPresentation: vi.fn(),
     onDownloadSwissifierMedia: vi.fn(),
     onEdgeSummariesVisible: vi.fn(),
+    onEdgeWeight: vi.fn(),
     onFitGraph: vi.fn(),
     onGraphDirection: vi.fn(),
+    onHoverPreviewsEnabled: vi.fn(),
     onIndexLocal: vi.fn(),
     onNewLineage: vi.fn(),
     onRefreshLineage: vi.fn(),
@@ -170,6 +188,14 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
 
   act(() => {
     root!.render(<LineageToolbar {...props} />);
+  });
+}
+
+function changeSelect(label: string, value: string) {
+  const select = container!.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement;
+  act(() => {
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
 

@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { createPortal } from 'react-dom';
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type EdgeChange, type NodeChange, type ReactFlowInstance } from '@xyflow/react';
 import type { LineageNode } from '../../shared/types';
-import { AssetNode, type AssetFlowNode, type LineagePreviewSource } from './LineageAssetNode';
+import {
+  AssetNode,
+  type AssetFlowNode,
+  type LineageCanvasPresentation,
+  type LineagePreviewSource,
+  type LineageSemanticZoomTier,
+} from './LineageAssetNode';
 import type { HoverPreviewPosition } from './lineageHoverPreview';
 import { quickActionState } from './lineageQuickActions';
 import './LineageCanvas.css';
@@ -20,6 +26,13 @@ const emptyPreviewState: PreviewState = { activeSource: null, focus: null, hover
 
 export type LineageWorkspaceProgress = 'downloading' | 'downloaded' | 'seeding' | 'indexing' | 'ready' | 'error' | null;
 
+// eslint-disable-next-line react-refresh/only-export-components -- pure presentation rule shared with regression tests
+export function lineageSemanticZoomTier(zoom: number): LineageSemanticZoomTier {
+  if (zoom < 0.45) return 'far';
+  if (zoom < 0.72) return 'medium';
+  return 'near';
+}
+
 // eslint-disable-next-line react-refresh/only-export-components -- pure state contract shared with regression tests
 export function lineageCanvasEmptyState(workspaceRootAssetId: string, progress: LineageWorkspaceProgress) {
   if (progress === 'downloading') return { action: 'none' as const, description: 'Fetching and verifying the 14 rich demo images.', title: 'Downloading rich demo media' };
@@ -31,6 +44,7 @@ export function lineageCanvasEmptyState(workspaceRootAssetId: string, progress: 
 }
 
 export function LineageCanvas({
+  canvasPresentation,
   flowEdges,
   flowNodes,
   graphKey,
@@ -59,6 +73,7 @@ export function LineageCanvas({
   workspaceProgress,
   workspaceRootAssetId,
 }: {
+  canvasPresentation: LineageCanvasPresentation;
   flowEdges: Edge[];
   flowNodes: AssetFlowNode[];
   graphKey: string;
@@ -89,6 +104,7 @@ export function LineageCanvas({
 }) {
   const [previews, setPreviews] = useState<PreviewState>(emptyPreviewState);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [semanticZoomTier, setSemanticZoomTier] = useState<LineageSemanticZoomTier>('near');
   const pendingActionRef = useRef(false);
   const previewCloseTimer = useRef<number | null>(null);
   const cancelPreviewClose = useCallback(() => {
@@ -160,6 +176,7 @@ export function LineageCanvas({
     ...node,
     data: {
       ...node.data,
+      canvasPresentation,
       hoverPreviewsEnabled,
       onOpenDetail: openDetail,
       onOpenHistory: openHistory,
@@ -177,8 +194,9 @@ export function LineageCanvas({
         if (quickActionState(target, selectionFull).socialDisabled) return;
         void runQuickAction('social', target);
       },
+      semanticZoomTier: canvasPresentation === 'portrait' ? semanticZoomTier : 'near',
     },
-  })), [changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory, runQuickAction, selectionFull]);
+  })), [canvasPresentation, changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory, runQuickAction, selectionFull, semanticZoomTier]);
 
   if (!flowNodes.length) {
     const emptyState = lineageCanvasEmptyState(workspaceRootAssetId, workspaceProgress);
@@ -311,7 +329,7 @@ export function LineageCanvas({
         edgesFocusable={replayInteractive}
         elementsSelectable={replayInteractive}
         key={graphKey}
-        minZoom={0.3}
+        minZoom={canvasPresentation === 'portrait' ? 0.08 : 0.3}
         nodesDraggable={replayInteractive}
         nodesFocusable={false}
         onEdgeDoubleClick={(event, edge) => {
@@ -335,6 +353,11 @@ export function LineageCanvas({
         onNodeDragStop={(_event, node) => onNodePosition(node)}
         onNodesChange={onNodesChange}
         onInit={onReady}
+        onMove={(_event, viewport) => {
+          if (canvasPresentation !== 'portrait') return;
+          const nextTier = lineageSemanticZoomTier(viewport.zoom);
+          setSemanticZoomTier(current => current === nextTier ? current : nextTier);
+        }}
         onMoveStart={() => { dismissPreview(); onViewportInteraction(); }}
         onPaneClick={onClearFocus}
       >

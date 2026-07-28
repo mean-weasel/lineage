@@ -56,6 +56,59 @@ describe('AssetNode', () => {
     expect(node.querySelector('.lineage-badges .root')?.textContent).toBe('root');
   });
 
+  it('renders the image-first portrait card without compact metadata chrome', () => {
+    renderNode({
+      attempt_count: 3,
+      canvasPresentation: 'portrait',
+      preview_url: '/api/assets/local-node/preview',
+      root: true,
+      semanticZoomTier: 'medium',
+      user_selected: true,
+    });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+
+    expect(node.classList.contains('lineage-node-portrait')).toBe(true);
+    expect(node.classList.contains('lineage-zoom-medium')).toBe(true);
+    expect(node.querySelector('.lineage-node-portrait-footer strong')?.textContent).toBe('Swissifier node');
+    expect(node.querySelector('.lineage-node-portrait-state')?.textContent).toContain('root');
+    expect(node.querySelector('.lineage-node-portrait-state')?.textContent).toContain('selected');
+    expect(node.querySelector('.lineage-node-portrait-state')?.textContent).toContain('v3');
+    expect(node.querySelector('.lineage-badges')).toBeNull();
+    expect(node.textContent).not.toContain('local-node');
+  });
+
+  it('keeps work and review markers outside the footer at far portrait zoom', () => {
+    renderNode({
+      canvasPresentation: 'portrait',
+      lineage_tasks: {
+        iterate: {
+          id: 'task-iterate',
+          project_id: 'demo-project',
+          root_asset_id: 'local-root',
+          target_asset_id: 'local-node',
+          task_type: 'iterate',
+          status: 'in_progress',
+          instructions: 'Make a clean variant.',
+          created_by: 'human',
+          created_at: '2026-07-07T00:00:00.000Z',
+          updated_at: '2026-07-07T00:00:00.000Z',
+        },
+      },
+      review_state: 'needs_revision',
+      semanticZoomTier: 'far',
+    });
+    const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+    const markers = node.querySelector<HTMLElement>('.lineage-node-overview-markers')!;
+
+    expect(node.classList.contains('lineage-has-work')).toBe(true);
+    expect(node.classList.contains('lineage-review-needs_revision')).toBe(true);
+    expect(node.dataset.hasWork).toBe('true');
+    expect(node.dataset.reviewState).toBe('needs_revision');
+    expect(markers.textContent).toContain('work');
+    expect(markers.textContent).toContain('needs revision');
+    expect(markers.closest('.lineage-node-portrait-footer')).toBeNull();
+  });
+
   it('keeps future replay nodes mounted but hidden from keyboard and accessibility interaction', () => {
     renderNode({ replayInteractive: false, replayState: 'future' });
     const node = container!.querySelector<HTMLElement>('.lineage-node')!;
@@ -65,11 +118,11 @@ describe('AssetNode', () => {
     expect(node.getAttribute('tabindex')).toBe('-1');
   });
 
-  it('requests the full media preview on hover without opening detail', () => {
+  it.each(['compact', 'portrait'] as const)('requests the full media preview from %s cards without opening detail', canvasPresentation => {
     const onOpenDetail = vi.fn();
     const onOpenHistory = vi.fn();
     const onPreviewChange = vi.fn();
-    renderNode({ hoverPreviewsEnabled: true, onOpenDetail, onOpenHistory, onPreviewChange, preview_url: '/api/assets/local-node/preview' });
+    renderNode({ canvasPresentation, hoverPreviewsEnabled: true, onOpenDetail, onOpenHistory, onPreviewChange, preview_url: '/api/assets/local-node/preview' });
     const node = container!.querySelector<HTMLElement>('.lineage-node')!;
 
     act(() => node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));

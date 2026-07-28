@@ -10,6 +10,7 @@ test('QA seed shows truthful progress and rich PNG previews in the first lineage
     await new Promise(resolve => setTimeout(resolve, 2_000));
     await route.continue();
   });
+  await page.setViewportSize({ height: 640, width: 1024 });
   await page.goto('/');
   const actions = page.locator('header.lineage-header .lineage-overflow');
   await actions.locator('summary').click();
@@ -56,7 +57,9 @@ test('QA seed shows truthful progress and rich PNG previews in the first lineage
   });
   const seeded = page.waitForResponse(response => response.request().method() === 'POST'
     && new URL(response.url()).pathname === '/api/lineage-workspaces/demo/swissifier/seed');
-  await actions.getByRole('button', { name: 'Load rich image demo' }).click();
+  const loadRichDemo = actions.getByRole('button', { name: 'Load rich image demo' });
+  await loadRichDemo.scrollIntoViewIfNeeded();
+  await loadRichDemo.click();
   const seedResponse = await seeded;
   expect(seedResponse.ok()).toBe(true);
   const seedResult = await seedResponse.json() as { workspace?: { id: string } };

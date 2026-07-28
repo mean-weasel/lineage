@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LineageNode, LineageTask, LineageTaskStatus, LineageTaskType } from '../../shared/types';
-import { lineageCanvasEmptyState } from './LineageCanvas';
+import { lineageCanvasEmptyState, lineageSemanticZoomTier } from './LineageCanvas';
 import { quickActionState } from './lineageQuickActions';
 
 describe('lineage inspector quick-action safety', () => {
@@ -100,6 +100,16 @@ describe('lineage canvas empty-state truthfulness', () => {
     expect(lineageCanvasEmptyState('real-empty-root', null)).toMatchObject({ action: 'index', title: 'No lineage index yet' });
     expect(lineageCanvasEmptyState('rich-root', 'error')).toMatchObject({ action: 'retry-index', title: 'Rich demo setup failed' });
     expect(lineageCanvasEmptyState('', 'error')).toMatchObject({ action: 'seed', title: 'Rich demo setup failed' });
+  });
+});
+
+describe('portrait canvas semantic zoom', () => {
+  it('uses stable presentation tiers around the experiment thresholds', () => {
+    expect(lineageSemanticZoomTier(0.3)).toBe('far');
+    expect(lineageSemanticZoomTier(0.449)).toBe('far');
+    expect(lineageSemanticZoomTier(0.45)).toBe('medium');
+    expect(lineageSemanticZoomTier(0.719)).toBe('medium');
+    expect(lineageSemanticZoomTier(0.72)).toBe('near');
   });
 });
 

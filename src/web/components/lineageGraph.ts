@@ -1,10 +1,12 @@
 import { MarkerType, Position, type Edge } from '@xyflow/react';
 import { graphlib, layout } from '@dagrejs/dagre';
 import type { LineageSnapshot } from '../../shared/types';
-import type { AssetFlowNode, LineageFocusRole } from './LineageAssetNode';
+import type { AssetFlowNode, LineageCanvasPresentation, LineageFocusRole } from './LineageAssetNode';
 
-const nodeWidth = 212;
-const nodeHeight = 164;
+const nodeSizes: Record<LineageCanvasPresentation, { height: number; width: number }> = {
+  compact: { height: 164, width: 212 },
+  portrait: { height: 400, width: 224 },
+};
 
 export type LineageGraphDirection = 'BT' | 'LR' | 'RL' | 'TB';
 
@@ -13,26 +15,29 @@ export function toGraph(
   activeNodeId: string | null,
   direction: LineageGraphDirection = 'LR',
   edgeSummariesVisible = true,
+  canvasPresentation: LineageCanvasPresentation = 'compact',
 ): { nodes: AssetFlowNode[]; edges: Edge[] } {
   if (!snapshot) return { nodes: [], edges: [] };
-  const tidyPositions = layoutLineageTree(snapshot, direction);
+  const nodeSize = nodeSizes[canvasPresentation];
+  const tidyPositions = layoutLineageTree(snapshot, direction, canvasPresentation);
   const handlePositions = lineageHandlePositions(direction);
   const focus = lineageFocus(snapshot, activeNodeId);
   const nodes = snapshot.nodes.map(node => {
     return {
       id: node.asset_id,
-      initialHeight: nodeHeight,
-      initialWidth: nodeWidth,
-      measured: { height: nodeHeight, width: nodeWidth },
+      initialHeight: nodeSize.height,
+      initialWidth: nodeSize.width,
+      measured: nodeSize,
       type: 'assetNode' as const,
-      height: nodeHeight,
-      position: node.position || tidyPositions.get(node.asset_id) || { x: 0, y: 0 },
+      height: nodeSize.height,
+      position: (canvasPresentation === 'compact' ? node.position : undefined) || tidyPositions.get(node.asset_id) || { x: 0, y: 0 },
       sourcePosition: handlePositions.source,
       targetPosition: handlePositions.target,
-      width: nodeWidth,
+      width: nodeSize.width,
       data: {
         ...node,
         active: node.asset_id === activeNodeId,
+        canvasPresentation,
         focusRole: focus.roles.get(node.asset_id) || 'none',
         root: node.asset_id === snapshot.root_asset_id,
         sourcePosition: handlePositions.source,
@@ -77,11 +82,15 @@ function lineageHandlePositions(direction: LineageGraphDirection): { source: Pos
   }[direction];
 }
 
-export function lineageGraphKey(snapshot: LineageSnapshot | null, direction: LineageGraphDirection = 'LR'): string {
+export function lineageGraphKey(
+  snapshot: LineageSnapshot | null,
+  direction: LineageGraphDirection = 'LR',
+  canvasPresentation: LineageCanvasPresentation = 'compact',
+): string {
   if (!snapshot) return 'lineage-empty';
   const nodeIds = snapshot.nodes.map(node => node.asset_id).sort().join(',');
   const edgeIds = snapshot.edges.map(edge => edge.id).sort().join(',');
-  return `${snapshot.root_asset_id}:${direction}:${nodeIds}:${edgeIds}`;
+  return `${snapshot.root_asset_id}:${direction}:${canvasPresentation}:${nodeIds}:${edgeIds}`;
 }
 
 export function lineageFocus(snapshot: LineageSnapshot, activeNodeId: string | null): { edgeClasses: Map<string, string>; roles: Map<string, LineageFocusRole> } {
@@ -103,7 +112,12 @@ export function lineageFocus(snapshot: LineageSnapshot, activeNodeId: string | n
   return { edgeClasses, roles };
 }
 
-export function layoutLineageTree(snapshot: LineageSnapshot, direction: LineageGraphDirection = 'LR'): Map<string, { x: number; y: number }> {
+export function layoutLineageTree(
+  snapshot: LineageSnapshot,
+  direction: LineageGraphDirection = 'LR',
+  canvasPresentation: LineageCanvasPresentation = 'compact',
+): Map<string, { x: number; y: number }> {
+  const nodeSize = nodeSizes[canvasPresentation];
   const graph = new graphlib.Graph();
   graph.setGraph({
     marginx: 40,
@@ -113,14 +127,14 @@ export function layoutLineageTree(snapshot: LineageSnapshot, direction: LineageG
     ranksep: 110,
   });
   graph.setDefaultEdgeLabel(() => ({}));
-  for (const node of snapshot.nodes) graph.setNode(node.asset_id, { height: nodeHeight, width: nodeWidth });
+  for (const node of snapshot.nodes) graph.setNode(node.asset_id, { ...nodeSize });
   for (const edge of snapshot.edges) graph.setEdge(edge.parent_asset_id, edge.child_asset_id);
   layout(graph);
   return new Map(snapshot.nodes.map(node => {
     const laidOut = graph.node(node.asset_id) as { x?: number; y?: number } | undefined;
     return [node.asset_id, {
-      x: Math.round((laidOut?.x || nodeWidth / 2) - nodeWidth / 2),
-      y: Math.round((laidOut?.y || nodeHeight / 2) - nodeHeight / 2),
+      x: Math.round((laidOut?.x || nodeSize.width / 2) - nodeSize.width / 2),
+      y: Math.round((laidOut?.y || nodeSize.height / 2) - nodeSize.height / 2),
     }];
   }));
 }
