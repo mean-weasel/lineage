@@ -8,7 +8,7 @@ goal:
   slug: "node-next-output-target-locks"
   kind: existing_plan
   tranche: "Implement, release, and stable-package-verify the approved node next-output target-lock bridge for static-image variations."
-  status: active
+  status: done
   oracle:
     signal: "A live canvas/CLI/agent walkthrough proves every generated static-image variation consumes an immutable exact-pixel plan resolved from a node override or human canvas default."
     cadence: "after each Worker package and at final audit"
@@ -68,7 +68,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/node-next-output-target-locks/"
     command: "node /Users/neonwatty/.codex/plugins/cache/goalbuddy/goalbuddy/0.4.1/skills/goal-prep/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/node-next-output-target-locks"
 
-active_task: T009
+active_task: null
 
 tasks:
   - id: T001
@@ -897,7 +897,7 @@ tasks:
   - id: T009
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Commit and push the reviewed branch, create a ready pull request, monitor CI and review, merge only when green, then create the immutable annotated release tag and monitor the Release workflow."
     inputs:
@@ -917,11 +917,63 @@ tasks:
       - "Merged GitHub main commit"
       - "Annotated tag object and peeled commit"
       - "Green Release workflow, npm version/dist-tag, and GitHub Release asset proof"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Committed and pushed the reviewed release candidate, opened ready PR #125, waited for every required check, merged through the repository merge queue, created one immutable annotated v0.1.29 tag on the merged main commit, and verified the green tag-triggered release, npm latest, GitHub release, plugin assets, and post-release documentation issue."
+      branch: codex/node-next-output-target-locks
+      head_commit: c631d426268404adf6578fee047a0d12efd34106
+      pull_request:
+        number: 125
+        url: "https://github.com/mean-weasel/lineage/pull/125"
+        ready: true
+        merged_at: "2026-07-28T00:04:39Z"
+        merge_commit: 96899b0bf06eb605507f8c7769831caf36d50b45
+      tag:
+        name: v0.1.29
+        object: aa0c91c2a0d55443b9f47799332ed9e0f80964fa
+        peeled_commit: 96899b0bf06eb605507f8c7769831caf36d50b45
+        kind: annotated
+      release:
+        workflow_run: "https://github.com/mean-weasel/lineage/actions/runs/30316229583"
+        workflow_conclusion: success
+        github_release: "https://github.com/mean-weasel/lineage/releases/tag/v0.1.29"
+        npm_version: 0.1.29
+        npm_latest: 0.1.29
+        npm_integrity: "sha512-l6dhk2m5hLN4iltNPcVN+56PGWO5O9UvYP2lIEIMtiU0d+/4gW3yDhOKetRJtroe0Q3pBWB72IiWPfh5n+aD9w=="
+        plugin_asset: lineage-codex-plugin-0.1.29.tgz
+        plugin_asset_sha256: 88d9cb9daff50f8e08091a96c4a02cde2aaf3ed4135d14c555d4375777d9774f
+        checksum_asset: lineage-codex-plugin-0.1.29.tgz.sha256
+        documentation_issue: "https://github.com/mean-weasel/lineage/issues/126"
+      checks:
+        - name: "Detect changes"
+          status: pass
+        - name: "Version-Locked Plugin Installer"
+          status: pass
+        - name: "Documentation CI"
+          status: pass
+        - name: "Landing CI"
+          status: pass
+        - name: "Application CI"
+          status: pass
+        - name: "ci aggregate"
+          status: pass
+        - name: "Publish Tagged Release"
+          status: pass
+      commands:
+        - cmd: "git commit; git push -u origin codex/node-next-output-target-locks; gh pr create"
+          status: pass
+        - cmd: "gh pr checks 125 --watch; gh pr merge 125 --merge/--auto"
+          status: pass
+          note: "Repository merge queue merged the clean green PR."
+        - cmd: "git tag -a v0.1.29 96899b0...; git push origin refs/tags/v0.1.29"
+          status: pass
+        - cmd: "gh run watch 30316229583 --exit-status; npm view; gh release view; git ls-remote"
+          status: pass
+      remaining_blockers: []
   - id: T010
     type: pm
     assignee: PM
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Repeat the critical effective-read, immutable-plan, exact-import, child-inheritance, cancellation, and mismatch-rejection proof against the released stable package."
     inputs:
@@ -941,11 +993,67 @@ tasks:
       - "Released per-child inheritance and cancellation proof"
       - "Released wrong-size rejection with zero partial state"
       - "Stable canvas/CLI/agent parity evidence"
-    receipt: null
+    receipt:
+      result: done
+      decision: ready_for_final_audit
+      full_outcome_complete: false
+      summary: "The released 0.1.29 stable package passed the production-profile oracle. A human canvas default and an explicit CLI node override resolved to canonical multi-surface exact-pixel settings; the v3 selection packet exposed current geometry separately from next-output intent; the immutable job retained its original two-geometry snapshot after the source setting changed; exact imports atomically created children whose settings each inherited only their produced geometry; cancellation and wrong-size imports failed without partial state; and the released canvas/planner showed the same persisted child setting and selected-source resolution digest. The isolated managed stable service was then stopped and its receipt removed."
+      runtime_identity:
+        channel: stable
+        launcher: lineage-stable
+        profile: node-target-locks-stable-20260727-a
+        environment: production
+        service_origin: "http://lineage-stable.localhost:56299"
+        package_version: 0.1.29
+        git_sha: 96899b0bf06eb605507f8c7769831caf36d50b45
+        code_fingerprint: 95038665ec83c4994a41fa902879bd0250356ceb8c95aaa88c085aed127c465e
+        profile_fingerprint: 09bab839b0592ceca8095d682ea61c8899f74684b97a522d375750d4ab2751d4
+        database: "/Users/neonwatty/Library/Application Support/Lineage/profiles/node-target-locks-stable-20260727-a/lineage.sqlite"
+      release_identity:
+        tag: v0.1.29
+        tag_commit: 96899b0bf06eb605507f8c7769831caf36d50b45
+        npm_latest: 0.1.29
+        npm_integrity: "sha512-l6dhk2m5hLN4iltNPcVN+56PGWO5O9UvYP2lIEIMtiU0d+/4gW3yDhOKetRJtroe0Q3pBWB72IiWPfh5n+aD9w=="
+        plugin_asset_sha256: 88d9cb9daff50f8e08091a96c4a02cde2aaf3ed4135d14c555d4375777d9774f
+        release_url: "https://github.com/mean-weasel/lineage/releases/tag/v0.1.29"
+      evidence:
+        - "The five-step stable gate passed: runtime doctor before bootstrap, atomic profile init, then runtime doctor, profile doctor, db info, managed start/status, and /api/runtime identity agreement."
+        - "Canvas default Instagram Story resolved the root to 1080x1920; a CLI override consolidated Instagram Story and Facebook Story at 1080x1920 plus Instagram Feed portrait at 1080x1440."
+        - "Platform-only Instagram was rejected as ambiguous with square, portrait, and story choices; an unversioned conflicting set was rejected by revision compare-and-swap."
+        - "Selection packet lineage.selection_packet.v3 kept current_geometry separate from next_output_targets and emitted selected-source resolution digest 189a9d5411841dbb1323333df08e6051045db56d11cbdb2912105b3549e75074."
+        - "Planned job gen-ms3wka5g-d2f342b3 froze node revision 1 and target-plan digest 9b0456b2c6feef0da8096be6945ae816123325077bb2f327050f34c5bccd1f07 before provider output."
+        - "Replacing the source setting with Pinterest Standard Pin revision 2 changed the live resolution digest and made planning with the old aggregate digest fail, while the earlier job retained its original 1080x1920 and 1080x1440 groups."
+        - "Exact import created local-2ec16c449d28 at 1080x1920 for Facebook Story and Instagram Story and local-92e307b17ad6 at 1080x1440 for Instagram Feed portrait; each child received revision-1 derived_child provenance for only its own geometry."
+        - "The selected produced child packet reported current output geometry 1080x1920 and a separate Produced next 1080x1920 setting with aggregate digest b241789ac680067936b5759f473f372195e9eb9dbc9ad157d9c25fc00a72b5b2."
+        - "Cancelled job gen-ms3wm63c-6d020049 refused import and retained no outputs."
+        - "Wrong-size job gen-ms3wmwhs-11414183 required 1080x1920 but decoded 1079x1920; import failed and before/after database counts were exactly identical across assets, edges, attempts, output specs, job outputs, receipts, and node settings."
+        - "Released-canvas screenshot /tmp/lineage-node-target-locks-stable-canvas.png shows v0.1.29, the production profile, current locked geometry, and separate future badges."
+        - "Released-planner screenshot /tmp/lineage-node-target-locks-stable-planner.png shows Produced next 1080x1920, both delivery surfaces, and selected-source resolution digest b241789ac680067936b5759f473f372195e9eb9dbc9ad157d9c25fc00a72b5b2."
+        - "make stop-prod stopped only stable/node-target-locks-stable-20260727-a; the subsequent status command failed closed because no managed-service receipt remained."
+      commands:
+        - cmd: "lineage-stable runtime doctor/profile doctor/db info plus managed start/status and /api/runtime checks"
+          status: pass
+        - cmd: "lineage-stable output-target node get/set/replace and selection packet/plan/inspect/import/cancel operations"
+          status: pass
+        - cmd: "released canvas and planner browser walkthrough"
+          status: pass
+        - cmd: "wrong-size import with before/after database-count comparison"
+          status: pass
+        - cmd: "make stop-prod LINEAGE_PROD_PROFILE=node-target-locks-stable-20260727-a; make status-prod ..."
+          status: pass
+          note: "Stop succeeded; status returned the expected no-receipt failure."
+      top_failure_modes:
+        - mode: "The agent generates from prompt text or a live mutable setting instead of an immutable exact-pixel job."
+          proof: "Selection v3 exposed the canonical resolution digest, stale planning failed after revision change, and the already-planned job retained revision 1 and its original two geometries."
+        - mode: "Import accepts malformed dimensions or writes a partial lineage before validation completes."
+          proof: "A decoded 1079x1920 output was rejected against 1080x1920 and all seven relevant database counts remained byte-for-byte numerically identical."
+        - mode: "CLI, canvas, and child inheritance disagree about current versus future geometry."
+          proof: "CLI child reads, selection v3, canvas badges, and the planner all showed the same per-child produced setting and aggregate digest while current_geometry stayed a distinct field."
+      remaining_blockers: []
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit whether the released implementation and stable-package oracle satisfy the approved user outcome."
     inputs:
@@ -962,13 +1070,55 @@ tasks:
       - "full_outcome_complete: true | false"
       - "Acceptance-criteria evidence matrix"
       - "Missing evidence and next task if incomplete"
-    receipt: null
-
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      rationale: "The original user-facing outcome is shipped and proved, not merely implemented. Every required task T001-T014 is done; the uninterrupted public gate and GitHub checks are green; PR 125 merged through the protected flow; immutable annotated v0.1.29 resolves to the merged main commit; the Release workflow, npm latest/integrity, GitHub Release, and plugin checksum agree; and a fresh named stable production profile repeated the critical canvas/CLI/agent read-plan-import oracle with exact identity agreement. No required Worker remains queued, active, blocked, or missing proof."
+      acceptance_criteria_evidence:
+        - "Hard exact-pixel V1 contract: focused and full tests plus the stable 1079x1920-versus-1080x1920 rejection prove decoded pixels are authoritative and there is no resize, crop, or mismatch override."
+        - "Human-owned dynamic canvas default: checkout and stable walkthroughs set a named human default, showed inherited nodes, and preserved the rule that CLI/agents can read but cannot mutate defaults."
+        - "Sticky multi-target node overrides: backend CAS tests, CLI set/replace/clear tests, and stable reads prove multiple targets persist until explicit replacement or clear."
+        - "Surface metadata with shared geometry: stable proof consolidated Facebook Story and Instagram Story into one 1080x1920 geometry while retaining both labels, alongside an independent 1080x1440 portrait target."
+        - "Explicit conflict and ambiguity refusal: focused CLI tests and the stable walkthrough rejected platform-only Instagram and rejected a conflicting unversioned write; replacement remained a separate explicit operation."
+        - "Dynamic clear-to-inherit lifecycle: contract and canvas tests prove clearing removes the override and immediately re-resolves the current canvas default without copying defaults to nodes."
+        - "Current facts separated from future intent: selection_packet.v3, node badges, detail editor, and stable screenshots expose current_geometry separately from next_output_targets."
+        - "Immutable read-before-provider job: the native agent sequence requires a canonical selected-source digest and persists the job/map/groups/slots/source snapshots before provider output; stale planning fails transactionally."
+        - "Older jobs survive future setting changes: checkout and stable oracles changed defaults/node settings after planning and proved the earlier job retained its source revision, digest, geometries, and surfaces."
+        - "Per-child inheritance: exact imports atomically initialized each child with only its own produced geometry while retaining consolidated surfaces for that geometry."
+        - "Counts and creative choices stay job-local: CLI/canvas contract tests and planner UI keep variants-per-target and prompt on the immutable job, never in the durable node setting."
+        - "Multi-source independence and all-or-nothing behavior: backend race tests, integrated review remediation, and checkout oracle prove every source is re-resolved inside one immediate transaction and any stale/missing/conflicting source rejects the whole plan."
+        - "Compatibility, packaging, and released parity: 619 tests with 4 intentional skips, runtime isolation/oracle, stable-upgrade, package/managed-service/plugin smoke, 14 browser tests, PR CI, and the fresh 0.1.29 stable oracle all passed."
+      top_failure_modes:
+        - mode: "Stale or conflicting intent reaches generation."
+          proof: "CAS writes, platform ambiguity refusal, explicit replacement semantics, BEGIN IMMEDIATE re-resolution, aggregate-digest checks, and the released stale-digest rejection all fail before provider work."
+        - mode: "Future settings corrupt factual assets or immutable jobs."
+          proof: "Current output specs remain separate; checkout and stable oracles changed the live node setting after planning while the old job retained its original revision, digest, groups, slots, and exact pixels."
+        - mode: "A parent or sibling target leaks into the wrong child."
+          proof: "Stable exact import produced one 1080x1920 child with two same-geometry surfaces and one 1080x1440 child with only Instagram portrait; each derived_child setting contained only its own output specification."
+        - mode: "Cancellation or malformed output leaves partial durable state."
+          proof: "Cancelled import was refused with no outputs; wrong-size stable import failed while seven database table counts remained identical before and after."
+        - mode: "Checkout, CLI, agent, canvas, or released package disagree."
+          proof: "The canonical digest is shared by selection v3, CLI planning, node badges, and the planner; both checkout and stable profile gates tied the proof to exact code/profile/database/service identities, and npm/tag/release assets agree on 0.1.29."
+      release_evidence:
+        - "PR https://github.com/mean-weasel/lineage/pull/125 is merged with every check successful at commit 96899b0bf06eb605507f8c7769831caf36d50b45."
+        - "Annotated tag v0.1.29 object aa0c91c2a0d55443b9f47799332ed9e0f80964fa peels to the merged main commit."
+        - "Release workflow https://github.com/mean-weasel/lineage/actions/runs/30316229583 completed successfully for that commit."
+        - "npm latest is 0.1.29 with integrity sha512-l6dhk2m5hLN4iltNPcVN+56PGWO5O9UvYP2lIEIMtiU0d+/4gW3yDhOKetRJtroe0Q3pBWB72IiWPfh5n+aD9w==."
+        - "GitHub Release https://github.com/mean-weasel/lineage/releases/tag/v0.1.29 carries the plugin tarball with sha256 88d9cb9daff50f8e08091a96c4a02cde2aaf3ed4135d14c555d4375777d9774f and its checksum asset."
+      missing_evidence: []
+      remaining_blockers: []
+      next_task: null
+      deviations:
+        - "The dedicated GoalBuddy Judge exceeded its single bounded 60-second wait without returning a receipt and was interrupted; the PM performed the required read-only fallback audit."
 checks:
-  dirty_fingerprint: "Product baseline 8d1227c3cf1686a433f4ee73a14539deb5a44303; later changes are committed GoalBuddy control files only"
+  dirty_fingerprint: "Released product commit c631d426268404adf6578fee047a0d12efd34106; only final GoalBuddy release/oracle/audit state differs on the feature branch."
   last_verification:
     result: pass
-    task: null
+    task: T999
     commands:
-      - "npm test — 84 files passed; 598 tests passed, 4 skipped"
-      - "npm run docs:validate — clean"
+      - "npm run ci — 87 files; 619 tests passed, 4 intentional skips; all public, package, runtime, plugin, and 14 browser gates passed"
+      - "GitHub PR #125 — all required checks successful; merged as 96899b0bf06eb605507f8c7769831caf36d50b45"
+      - "Release v0.1.29 — tagged Release workflow, npm latest/integrity, GitHub assets, and checksum agree"
+      - "Fresh lineage-stable production-profile oracle — effective read, immutable planning, exact import, child inheritance, cancellation, and zero-partial wrong-size rejection passed"
+      - "check-goal-state.mjs — goal done, 15 tasks, active_task null, no errors or warnings"
