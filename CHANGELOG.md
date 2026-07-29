@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.31
+
+- Replace the stacked top navigation and growing Canvas Actions menu with a full-height destination rail, contextual left panel, and full-page canvas that stay usable across desktop and mobile layouts.
+- Move Canvas appearance into a polished top-right settings panel with direct card, layout, connection, minimap, and hover controls, graceful motion, responsive mobile treatment, and a first-use hint.
+- Make the Lineage brand open an accessible About dialog with release and verified runtime identity, repository and documentation links, and deliberately sanitized diagnostics copying.
+
 ## 0.1.30
 
 - Add switchable compact-node and portrait-card lineage presentations, with full-image containment for social artwork and browser-local presentation preferences.
