@@ -1,0 +1,311 @@
+.about-lineage-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background: rgba(7, 25, 31, 0.62);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+  animation: about-lineage-backdrop-in 160ms ease-out both;
+}
+
+.about-lineage-dialog {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: hidden auto;
+  border: 1px solid rgba(111, 156, 166, 0.3);
+  border-radius: 20px;
+  background: #fbfdfd;
+  box-shadow:
+    0 28px 80px rgba(4, 22, 28, 0.32),
+    0 2px 8px rgba(4, 22, 28, 0.12);
+  color: #17323a;
+  animation: about-lineage-dialog-in 220ms cubic-bezier(0.2, 0.85, 0.3, 1) both;
+}
+
+.about-lineage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 24px 19px;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(28, 159, 166, 0.16), transparent 42%),
+    linear-gradient(145deg, #f0faf9 0%, #fbfdfd 66%);
+}
+
+.about-lineage-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.about-lineage-mark {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 13px;
+  background: #174651;
+  box-shadow: 0 8px 20px rgba(15, 73, 83, 0.2);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.about-lineage-identity p {
+  margin: 0 0 4px;
+  color: #4f737b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.about-lineage-identity h2 {
+  margin: 0;
+  color: #102f38;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.about-lineage-close {
+  display: inline-flex;
+  width: 36px;
+  min-height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d6e3e6;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #31515b;
+}
+
+.about-lineage-close:hover,
+.about-lineage-close:focus-visible {
+  border-color: #8fb9c0;
+  background: #fff;
+  color: #076b77;
+}
+
+.about-lineage-body {
+  display: grid;
+  gap: 20px;
+  padding: 0 24px 22px;
+}
+
+.about-lineage-description {
+  margin: 0;
+  color: #587078;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.about-lineage-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #dce7e9;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.about-lineage-facts > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e7eef0;
+}
+
+.about-lineage-facts > div:nth-child(odd) {
+  border-right: 1px solid #e7eef0;
+}
+
+.about-lineage-facts > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.about-lineage-facts dt {
+  margin-bottom: 4px;
+  color: #71858b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.about-lineage-facts dd {
+  overflow: hidden;
+  margin: 0;
+  color: #193c45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-lineage-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.about-lineage-links a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #dce7e9;
+  border-radius: 12px;
+  background: #fff;
+  color: #214a53;
+  padding: 12px;
+  text-decoration: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.about-lineage-links a:hover,
+.about-lineage-links a:focus-visible {
+  border-color: #8cbac1;
+  box-shadow: 0 7px 18px rgba(23, 70, 81, 0.1);
+  color: #076b77;
+  transform: translateY(-1px);
+}
+
+.about-lineage-links span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.about-lineage-links strong,
+.about-lineage-links small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-lineage-links strong {
+  font-size: 12px;
+}
+
+.about-lineage-links small {
+  color: #788b90;
+  font-size: 10px;
+}
+
+.about-lineage-footer {
+  display: flex;
+  min-height: 66px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid #dfe9eb;
+  background: #f6f9fa;
+  padding: 13px 24px;
+}
+
+.about-lineage-copy-status {
+  min-height: 16px;
+  margin: 0 auto 0 0;
+  color: #24705e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.about-lineage-copy-status.error {
+  color: #a8453b;
+}
+
+.about-lineage-copy {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #bcd0d4;
+  border-radius: 10px;
+  background: #fff;
+  color: #214a53;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.about-lineage-copy:hover,
+.about-lineage-copy:focus-visible {
+  border-color: #77aeb6;
+  background: #edf8f8;
+  color: #075f6c;
+}
+
+@keyframes about-lineage-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes about-lineage-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 560px) {
+  .about-lineage-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .about-lineage-dialog {
+    max-height: calc(100dvh - 24px);
+    border-radius: 18px;
+  }
+
+  .about-lineage-header {
+    padding: 20px 18px 17px;
+  }
+
+  .about-lineage-identity p {
+    font-size: 9px;
+  }
+
+  .about-lineage-identity h2 {
+    font-size: 21px;
+  }
+
+  .about-lineage-body {
+    gap: 16px;
+    padding: 0 18px 18px;
+  }
+
+  .about-lineage-links {
+    grid-template-columns: 1fr;
+  }
+
+  .about-lineage-footer {
+    padding: 12px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-lineage-backdrop,
+  .about-lineage-dialog {
+    animation: none;
+  }
+
+  .about-lineage-links a {
+    transition: none;
+  }
+}

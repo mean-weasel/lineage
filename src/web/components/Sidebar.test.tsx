@@ -74,6 +74,34 @@ describe('Sidebar', () => {
     expect(text()).not.toContain('More');
   });
 
+  it('opens About Lineage from the brand and restores focus when closed', () => {
+    renderSidebar('lineage', { runtime });
+    const opener = buttonByLabel('About Lineage')!;
+    opener.focus();
+
+    act(() => opener.click());
+
+    const dialog = document.body.querySelector<HTMLElement>('[aria-labelledby="about-lineage-title"]');
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.textContent).toContain('canvas-navigation-dev');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Close About Lineage');
+
+    act(() => {
+      document.body.querySelector<HTMLButtonElement>('[aria-label="Close About Lineage"]')?.click();
+    });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('keeps About Lineage reachable through the contextual header on mobile', () => {
+    const onMobileContextOpenChange = vi.fn();
+    renderSidebar('lineage', { mobileContextOpen: true, onMobileContextOpenChange, runtime });
+
+    act(() => buttonByLabel('Open About Lineage')?.click());
+
+    expect(onMobileContextOpenChange).toHaveBeenCalledWith(false);
+    expect(document.body.querySelector('[aria-labelledby="about-lineage-title"]')).not.toBeNull();
+  });
+
   it('keeps destinations and create/upload reachable in the mobile drawer', () => {
     renderSidebar('lineage');
 

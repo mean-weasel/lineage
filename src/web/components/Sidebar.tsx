@@ -13,14 +13,15 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import type { ProjectSummary } from '../../shared/types';
-import { appDescription, appName } from '../../shared/appConstants';
+import { appName } from '../../shared/appConstants';
 import { placementFilters, sourceFilters, statusFilters, type PlacementFilter, type SourceFilter, type StudioView, type StatusFilter } from '../assetUi';
 import { lineageReleaseInfo } from '../releaseInfo';
 import { navigationViews } from './Topbar.navigation';
 import { RuntimeIdentityBadge } from './Topbar';
+import { AboutLineageDialog } from './AboutLineageDialog';
 import './Sidebar.css';
 
 const navigationIcons = {
@@ -79,6 +80,8 @@ export function Sidebar(props: {
   const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileCloseRef = useRef<HTMLButtonElement | null>(null);
   const mobileWasOpen = useRef(mobileContextOpen);
+  const aboutReturnFocusRef = useRef<HTMLElement | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   useEffect(() => {
     if (mobileContextOpen) mobileCloseRef.current?.focus();
@@ -92,12 +95,26 @@ export function Sidebar(props: {
     props.onMobileContextOpenChange(false);
   }
 
+  function openAbout(event: MouseEvent<HTMLButtonElement>) {
+    aboutReturnFocusRef.current = mobileContextOpen ? mobileTriggerRef.current : event.currentTarget;
+    props.onMobileContextOpenChange(false);
+    setAboutOpen(true);
+  }
+
   return (
     <>
       <aside className="navigation-shell" aria-label="Application navigation">
         <nav className="navigation-rail" aria-label={`${appName} destinations`}>
           <div className="rail-brand">
-            <div className="brand-mark" aria-label={appDescription}>L</div>
+            <button
+              aria-label="About Lineage"
+              className="brand-mark brand-button"
+              onClick={openAbout}
+              title="About Lineage"
+              type="button"
+            >
+              L
+            </button>
           </div>
           <button
             aria-label="Expand contextual panel"
@@ -173,10 +190,15 @@ export function Sidebar(props: {
           role={mobileContextOpen ? 'dialog' : undefined}
         >
           <header className="context-panel-header">
-            <div className="context-brand">
+            <button
+              aria-label="Open About Lineage"
+              className="context-brand"
+              onClick={openAbout}
+              type="button"
+            >
               <strong>{appName}</strong>
               <span className="brand-version" title={`${lineageReleaseInfo.channel} channel`}>v{lineageReleaseInfo.version}</span>
-            </div>
+            </button>
             <button
               aria-label="Close navigation panel"
               className="context-close mobile-context-close"
@@ -267,6 +289,14 @@ export function Sidebar(props: {
           className="navigation-backdrop"
           onClick={() => props.onMobileContextOpenChange(false)}
           type="button"
+        />
+      )}
+      {aboutOpen && (
+        <AboutLineageDialog
+          onClose={() => setAboutOpen(false)}
+          returnFocusRef={aboutReturnFocusRef}
+          runtime={props.runtime}
+          runtimeIdentityUnavailable={props.runtimeIdentityUnavailable}
         />
       )}
     </>
