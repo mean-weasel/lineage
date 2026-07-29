@@ -115,12 +115,14 @@ Plan outputs, output defaults, and selection management. Maintenance and
 Demo/QA are collapsed by default. Archive current lineage remains under
 **Workspace options** and uses destructive styling.
 
-Use the gear at the lower right of Canvas for presentation and graph controls:
+Use the gear at the upper right of Canvas for presentation and graph controls:
 compact or portrait cards, direction, edge weight, edge labels, hover
-previews, Fit graph, Tidy tree, and Reset appearance. These appearance choices
-are stored in the browser. Canvas settings, selection, and Canvas asset details
-share one right-side panel, so opening one replaces the other; on mobile that
-panel becomes a bottom sheet.
+previews, minimap visibility, Fit graph, Tidy tree, and Reset appearance.
+These appearance choices are stored in the browser. Canvas settings, selection,
+and Canvas asset details share one right-side panel, so opening one replaces
+the other; on mobile that panel becomes a bottom sheet. Agent handoff now flows
+through the direct agent/UX bridge and the Agents view rather than a separate
+bottom Agent Context drawer.
 
 ### Install the published channels
 

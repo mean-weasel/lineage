@@ -5,12 +5,14 @@ import {
   readLineageEdgeLabelsVisible,
   readLineageEdgeWeight,
   readLineageGraphDirection,
+  readLineageMinimapVisible,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
   writeLineageCanvasPresentation,
   writeLineageEdgeLabelsVisible,
   writeLineageEdgeWeight,
   writeLineageGraphDirection,
+  writeLineageMinimapVisible,
 } from './lineagePreferences';
 
 describe('lineage hover preview preference', () => {
@@ -34,6 +36,7 @@ describe('lineage canvas appearance preferences', () => {
     expect(readLineageEdgeWeight({ getItem: () => null })).toBe('standard');
     expect(readLineageEdgeWeight({ getItem: () => 'unexpected' })).toBe('standard');
     expect(readLineageEdgeLabelsVisible({ getItem: () => null })).toBe(true);
+    expect(readLineageMinimapVisible({ getItem: () => null })).toBe(true);
     expect(readLineageGraphDirection('compact', { getItem: () => null })).toBe('LR');
     expect(readLineageGraphDirection('portrait', { getItem: () => 'unexpected' })).toBe('LR');
   });
@@ -43,6 +46,7 @@ describe('lineage canvas appearance preferences', () => {
     expect(readLineageEdgeWeight({ getItem: () => 'fine' })).toBe('fine');
     expect(readLineageEdgeWeight({ getItem: () => 'bold' })).toBe('bold');
     expect(readLineageEdgeLabelsVisible({ getItem: () => 'false' })).toBe(false);
+    expect(readLineageMinimapVisible({ getItem: () => 'false' })).toBe(false);
     expect(readLineageGraphDirection('compact', { getItem: () => 'TB' })).toBe('TB');
     expect(readLineageGraphDirection('portrait', { getItem: () => 'RL' })).toBe('RL');
 
@@ -50,13 +54,15 @@ describe('lineage canvas appearance preferences', () => {
     expect(writeLineageCanvasPresentation('portrait', { setItem })).toBe(true);
     expect(writeLineageEdgeWeight('bold', { setItem })).toBe(true);
     expect(writeLineageEdgeLabelsVisible(false, { setItem })).toBe(true);
+    expect(writeLineageMinimapVisible(false, { setItem })).toBe(true);
     expect(writeLineageGraphDirection('compact', 'BT', { setItem })).toBe(true);
     expect(writeLineageGraphDirection('portrait', 'TB', { setItem })).toBe(true);
     expect(setItem).toHaveBeenNthCalledWith(1, 'lineage.preferences.canvas-presentation', 'portrait');
     expect(setItem).toHaveBeenNthCalledWith(2, 'lineage.preferences.edge-weight', 'bold');
     expect(setItem).toHaveBeenNthCalledWith(3, 'lineage.preferences.edge-labels', 'false');
-    expect(setItem).toHaveBeenNthCalledWith(4, 'lineage.preferences.compact-direction', 'BT');
-    expect(setItem).toHaveBeenNthCalledWith(5, 'lineage.preferences.portrait-direction', 'TB');
+    expect(setItem).toHaveBeenNthCalledWith(4, 'lineage.preferences.minimap-visible', 'false');
+    expect(setItem).toHaveBeenNthCalledWith(5, 'lineage.preferences.compact-direction', 'BT');
+    expect(setItem).toHaveBeenNthCalledWith(6, 'lineage.preferences.portrait-direction', 'TB');
   });
 
   it('uses safe defaults and returns false when storage access fails', () => {
@@ -65,10 +71,12 @@ describe('lineage canvas appearance preferences', () => {
     expect(readLineageCanvasPresentation(deniedReader)).toBe('compact');
     expect(readLineageEdgeWeight(deniedReader)).toBe('standard');
     expect(readLineageEdgeLabelsVisible(deniedReader)).toBe(true);
+    expect(readLineageMinimapVisible(deniedReader)).toBe(true);
     expect(readLineageGraphDirection('compact', deniedReader)).toBe('LR');
     expect(writeLineageCanvasPresentation('portrait', deniedWriter)).toBe(false);
     expect(writeLineageEdgeWeight('bold', deniedWriter)).toBe(false);
     expect(writeLineageEdgeLabelsVisible(false, deniedWriter)).toBe(false);
+    expect(writeLineageMinimapVisible(false, deniedWriter)).toBe(false);
     expect(writeLineageGraphDirection('portrait', 'BT', deniedWriter)).toBe(false);
     expect(resetLineageAppearancePreferences(deniedWriter)).toBe(false);
   });
@@ -83,6 +91,7 @@ describe('lineage canvas appearance preferences', () => {
       ['lineage.preferences.edge-weight', 'standard'],
       ['lineage.preferences.edge-labels', 'true'],
       ['lineage.preferences.hover-previews', 'true'],
+      ['lineage.preferences.minimap-visible', 'true'],
     ]);
   });
 });

@@ -9,12 +9,14 @@ export function LineageCanvasAppearanceControls({
   graphDirection,
   hoverPreviewsEnabled,
   loading,
+  minimapVisible,
   onCanvasPresentation,
   onEdgeSummariesVisible,
   onEdgeWeight,
   onFitGraph,
   onGraphDirection,
   onHoverPreviewsEnabled,
+  onMinimapVisible,
   onResetAppearance,
   onTidyGraph,
   snapshotAvailable,
@@ -25,12 +27,14 @@ export function LineageCanvasAppearanceControls({
   graphDirection: LineageGraphDirection;
   hoverPreviewsEnabled: boolean;
   loading: boolean;
+  minimapVisible: boolean;
   onCanvasPresentation: (presentation: LineageCanvasPresentation) => void;
   onEdgeSummariesVisible: (visible: boolean) => void;
   onEdgeWeight: (weight: LineageEdgeWeight) => void;
   onFitGraph: () => void;
   onGraphDirection: (direction: LineageGraphDirection) => void;
   onHoverPreviewsEnabled: (enabled: boolean) => void;
+  onMinimapVisible: (visible: boolean) => void;
   onResetAppearance: () => void;
   onTidyGraph: () => void;
   snapshotAvailable: boolean;
@@ -90,6 +94,21 @@ export function LineageCanvasAppearanceControls({
           <option value="bold">Bold</option>
         </select>
       </label>
+      </section>
+      <section aria-labelledby="canvas-settings-view-aids" className="lineage-canvas-settings-group">
+        <h4 id="canvas-settings-view-aids">View aids</h4>
+        <label className="lineage-action-select">
+          <span>Minimap</span>
+          <select
+            aria-label="Canvas minimap"
+            disabled={!snapshotAvailable}
+            onChange={event => onMinimapVisible(event.target.value === 'show')}
+            value={minimapVisible ? 'show' : 'hide'}
+          >
+            <option value="show">Show minimap</option>
+            <option value="hide">Hide minimap</option>
+          </select>
+        </label>
       </section>
       <section aria-labelledby="canvas-settings-interaction" className="lineage-canvas-settings-group">
         <h4 id="canvas-settings-interaction">Interaction</h4>

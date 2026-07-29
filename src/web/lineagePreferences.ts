@@ -5,6 +5,7 @@ const hoverPreviewsKey = 'lineage.preferences.hover-previews';
 const canvasPresentationKey = 'lineage.preferences.canvas-presentation';
 const edgeWeightKey = 'lineage.preferences.edge-weight';
 const edgeLabelsKey = 'lineage.preferences.edge-labels';
+const minimapVisibleKey = 'lineage.preferences.minimap-visible';
 const compactDirectionKey = 'lineage.preferences.compact-direction';
 const portraitDirectionKey = 'lineage.preferences.portrait-direction';
 
@@ -18,6 +19,7 @@ const lineageAppearanceDefaults = {
   edgeLabelsVisible: true,
   edgeWeight: 'standard',
   hoverPreviewsEnabled: true,
+  minimapVisible: true,
   portraitDirection: 'LR',
 } as const;
 
@@ -90,6 +92,23 @@ export function writeLineageEdgeLabelsVisible(visible: boolean, storage?: Prefer
   }
 }
 
+export function readLineageMinimapVisible(storage?: PreferenceReader): boolean {
+  try {
+    return (storage || window.localStorage).getItem(minimapVisibleKey) !== 'false';
+  } catch {
+    return lineageAppearanceDefaults.minimapVisible;
+  }
+}
+
+export function writeLineageMinimapVisible(visible: boolean, storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(minimapVisibleKey, String(visible));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function directionKey(presentation: LineageCanvasPresentation): string {
   return presentation === 'portrait' ? portraitDirectionKey : compactDirectionKey;
 }
@@ -128,6 +147,7 @@ export function resetLineageAppearancePreferences(storage?: PreferenceWriter): b
     writer.setItem(edgeWeightKey, lineageAppearanceDefaults.edgeWeight);
     writer.setItem(edgeLabelsKey, String(lineageAppearanceDefaults.edgeLabelsVisible));
     writer.setItem(hoverPreviewsKey, String(lineageAppearanceDefaults.hoverPreviewsEnabled));
+    writer.setItem(minimapVisibleKey, String(lineageAppearanceDefaults.minimapVisible));
     return true;
   } catch {
     return false;

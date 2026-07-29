@@ -8,7 +8,6 @@ import { AssetBoard } from './components/AssetBoard';
 import { AgentsView, type AgentWorkTarget } from './components/AgentsView';
 import { ContentBatchesView } from './components/ContentBatchesView';
 import { CopiedTextFallback } from './components/CopiedTextFallback';
-import { CurrentWorkTarget } from './components/CurrentWorkTargetPanel';
 import { LedgerView } from './components/LedgerView';
 import { LineageView } from './components/LineageView';
 import { LocalBackupDrawer } from './components/LocalBackupDrawer';
@@ -56,7 +55,6 @@ export function App() {
   const [view, setView] = useState<StudioView>('lineage');
   const [assetDetailsOpen, setAssetDetailsOpen] = useState(false);
   const [inspectedAsset, setInspectedAsset] = useState<GrowthAsset | null>(null);
-  const [workTargetRefreshKey, setWorkTargetRefreshKey] = useState(0);
   const [runtime, setRuntime] = useState<LineageRuntimeInfo | null>(null);
   const [runtimeIdentityUnavailable, setRuntimeIdentityUnavailable] = useState(false);
   const [contextPanelOpen, setContextPanelOpen] = useState(readContextPanelOpen);
@@ -357,13 +355,6 @@ export function App() {
       <main className="workspace">
         {toast && <ToastBanner toast={toast} onDismiss={() => setToast(null)} />}
         {copiedText && <CopiedTextFallback copiedText={copiedText} onDismiss={() => setCopiedText(null)} />}
-        <CurrentWorkTarget
-          onCopy={copyText}
-          project={project}
-          refreshKey={workTargetRefreshKey}
-          selectedAsset={selected}
-          view={view}
-        />
         {view === 'review' ? (
           <ReviewQueue
             channel={channel}
@@ -392,7 +383,6 @@ export function App() {
             onCopy={copyText}
             onOpenAsset={openAssetDetails}
             onToast={showToast}
-            onWorkTargetsChanged={() => setWorkTargetRefreshKey(value => value + 1)}
             project={project}
             selectedAsset={selected}
           />
@@ -430,7 +420,7 @@ export function App() {
               }}
               onOpen={() => setLocalBackupOpen(true)}
             />
-            <AssetBoard assets={assets} liveSync={liveSync} onCopy={copyText} onSelectionChanged={() => setWorkTargetRefreshKey(value => value + 1)} page={page} pageSize={pageSize} previewUrls={previewUrls} project={project} selected={selected} setLiveSync={setLiveSync} setPage={setPage} setPageSize={setPageSize} setSelectedId={setSelectedId} snapshot={projectSnapshot} source={source} totals={totals} />
+            <AssetBoard assets={assets} liveSync={liveSync} onCopy={copyText} page={page} pageSize={pageSize} previewUrls={previewUrls} project={project} selected={selected} setLiveSync={setLiveSync} setPage={setPage} setPageSize={setPageSize} setSelectedId={setSelectedId} snapshot={projectSnapshot} source={source} totals={totals} />
           </>
         ) : view === 'settings' ? <SettingsView onToast={showToast} project={project} /> : (
           <LineageView

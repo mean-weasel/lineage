@@ -46,5 +46,7 @@ describe('shouldRevealCopiedText', () => {
     expect(sidebarEnd).toBeLessThan(workspaceStart);
     expect(source).toContain('context-panel-collapsed');
     expect(source).toContain('mobile-context-open');
+    expect(source).not.toContain('CurrentWorkTarget');
+    expect(source).not.toContain('Agent context');
   });
 });

@@ -74,7 +74,8 @@ describe('Canvas contextual tool composition', () => {
     expect(css).toContain('@media (max-width: 760px)');
     expect(css).toContain('.lineage-panel-backdrop');
     expect(css).toContain(".lineage-canvas-settings-trigger[aria-expanded='true']");
-    expect(css).toContain('bottom: calc(min(72vh, 620px) + 18px);');
+    expect(css).toContain('top: 18px;');
+    expect(css).toContain("right: calc(min(390px, calc(100% - 24px)) + 24px);");
   });
 });
 

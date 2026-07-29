@@ -13,12 +13,14 @@ import {
   readLineageEdgeLabelsVisible,
   readLineageEdgeWeight,
   readLineageGraphDirection,
+  readLineageMinimapVisible,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
   writeLineageCanvasPresentation,
   writeLineageEdgeLabelsVisible,
   writeLineageEdgeWeight,
   writeLineageGraphDirection,
+  writeLineageMinimapVisible,
   type LineageEdgeWeight,
 } from '../lineagePreferences';
 import type { AssetFlowNode, LineageCanvasPresentation } from './LineageAssetNode';
@@ -72,6 +74,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyAttempts, setHistoryAttempts] = useState<LineageAttempt[]>([]);
   const [hoverPreviewsEnabled, setHoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
+  const [minimapVisible, setMinimapVisible] = useState(readLineageMinimapVisible);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
   const [edgeSummariesVisible, setEdgeSummariesVisible] = useState(readLineageEdgeLabelsVisible);
@@ -606,6 +609,12 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       onToast('error', 'Edge labels changed for this session, but browser storage is unavailable so the preference could not be saved');
     }
   }
+  function selectMinimapVisible(visible: boolean) {
+    setMinimapVisible(visible);
+    if (!writeLineageMinimapVisible(visible)) {
+      onToast('error', 'Minimap visibility changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
+  }
   function resetAppearance() {
     setCanvasPresentation('compact');
     setCompactGraphDirection('LR');
@@ -613,6 +622,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     setEdgeWeight('standard');
     setEdgeSummariesVisible(true);
     setHoverPreviewsEnabled(true);
+    setMinimapVisible(true);
     setFlowApi(null);
     if (!resetLineageAppearancePreferences()) {
       onToast('error', 'Appearance reset for this session, but browser storage is unavailable so the defaults could not be saved');
@@ -831,6 +841,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             graphKey={graphKey}
             hoverPreviewsEnabled={canvasHoverPreviewsEnabled}
             loading={loading}
+            minimapVisible={minimapVisible}
             onEdgesChange={handleEdgesChange}
             onEdgeEdit={(edgeId, returnFocus) => setEdgeEditor({ edgeId, returnFocus })}
             onClearFocus={clearFocus}
@@ -892,12 +903,14 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
               graphDirection={graphDirection}
               hoverPreviewsEnabled={hoverPreviewsEnabled}
               loading={loading}
+              minimapVisible={minimapVisible}
               onCanvasPresentation={selectCanvasPresentation}
               onEdgeSummariesVisible={selectEdgeSummariesVisible}
               onEdgeWeight={selectEdgeWeight}
               onFitGraph={() => fitGraph()}
               onGraphDirection={direction => void orientGraph(direction)}
               onHoverPreviewsEnabled={selectHoverPreviews}
+              onMinimapVisible={selectMinimapVisible}
               onResetAppearance={resetAppearance}
               onTidyGraph={() => void tidyGraph()}
               snapshotAvailable={Boolean(snapshot)}

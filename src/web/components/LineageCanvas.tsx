@@ -50,6 +50,7 @@ export function LineageCanvas({
   graphKey,
   hoverPreviewsEnabled,
   loading,
+  minimapVisible,
   onSeedDemo,
   onEdgesChange,
   onEdgeEdit,
@@ -79,6 +80,7 @@ export function LineageCanvas({
   graphKey: string;
   hoverPreviewsEnabled: boolean;
   loading: boolean;
+  minimapVisible: boolean;
   onSeedDemo: () => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onEdgeEdit: (edgeId: string, trigger: HTMLElement | SVGElement | null) => void;
@@ -363,7 +365,7 @@ export function LineageCanvas({
       >
         <Background />
         <Controls />
-        <MiniMap pannable zoomable />
+        {minimapVisible && <MiniMap pannable zoomable />}
       </ReactFlow>
     </>
   );
