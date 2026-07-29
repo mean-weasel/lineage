@@ -33,6 +33,23 @@
   background: #174651;
 }
 
+.brand-button {
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.brand-button:hover,
+.brand-button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: #1d5965;
+  transform: translateY(-1px);
+}
+
 .rail-destinations,
 .rail-bottom {
   display: grid;
@@ -111,6 +128,17 @@
   min-width: 0;
   align-items: baseline;
   gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.context-brand:hover,
+.context-brand:focus-visible {
+  background: #edf6f7;
 }
 
 .context-brand strong {

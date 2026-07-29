@@ -1,5 +1,41 @@
 import { expect, test } from 'playwright/test';
 
+test('opens About Lineage from the brand with safe diagnostics and mobile access', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/?project=demo-project');
+
+  const aboutTrigger = page.getByRole('button', { name: 'About Lineage', exact: true });
+  await aboutTrigger.click();
+  const about = page.getByRole('dialog', { name: 'About Lineage' });
+  await expect(about).toBeVisible();
+  await expect(about.getByRole('button', { name: 'Close About Lineage' })).toBeFocused();
+  await expect(about).toContainText('Runtime channel');
+  await expect(about.getByRole('link', { name: /GitHub repository/ })).toHaveAttribute('href', 'https://github.com/mean-weasel/lineage');
+  await expect(about.getByRole('link', { name: /Documentation/ })).toHaveAttribute('href', 'https://mean-weasel.github.io/lineage/docs/');
+
+  await about.getByRole('button', { name: 'Copy diagnostics' }).click();
+  await expect(about.getByRole('button', { name: 'Copied' })).toBeVisible();
+  const diagnostics = await page.evaluate(() => navigator.clipboard.readText());
+  expect(diagnostics).toContain('Lineage diagnostics');
+  expect(diagnostics).not.toContain('lineage.sqlite');
+  expect(diagnostics).not.toContain('Application Support');
+
+  await page.keyboard.press('Escape');
+  await expect(about).toHaveCount(0);
+  await expect(aboutTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileTrigger = page.getByRole('button', { name: 'Open navigation panel' });
+  await mobileTrigger.click();
+  const navigationDialog = page.getByRole('dialog', { name: 'Contextual navigation panel' });
+  await navigationDialog.getByRole('button', { name: 'Open About Lineage' }).click();
+  await expect(navigationDialog).not.toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'About Lineage' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close About Lineage' }).click();
+  await expect(mobileTrigger).toBeFocused();
+});
+
 test('offers the Canvas settings hint once without obstructing its gear', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/?project=demo-project');
