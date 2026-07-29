@@ -1,5 +1,30 @@
 import { expect, test } from 'playwright/test';
 
+test('offers the Canvas settings hint once without obstructing its gear', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/?project=demo-project');
+
+  const gear = page.getByRole('button', { name: 'Open Canvas settings' });
+  const hint = page.getByRole('note', { name: 'Canvas settings tip' });
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText('Customize your canvas');
+  const separated = await hint.evaluate((element, gearLabel) => {
+    const hintBox = element.getBoundingClientRect();
+    const gearBox = document.querySelector(`[aria-label="${gearLabel}"]`)?.getBoundingClientRect();
+    return Boolean(gearBox && hintBox.right <= gearBox.left);
+  }, 'Open Canvas settings');
+  expect(separated).toBe(true);
+
+  await gear.click();
+  await expect(hint).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: 'Canvas settings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close Canvas settings' }).click();
+  await page.reload();
+  await expect(hint).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    window.localStorage.getItem('lineage.preferences.canvas-settings-hint-dismissed'))).toBe('true');
+});
+
 test('keeps Canvas full-height and restores focus when its shared panel closes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/?project=demo-project&lineageCanvas=portrait');
@@ -108,17 +133,23 @@ test('uses a mobile navigation dialog and Canvas bottom sheet with focus return'
   await expect(settings).toBeVisible();
   await expect(settings.getByRole('button', { name: 'Close Canvas settings' })).toBeFocused();
   await expect(settings).toHaveCSS('animation-name', 'none');
+  await expect(settings.locator('.lineage-settings-sheet-handle')).toBeVisible();
   const resetAppearance = settings.getByRole('button', { name: 'Reset appearance' });
-  const geometry = await settings.evaluate((element, { gearLabel, resetLabel }) => {
+  const settingsScroller = settings.locator('.lineage-canvas-settings-groups');
+  await settingsScroller.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await expect(settings.getByRole('button', { name: 'Close Canvas settings' })).toBeVisible();
+  await expect(resetAppearance).toBeVisible();
+  const geometry = await settings.evaluate((element, { gearLabel }) => {
     const box = element.getBoundingClientRect();
     const canvas = document.querySelector('.lineage-canvas')?.getBoundingClientRect();
     const gear = document.querySelector(`[aria-label="${gearLabel}"]`)?.getBoundingClientRect();
-    const reset = Array.from(element.querySelectorAll('button'))
-      .find(button => button.textContent?.trim() === resetLabel)
-      ?.getBoundingClientRect();
+    const reset = element.querySelector('.lineage-reset-appearance')?.getBoundingClientRect();
+    const header = element.querySelector('.lineage-canvas-settings-head')?.getBoundingClientRect();
+    const footer = element.querySelector('.lineage-canvas-settings-footer')?.getBoundingClientRect();
     return {
-      bottomGap: canvas ? Math.abs(canvas.bottom - box.bottom) : -1,
+      bottomGap: Math.abs(window.innerHeight - box.bottom),
       canvasWidth: canvas?.width || 0,
+      footerAnchored: Boolean(footer && Math.abs(footer.bottom - box.bottom) <= 1),
       gearOverlapsSheet: Boolean(gear
         && gear.left < box.right
         && gear.right > box.left
@@ -130,13 +161,16 @@ test('uses a mobile navigation dialog and Canvas bottom sheet with focus return'
         && gear.top < reset.bottom
         && gear.bottom > reset.top),
       rightGap: canvas && gear ? canvas.right - gear.right : -1,
+      headerAnchored: Boolean(header && Math.abs(header.top - box.top) <= 1),
       topGap: canvas && gear ? gear.top - canvas.top : -1,
       width: box.width,
     };
-  }, { gearLabel: 'Open Canvas settings', resetLabel: 'Reset appearance' });
+  }, { gearLabel: 'Open Canvas settings' });
   await expect(resetAppearance).toBeVisible();
   expect(geometry.bottomGap).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry.canvasWidth - geometry.width)).toBeLessThanOrEqual(1);
+  expect(geometry.headerAnchored).toBe(true);
+  expect(geometry.footerAnchored).toBe(true);
   expect(geometry.gearOverlapsSheet).toBe(false);
   expect(geometry.gearOverlapsReset).toBe(false);
   expect(geometry.rightGap).toBeGreaterThanOrEqual(16);

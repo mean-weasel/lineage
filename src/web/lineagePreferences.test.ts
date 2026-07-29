@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   readHoverPreviewsEnabled,
+  readCanvasSettingsHintDismissed,
   readLineageCanvasPresentation,
   readLineageEdgeLabelsVisible,
   readLineageEdgeWeight,
@@ -8,6 +9,7 @@ import {
   readLineageMinimapVisible,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
+  writeCanvasSettingsHintDismissed,
   writeLineageCanvasPresentation,
   writeLineageEdgeLabelsVisible,
   writeLineageEdgeWeight,
@@ -26,6 +28,22 @@ describe('lineage hover preview preference', () => {
     expect(writeHoverPreviewsEnabled(false, { setItem })).toBe(true);
     expect(setItem).toHaveBeenCalledWith('lineage.preferences.hover-previews', 'false');
     expect(writeHoverPreviewsEnabled(true, { setItem: () => { throw new Error('denied'); } })).toBe(false);
+  });
+});
+
+describe('lineage Canvas settings hint preference', () => {
+  it('shows for a fresh browser and stays dismissed after the first interaction', () => {
+    expect(readCanvasSettingsHintDismissed({ getItem: () => null })).toBe(false);
+    expect(readCanvasSettingsHintDismissed({ getItem: () => 'true' })).toBe(true);
+
+    const setItem = vi.fn();
+    expect(writeCanvasSettingsHintDismissed({ setItem })).toBe(true);
+    expect(setItem).toHaveBeenCalledWith('lineage.preferences.canvas-settings-hint-dismissed', 'true');
+  });
+
+  it('fails closed when browser storage is unavailable', () => {
+    expect(readCanvasSettingsHintDismissed({ getItem: () => { throw new Error('denied'); } })).toBe(true);
+    expect(writeCanvasSettingsHintDismissed({ setItem: () => { throw new Error('denied'); } })).toBe(false);
   });
 });
 

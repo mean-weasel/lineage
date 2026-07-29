@@ -9,6 +9,7 @@ import type { GenerationJob, GenerationJobListResponse } from '../../shared/gene
 import { api, ApiError } from '../api';
 import {
   readHoverPreviewsEnabled,
+  readCanvasSettingsHintDismissed,
   readLineageCanvasPresentation,
   readLineageEdgeLabelsVisible,
   readLineageEdgeWeight,
@@ -16,6 +17,7 @@ import {
   readLineageMinimapVisible,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
+  writeCanvasSettingsHintDismissed,
   writeLineageCanvasPresentation,
   writeLineageEdgeLabelsVisible,
   writeLineageEdgeWeight,
@@ -86,6 +88,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<'settings' | 'selection' | 'asset' | null>(null);
+  const [settingsHintVisible, setSettingsHintVisible] = useState(() => !readCanvasSettingsHintDismissed());
   const [canvasToolsHost, setCanvasToolsHost] = useState<HTMLElement | null>(null);
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<AssetFlowNode>([]);
   const [flowEdges, setFlowEdges] = useEdgesState<Edge>([]);
@@ -377,7 +380,12 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     panelReturnFocusRef.current?.focus();
     panelReturnFocusRef.current = null;
   }, []);
+  function dismissSettingsHint() {
+    setSettingsHintVisible(false);
+    writeCanvasSettingsHintDismissed();
+  }
   function togglePanel(mode: 'settings' | 'selection' | 'asset') {
+    if (mode === 'settings') dismissSettingsHint();
     const invokingControl = document.activeElement;
     if (invokingControl instanceof HTMLElement) panelReturnFocusRef.current = invokingControl;
     setPanelMode(current => {
@@ -869,6 +877,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           />
           <button
             aria-controls="lineage-canvas-panel"
+            aria-describedby={settingsHintVisible ? 'lineage-canvas-settings-hint-copy' : undefined}
             aria-expanded={panelMode === 'settings'}
             aria-label="Open Canvas settings"
             className="lineage-canvas-settings-trigger"
@@ -878,6 +887,16 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           >
             <span aria-hidden="true">⚙</span>
           </button>
+          {settingsHintVisible && !panelMode && (
+            <div aria-label="Canvas settings tip" className="lineage-canvas-settings-hint" role="note">
+              <span aria-hidden="true" className="lineage-canvas-settings-hint-icon">✦</span>
+              <span id="lineage-canvas-settings-hint-copy">
+                <strong>Customize your canvas</strong>
+                <small>Shape cards, layout, connections, and view aids.</small>
+              </span>
+              <button aria-label="Dismiss Canvas settings hint" onClick={dismissSettingsHint} type="button">×</button>
+            </div>
+          )}
         </div>
         {panelMode && (
           <button
@@ -889,7 +908,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
         )}
         {panelMode === 'settings' && (
           <aside aria-label="Canvas settings" className="lineage-side lineage-canvas-settings-panel" id="lineage-canvas-panel">
-            <div className="lineage-side-head">
+            <div className="lineage-side-head lineage-canvas-settings-head">
+              <span aria-hidden="true" className="lineage-settings-sheet-handle" />
               <div>
                 <h3>Canvas settings</h3>
                 <p className="muted-copy">Appearance preferences are saved in this browser.</p>

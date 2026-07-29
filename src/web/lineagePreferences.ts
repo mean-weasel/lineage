@@ -8,6 +8,7 @@ const edgeLabelsKey = 'lineage.preferences.edge-labels';
 const minimapVisibleKey = 'lineage.preferences.minimap-visible';
 const compactDirectionKey = 'lineage.preferences.compact-direction';
 const portraitDirectionKey = 'lineage.preferences.portrait-direction';
+const canvasSettingsHintDismissedKey = 'lineage.preferences.canvas-settings-hint-dismissed';
 
 type PreferenceReader = Pick<Storage, 'getItem'>;
 type PreferenceWriter = Pick<Storage, 'setItem'>;
@@ -132,6 +133,23 @@ export function writeLineageGraphDirection(
 ): boolean {
   try {
     (storage || window.localStorage).setItem(directionKey(presentation), direction);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readCanvasSettingsHintDismissed(storage?: PreferenceReader): boolean {
+  try {
+    return (storage || window.localStorage).getItem(canvasSettingsHintDismissedKey) === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export function writeCanvasSettingsHintDismissed(storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(canvasSettingsHintDismissedKey, 'true');
     return true;
   } catch {
     return false;

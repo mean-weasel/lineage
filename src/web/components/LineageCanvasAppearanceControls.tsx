@@ -179,8 +179,9 @@ export function LineageCanvasAppearanceControls({
   const disabled = !snapshotAvailable || loading;
 
   return (
-    <div className="lineage-canvas-settings-groups">
-      <section aria-labelledby="canvas-settings-appearance" className="lineage-canvas-settings-group">
+    <>
+      <div className="lineage-canvas-settings-groups">
+        <section aria-labelledby="canvas-settings-appearance" className="lineage-canvas-settings-group">
         <div className="lineage-canvas-settings-group-head">
           <span aria-hidden="true">◫</span>
           <div>
@@ -203,9 +204,9 @@ export function LineageCanvasAppearanceControls({
             ))}
           </div>
         </fieldset>
-      </section>
+        </section>
 
-      <section aria-labelledby="canvas-settings-layout" className="lineage-canvas-settings-group">
+        <section aria-labelledby="canvas-settings-layout" className="lineage-canvas-settings-group">
         <div className="lineage-canvas-settings-group-head">
           <span aria-hidden="true">↳</span>
           <div>
@@ -238,9 +239,9 @@ export function LineageCanvasAppearanceControls({
             <span><strong>Tidy tree</strong><small>Restore spacing</small></span>
           </button>
         </div>
-      </section>
+        </section>
 
-      <section aria-labelledby="canvas-settings-connections" className="lineage-canvas-settings-group">
+        <section aria-labelledby="canvas-settings-connections" className="lineage-canvas-settings-group">
         <div className="lineage-canvas-settings-group-head">
           <span aria-hidden="true">⌁</span>
           <div>
@@ -271,9 +272,9 @@ export function LineageCanvasAppearanceControls({
           label="Edge labels"
           onChange={onEdgeSummariesVisible}
         />
-      </section>
+        </section>
 
-      <section aria-labelledby="canvas-settings-view-aids" className="lineage-canvas-settings-group">
+        <section aria-labelledby="canvas-settings-view-aids" className="lineage-canvas-settings-group">
         <div className="lineage-canvas-settings-group-head">
           <span aria-hidden="true">⌖</span>
           <div>
@@ -289,9 +290,9 @@ export function LineageCanvasAppearanceControls({
           label="Minimap"
           onChange={onMinimapVisible}
         />
-      </section>
+        </section>
 
-      <section aria-labelledby="canvas-settings-interaction" className="lineage-canvas-settings-group">
+        <section aria-labelledby="canvas-settings-interaction" className="lineage-canvas-settings-group">
         <div className="lineage-canvas-settings-group-head">
           <span aria-hidden="true">◎</span>
           <div>
@@ -307,12 +308,15 @@ export function LineageCanvasAppearanceControls({
           label="Hover previews"
           onChange={onHoverPreviewsEnabled}
         />
-      </section>
+        </section>
+      </div>
 
-      <button className="lineage-reset-appearance" onClick={onResetAppearance} type="button">
-        <span aria-hidden="true">↺</span>
-        <span><strong>Reset appearance</strong><small>Return every Canvas setting to its default</small></span>
-      </button>
-    </div>
+      <div className="lineage-canvas-settings-footer">
+        <button className="lineage-reset-appearance" onClick={onResetAppearance} type="button">
+          <span aria-hidden="true">↺</span>
+          <span><strong>Reset appearance</strong><small>Return every Canvas setting to its default</small></span>
+        </button>
+      </div>
+    </>
   );
 }
