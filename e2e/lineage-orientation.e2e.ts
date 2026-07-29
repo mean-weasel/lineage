@@ -18,28 +18,28 @@ test('rotates lineage graph layout and handles without stale saved positions', a
     await expect(child).toBeVisible();
 
     await openCanvasSettings(page);
-    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
     const topToBottomPath = await firstEdgePath(page);
     expect(topToBottomPath).toMatch(/V|Q/);
 
-    await page.getByLabel('Lineage graph direction').selectOption('LR');
+    await page.getByRole('radio', { name: 'Left to right' }).check();
     await assertRootLeftOfChild(root, child);
     const leftToRightPath = await firstEdgePath(page);
     expect(leftToRightPath).not.toBe(topToBottomPath);
 
-    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
 
-    await page.getByLabel('Lineage graph direction').selectOption('LR');
+    await page.getByRole('radio', { name: 'Left to right' }).check();
     await assertRootLeftOfChild(root, child);
 
-    await page.getByLabel('Canvas card style').selectOption('portrait');
-    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await page.getByRole('radio', { name: 'Portrait cards' }).check();
+    await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
 
-    await page.getByLabel('Canvas card style').selectOption('compact');
-    await expect(page.getByLabel('Lineage graph direction')).toHaveValue('LR');
+    await page.getByRole('radio', { name: 'Compact nodes' }).check();
+    await expect(page.getByRole('radio', { name: 'Left to right' })).toBeChecked();
     await assertRootLeftOfChild(root, child);
   } finally {
     if (workspaceId) {

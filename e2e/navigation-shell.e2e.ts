@@ -27,7 +27,11 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
 
   const minimap = page.locator('.react-flow__minimap');
   if (await minimap.count() === 0) {
-    const loadDemo = page.getByRole('button', { name: 'Load demo lineage' }).first();
+    const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
+    const loadDemo = canvasTools.getByRole('button', { name: 'Load demo lineage' }).first();
+    if (await loadDemo.count() === 0) {
+      await canvasTools.getByText('Demo/QA', { exact: true }).click();
+    }
     await expect(loadDemo).toBeEnabled();
     const seeded = page.waitForResponse(response =>
       response.request().method() === 'POST'
@@ -41,6 +45,12 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
   const settings = page.getByRole('complementary', { name: 'Canvas settings' });
   await expect(settings).toBeVisible();
   await expect(gear).toHaveAttribute('aria-expanded', 'true');
+  await expect(settings.getByRole('radio')).toHaveCount(9);
+  await expect(settings.getByRole('switch')).toHaveCount(3);
+  await expect(settings.getByRole('radio', { name: 'Portrait cards' })).toBeChecked();
+  await settings.getByRole('radio', { name: 'Compact nodes' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(settings.getByRole('radio', { name: 'Portrait cards' })).toBeChecked();
   await expect.poll(async () => settings.evaluate((panel, gearLabel) => {
     const panelBox = panel.getBoundingClientRect();
     const gearBox = document.querySelector(`[aria-label="${gearLabel}"]`)?.getBoundingClientRect();
@@ -48,15 +58,18 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
   }, 'Open Canvas settings')).toBe(true);
 
   await expect(minimap).toBeVisible();
-  await settings.getByLabel('Canvas minimap').selectOption('hide');
+  const minimapSwitch = settings.getByRole('switch', { name: 'Canvas minimap' });
+  await expect(minimapSwitch).toHaveAttribute('aria-checked', 'true');
+  await minimapSwitch.click();
+  await expect(minimapSwitch).toHaveAttribute('aria-checked', 'false');
   await expect(minimap).toHaveCount(0);
   await page.reload();
   await expect(page.locator('.react-flow__minimap')).toHaveCount(0);
   await gear.click();
-  await expect(page.getByRole('complementary', { name: 'Canvas settings' }).getByLabel('Canvas minimap')).toHaveValue('hide');
+  await expect(page.getByRole('complementary', { name: 'Canvas settings' }).getByRole('switch', { name: 'Canvas minimap' })).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('complementary', { name: 'Canvas settings' }).getByRole('button', { name: 'Reset appearance' }).click();
   await expect(page.locator('.react-flow__minimap')).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'Canvas settings' }).getByLabel('Canvas minimap')).toHaveValue('show');
+  await expect(page.getByRole('complementary', { name: 'Canvas settings' }).getByRole('switch', { name: 'Canvas minimap' })).toHaveAttribute('aria-checked', 'true');
 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('complementary', { name: 'Canvas settings' })).toHaveCount(0);
@@ -70,6 +83,7 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
 
 test('uses a mobile navigation dialog and Canvas bottom sheet with focus return', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/?project=demo-project');
 
   const navigationTrigger = page.getByRole('button', { name: 'Open navigation panel' });
@@ -93,6 +107,7 @@ test('uses a mobile navigation dialog and Canvas bottom sheet with focus return'
   const settings = page.getByRole('complementary', { name: 'Canvas settings' });
   await expect(settings).toBeVisible();
   await expect(settings.getByRole('button', { name: 'Close Canvas settings' })).toBeFocused();
+  await expect(settings).toHaveCSS('animation-name', 'none');
   const resetAppearance = settings.getByRole('button', { name: 'Reset appearance' });
   const geometry = await settings.evaluate((element, { gearLabel, resetLabel }) => {
     const box = element.getBoundingClientRect();

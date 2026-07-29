@@ -13,7 +13,7 @@ test('toggles and remembers hover previews for portrait cards', async ({ page, r
     await page.goto('/?project=demo-project&lineageCanvas=compact');
     await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await openCanvasSettings(page);
-    await page.getByLabel('Canvas card style').selectOption('portrait');
+    await page.getByRole('radio', { name: 'Portrait cards' }).check();
     const rootNode = page.locator('.lineage-node.root-node');
     await expect(rootNode).toHaveClass(/lineage-node-portrait/);
     await expect.poll(() => graphFitsInsideCanvas(page), { timeout: 10_000 }).toBe(true);
@@ -24,9 +24,10 @@ test('toggles and remembers hover previews for portrait cards', async ({ page, r
     await expect(preview).toBeVisible();
 
     await openCanvasSettings(page);
-    const hoverPreviews = page.getByLabel('Canvas hover previews');
-    await expect(hoverPreviews).toHaveValue('enabled');
-    await hoverPreviews.selectOption('disabled');
+    const hoverPreviews = page.getByRole('switch', { name: 'Canvas hover previews' });
+    await expect(hoverPreviews).toHaveAttribute('aria-checked', 'true');
+    await hoverPreviews.click();
+    await expect(hoverPreviews).toHaveAttribute('aria-checked', 'false');
     await expect(preview).toHaveCount(0);
     await page.getByRole('button', { name: 'Close Canvas settings' }).click();
     await rootNode.hover();
@@ -35,9 +36,9 @@ test('toggles and remembers hover previews for portrait cards', async ({ page, r
     await page.reload();
     await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await openCanvasSettings(page);
-    await expect(page.getByLabel('Canvas card style')).toHaveValue('portrait');
-    await expect(page.getByLabel('Canvas hover previews')).toHaveValue('disabled');
-    await page.getByLabel('Canvas hover previews').selectOption('enabled');
+    await expect(page.getByRole('radio', { name: 'Portrait cards' })).toBeChecked();
+    await expect(page.getByRole('switch', { name: 'Canvas hover previews' })).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('switch', { name: 'Canvas hover previews' }).click();
     await page.getByRole('button', { name: 'Close Canvas settings' }).click();
     await page.locator('.lineage-node.root-node').hover();
     await expect(preview).toBeVisible();
@@ -46,7 +47,7 @@ test('toggles and remembers hover previews for portrait cards', async ({ page, r
       Storage.prototype.setItem = () => { throw new Error('storage denied'); };
     });
     await openCanvasSettings(page);
-    await page.getByLabel('Canvas edge weight').selectOption('bold');
+    await page.getByRole('radio', { name: 'Bold edges' }).check();
     await expect(page.getByRole('status')).toContainText('Edge weight changed for this session');
   } finally {
     if (seeded.workspace?.id) {

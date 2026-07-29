@@ -138,14 +138,14 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);
 
     await openCanvasSettings(page);
-    const edgeLabels = page.getByLabel('Canvas edge labels');
-    await expect(edgeLabels).toHaveValue('show');
-    await edgeLabels.selectOption('hide');
+    const edgeLabels = page.getByRole('switch', { name: 'Canvas edge labels' });
+    await expect(edgeLabels).toHaveAttribute('aria-checked', 'true');
+    await edgeLabels.click();
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(0);
     await expect(edgeById(page, drillEdgeId)).toHaveAttribute('aria-label', 'swissifier linkedin root v1 to swissifier vertical drill v1: My edit');
 
-    await expect(edgeLabels).toHaveValue('hide');
-    await edgeLabels.selectOption('show');
+    await expect(edgeLabels).toHaveAttribute('aria-checked', 'false');
+    await edgeLabels.click();
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(12);
     await page.getByRole('button', { name: 'Close Canvas settings' }).click();
 
@@ -261,16 +261,23 @@ async function selectDirection(page: Page, direction: string) {
   await page.locator(`.react-flow__node[data-id="${rootId}"]`).click();
   await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
   await openCanvasSettings(page);
-  const directionSelect = page.getByLabel('Lineage graph direction');
+  const directionName = {
+    BT: 'Bottom to top',
+    LR: 'Left to right',
+    RL: 'Right to left',
+    TB: 'Top to bottom',
+  }[direction];
+  if (!directionName) throw new Error(`Unsupported direction ${direction}`);
+  const directionRadio = page.getByRole('radio', { name: directionName });
   const layoutSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/lineage/layout');
   const lineageRefreshed = page.waitForResponse(response => (
     response.request().method() === 'GET'
     && new URL(response.url()).pathname === `/api/lineage/${rootId}`
   ));
-  await directionSelect.selectOption(direction);
+  await directionRadio.check();
   await layoutSaved;
   await lineageRefreshed;
-  await expect(directionSelect).toHaveValue(direction);
+  await expect(directionRadio).toBeChecked();
   await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
   await page.getByRole('button', { name: 'Close Canvas settings' }).click();
   await page.locator('.react-flow__pane').click({ position: { x: 5, y: 5 } });

@@ -87,13 +87,13 @@ test('lets users disable lineage hover previews without disabling details', asyn
   await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
 
   await openCanvasSettings(page);
-  const hoverPreviews = page.getByLabel('Canvas hover previews');
-  await expect(hoverPreviews).toHaveValue('enabled');
-  await hoverPreviews.selectOption('disabled');
-  await expect(hoverPreviews).toHaveValue('disabled');
+  const hoverPreviews = page.getByRole('switch', { name: 'Canvas hover previews' });
+  await expect(hoverPreviews).toHaveAttribute('aria-checked', 'true');
+  await hoverPreviews.click();
+  await expect(hoverPreviews).toHaveAttribute('aria-checked', 'false');
   await page.reload();
   await openCanvasSettings(page);
-  await expect(page.getByLabel('Canvas hover previews')).toHaveValue('disabled');
+  await expect(page.getByRole('switch', { name: 'Canvas hover previews' })).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('button', { name: 'Close Canvas settings' }).click();
   const rootNode = page.locator('.lineage-node.root-node');
   await expect(rootNode).toBeVisible();
@@ -199,10 +199,7 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await page.mouse.move(0, 0);
   await expect(hoverPreview).toContainText('Initial Demo Concept');
   await openCanvasSettings(page);
-  await page.getByLabel('Lineage graph direction').evaluate((select: HTMLSelectElement) => {
-    select.value = 'TB';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await page.getByRole('radio', { name: 'Top to bottom' }).check();
   await expect(hoverPreview).toHaveCount(0);
 
   await canvasTools.getByRole('button', { name: 'Manage selection' }).click();

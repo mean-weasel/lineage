@@ -65,6 +65,7 @@ describe('Canvas contextual tool composition', () => {
 
   it('restores panel focus and uses the mobile breakpoint for the bottom sheet', () => {
     const source = readFileSync(join(process.cwd(), 'src/web/components/LineageView.tsx'), 'utf8');
+    const controls = readFileSync(join(process.cwd(), 'src/web/components/LineageCanvasAppearanceControls.tsx'), 'utf8');
     const css = readFileSync(join(process.cwd(), 'src/web/components/LineageView.css'), 'utf8');
 
     expect(source).toContain('panelReturnFocusRef.current?.focus()');
@@ -76,6 +77,13 @@ describe('Canvas contextual tool composition', () => {
     expect(css).toContain(".lineage-canvas-settings-trigger[aria-expanded='true']");
     expect(css).toContain('top: 18px;');
     expect(css).toContain("right: calc(min(390px, calc(100% - 24px)) + 24px);");
+    expect(controls).toContain('type="radio"');
+    expect(controls).toContain('role="switch"');
+    expect(controls).toContain('aria-checked={checked}');
+    expect(css).toContain('@keyframes lineage-settings-panel-in');
+    expect(css).toContain('@keyframes lineage-settings-sheet-in');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(css).toContain('.lineage-setting-switch-thumb');
   });
 });
 
