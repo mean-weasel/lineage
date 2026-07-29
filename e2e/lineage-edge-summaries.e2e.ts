@@ -35,7 +35,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
 
   try {
     await page.goto('/');
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const posterEdge = page.locator('.react-flow__edge').filter({ has: page.locator('.react-flow__edge-text', { hasText: 'Poster focus' }) });
     const drillEdge = page.locator('.react-flow__edge').filter({ has: page.locator('.react-flow__edge-text', { hasText: 'Drill focus' }) });
@@ -58,7 +58,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     await interactionBackground.hover();
     await expect.poll(() => labelColors(interactionLabel, interactionBackground)).toEqual(interactionColors);
 
-    await page.locator('header.lineage-header').hover();
+    await page.getByRole('region', { name: 'Canvas workspace tools' }).hover();
     await interactionBackground.click();
     await expect(interactionEdge).toHaveClass(/selected/);
     await expect.poll(() => labelColors(interactionLabel, interactionBackground)).toEqual(interactionColors);
@@ -85,7 +85,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     });
 
     await page.reload();
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);
 
     await openEdgeSummaryWithDoubleClick(page, posterEdgeId);
@@ -132,21 +132,22 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     });
 
     await page.reload();
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await expect(edgeById(page, posterEdgeId).locator('.react-flow__edge-text')).toHaveCount(0);
     await expect(edgeById(page, drillEdgeId)).toHaveAttribute('aria-label', 'swissifier linkedin root v1 to swissifier vertical drill v1: My edit');
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);
 
-    await openLineageActions(page);
-    const edgeLabels = page.getByLabel('Canvas edge labels');
-    await expect(edgeLabels).toHaveValue('show');
-    await edgeLabels.selectOption('hide');
+    await openCanvasSettings(page);
+    const edgeLabels = page.getByRole('switch', { name: 'Canvas edge labels' });
+    await expect(edgeLabels).toHaveAttribute('aria-checked', 'true');
+    await edgeLabels.click();
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(0);
     await expect(edgeById(page, drillEdgeId)).toHaveAttribute('aria-label', 'swissifier linkedin root v1 to swissifier vertical drill v1: My edit');
 
-    await expect(edgeLabels).toHaveValue('hide');
-    await edgeLabels.selectOption('show');
+    await expect(edgeLabels).toHaveAttribute('aria-checked', 'false');
+    await edgeLabels.click();
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(12);
+    await page.getByRole('button', { name: 'Close Canvas settings' }).click();
 
     const rootNode = page.locator('.react-flow__node').filter({ hasText: 'swissifier linkedin root v1' });
     await rootNode.click();
@@ -259,25 +260,34 @@ function edgeSummaryDatabase(): DatabaseSync {
 async function selectDirection(page: Page, direction: string) {
   await page.locator(`.react-flow__node[data-id="${rootId}"]`).click();
   await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
-  await openLineageActions(page);
-  const directionSelect = page.getByLabel('Lineage graph direction');
+  await openCanvasSettings(page);
+  const directionName = {
+    BT: 'Bottom to top',
+    LR: 'Left to right',
+    RL: 'Right to left',
+    TB: 'Top to bottom',
+  }[direction];
+  if (!directionName) throw new Error(`Unsupported direction ${direction}`);
+  const directionRadio = page.getByRole('radio', { name: directionName });
   const layoutSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/lineage/layout');
   const lineageRefreshed = page.waitForResponse(response => (
     response.request().method() === 'GET'
     && new URL(response.url()).pathname === `/api/lineage/${rootId}`
   ));
-  await directionSelect.selectOption(direction);
+  await directionRadio.check();
   await layoutSaved;
   await lineageRefreshed;
-  await expect(directionSelect).toHaveValue(direction);
+  await expect(directionRadio).toBeChecked();
   await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
+  await page.getByRole('button', { name: 'Close Canvas settings' }).click();
   await page.locator('.react-flow__pane').click({ position: { x: 5, y: 5 } });
   await expect(page.locator('.lineage-canvas')).not.toHaveClass(/focus-active/);
 }
 
-async function openLineageActions(page: Page) {
-  const actions = page.locator('header.lineage-header .lineage-overflow');
-  if (await actions.getAttribute('open') === null) await actions.locator('summary').click();
+async function openCanvasSettings(page: Page) {
+  const panel = page.getByRole('complementary', { name: 'Canvas settings' });
+  if (!await panel.isVisible()) await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+  await expect(panel).toBeVisible();
 }
 
 async function expectHorizontalLabel(label: Locator) {

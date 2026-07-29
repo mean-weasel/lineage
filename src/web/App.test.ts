@@ -34,4 +34,19 @@ describe('shouldRevealCopiedText', () => {
     expect(source).not.toContain('metadata');
     expect(source).not.toContain("method: 'POST'");
   });
+
+  it('composes the rail and contextual utilities outside the workspace', () => {
+    const source = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
+    const sidebarStart = source.indexOf('<Sidebar');
+    const sidebarEnd = source.indexOf('</Sidebar>');
+    const workspaceStart = source.indexOf('<main className="workspace">');
+
+    expect(sidebarStart).toBeGreaterThan(-1);
+    expect(source.slice(sidebarStart, sidebarEnd)).toContain('<Topbar');
+    expect(sidebarEnd).toBeLessThan(workspaceStart);
+    expect(source).toContain('context-panel-collapsed');
+    expect(source).toContain('mobile-context-open');
+    expect(source).not.toContain('CurrentWorkTarget');
+    expect(source).not.toContain('Agent context');
+  });
 });

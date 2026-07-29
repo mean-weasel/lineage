@@ -1,25 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { primaryViews, secondaryViews } from './Topbar.navigation';
+import { navigationViews } from './Topbar.navigation';
 
-describe('Topbar navigation groups', () => {
-  it('keeps workflow views in the primary tab group', () => {
-    expect(primaryViews.map(item => item.view)).toEqual(['lineage', 'review', 'assets', 'agents', 'settings']);
+describe('navigation destinations', () => {
+  it('exposes every destination directly in the agreed rail order', () => {
+    expect(navigationViews).toEqual([
+      { label: 'Canvas', view: 'lineage' },
+      { label: 'Assets', view: 'assets' },
+      { label: 'Content batches', view: 'content' },
+      { label: 'Review', view: 'review' },
+      { label: 'Backup queue', view: 'backup' },
+      { label: 'Agents', view: 'agents' },
+      { label: 'Ledger', view: 'ledger' },
+      { label: 'Settings', view: 'settings' },
+    ]);
   });
 
-  it('keeps Ledger, Content, and Backup reachable as secondary views', () => {
-    expect(secondaryViews.map(item => item.view)).toEqual(['ledger', 'content', 'backup']);
+  it('has no hidden secondary More destinations', () => {
+    const source = readFileSync(join(process.cwd(), 'src/web/components/Topbar.navigation.ts'), 'utf8');
+
+    expect(source).not.toContain('primaryViews');
+    expect(source).not.toContain('secondaryViews');
+    expect(new Set(navigationViews.map(item => item.view)).size).toBe(navigationViews.length);
   });
 
-  it('keeps live cloud inventory out of the global topbar', () => {
+  it('keeps navigation and upload out of the contextual utility component', () => {
     const source = readFileSync(join(process.cwd(), 'src/web/components/Topbar.tsx'), 'utf8');
 
-    expect(source).not.toContain('liveSync');
-    expect(source).not.toContain('setLiveSync');
-    expect(source).not.toContain("'Synced'");
-    expect(source).not.toContain("'Sync'");
-    expect(source).not.toContain('Sync S3');
-    expect(source).not.toContain('S3 synced');
+    expect(source).toContain("if (props.view === 'lineage') return null");
+    expect(source).toContain('Search ${activeLabel}');
+    expect(source).toContain('Refresh ${activeLabel}');
+    expect(source).toContain('Details');
+    expect(source).not.toContain('MoreHorizontal');
+    expect(source).not.toContain('setUploadOpen');
   });
 });

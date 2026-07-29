@@ -21,7 +21,7 @@ test('replays and scrubs a stable branching lineage, isolates refreshes, and rem
 
   try {
     await page.goto('/');
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText(richTitle, { timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText(richTitle, { timeout: 20_000 });
     await expect(page.locator('.react-flow__node')).toHaveCount(14);
     await expect(page.locator('.react-flow__edge')).toHaveCount(13);
 
@@ -114,8 +114,8 @@ test('replays and scrubs a stable branching lineage, isolates refreshes, and rem
     await controls.getByRole('button', { name: 'Return to live' }).click();
     await expect(controls).toHaveCount(0);
 
-    await page.setViewportSize({ height: 760, width: 520 });
     await replayButton.click();
+    await page.setViewportSize({ height: 760, width: 520 });
     const compactBox = await controls.boundingBox();
     expect(compactBox).not.toBeNull();
     expect(compactBox!.x).toBeGreaterThanOrEqual(0);
@@ -123,6 +123,7 @@ test('replays and scrubs a stable branching lineage, isolates refreshes, and rem
     await controls.getByRole('button', { name: 'Return to live' }).click();
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ height: 900, width: 1280 });
     expect(await page.evaluate(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
     await replayButton.click();
     await expect(controls).toBeVisible();
@@ -131,9 +132,9 @@ test('replays and scrubs a stable branching lineage, isolates refreshes, and rem
     ))).toBe('1ms');
     await expect(controls.locator('output')).toHaveText('Stage 14 of 14', { timeout: 5_000 });
 
-    await page.locator('header.lineage-header .lineage-workspace-trigger').click();
+    await page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger').click();
     await page.getByRole('option', { name: new RegExp(basicTitle) }).click();
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText(basicTitle);
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText(basicTitle);
     await expect(controls).toHaveCount(0);
   } finally {
     for (const workspaceId of [rich.workspace?.id, basic.workspace?.id]) {

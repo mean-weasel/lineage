@@ -1,117 +1,88 @@
-import { ChevronDown, FileSearch, Loader2, MoreHorizontal, RefreshCcw, Search, Upload } from 'lucide-react';
-import { appName } from '../../shared/appConstants';
+import { FileSearch, Loader2, RefreshCcw, Search } from 'lucide-react';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import type { StudioView } from '../assetUi';
-import { primaryViews, secondaryViews } from './Topbar.navigation';
+import { navigationViews } from './Topbar.navigation';
 import './Topbar.css';
 
 export function Topbar(props: {
   assetDetailsOpen: boolean;
   canInspectAsset: boolean;
   loading: boolean;
-  moreOpen: boolean;
-  onMoreOpenChange: (open: boolean) => void;
   query: string;
   refresh: () => Promise<void>;
-  runtime: LineageRuntimeInfo | null;
-  runtimeIdentityUnavailable: boolean;
   setAssetDetailsOpen: (value: boolean) => void;
   setQuery: (value: string) => void;
-  setUploadOpen: (value: boolean) => void;
-  setView: (view: StudioView) => void;
   view: StudioView;
 }) {
-  const secondaryActive = secondaryViews.some(item => item.view === props.view);
+  const activeLabel = navigationViews.find(item => item.view === props.view)?.label || 'Workspace';
+  const canShowDetails = props.view !== 'lineage';
 
-  function openPrimary(view: StudioView) {
-    props.setView(view);
-    props.onMoreOpenChange(false);
-  }
-
-  function openSecondary(view: StudioView) {
-    props.setView(view);
-    props.onMoreOpenChange(false);
-  }
+  if (props.view === 'lineage') return null;
 
   return (
-    <header className="topbar">
-      <div className="view-tabs" role="tablist" aria-label={`${appName} views`}>
-        {primaryViews.map(item => (
+    <div className="context-utilities">
+      <div className="context-panel-heading">
+        <span>Current view</span>
+        <strong>{activeLabel}</strong>
+      </div>
+      <label className="searchbox">
+        <span className="sr-only">Search {activeLabel}</span>
+        <Search aria-hidden="true" size={17} />
+        <input
+          aria-label={`Search ${activeLabel}`}
+          onChange={event => props.setQuery(event.target.value)}
+          placeholder={`Search ${activeLabel.toLowerCase()}`}
+          value={props.query}
+        />
+      </label>
+      <div className="context-utility-actions">
+        {canShowDetails && (
           <button
-            aria-pressed={props.view === item.view}
-            className={props.view === item.view ? 'active' : ''}
-            key={item.view}
-            onClick={() => openPrimary(item.view)}
+            aria-expanded={props.assetDetailsOpen}
+            className="secondary-button"
+            disabled={!props.canInspectAsset}
+            onClick={() => props.setAssetDetailsOpen(!props.assetDetailsOpen)}
             type="button"
           >
-            {item.label}
+            <FileSearch size={17} />
+            Details
           </button>
-        ))}
-        <div className="more-menu">
-          <button
-            aria-expanded={props.moreOpen}
-            aria-haspopup="menu"
-            aria-pressed={secondaryActive}
-            className={secondaryActive ? 'active' : ''}
-            onClick={() => props.onMoreOpenChange(!props.moreOpen)}
-            type="button"
-          >
-            <MoreHorizontal size={16} /> More <ChevronDown className={props.moreOpen ? 'open' : ''} size={15} />
-          </button>
-          {props.moreOpen && (
-            <div className="more-menu-popover" role="menu">
-              {secondaryViews.map(item => (
-                <button
-                  aria-pressed={props.view === item.view}
-                  key={item.view}
-                  onClick={() => openSecondary(item.view)}
-                  role="menuitem"
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      <RuntimeIdentityBadge runtime={props.runtime} unavailable={props.runtimeIdentityUnavailable} />
-      <div className="searchbox">
-        <Search size={17} />
-        <input onChange={event => props.setQuery(event.target.value)} placeholder="Search assets, campaigns, hooks" value={props.query} />
-      </div>
-      {props.view !== 'lineage' && (
+        )}
         <button
-          aria-expanded={props.assetDetailsOpen}
+          aria-label={`Refresh ${activeLabel}`}
           className="secondary-button"
-          disabled={!props.canInspectAsset}
-          onClick={() => {
-            props.onMoreOpenChange(false);
-            props.setAssetDetailsOpen(!props.assetDetailsOpen);
-          }}
+          disabled={props.loading}
+          onClick={() => void props.refresh()}
           type="button"
         >
-          <FileSearch size={17} />
-          Details
+          {props.loading ? <Loader2 className="spin" size={17} /> : <RefreshCcw size={17} />}
+          Refresh
         </button>
-      )}
-      <button className="icon-button" disabled={props.loading} onClick={() => void props.refresh()} title="Refresh current page">
-        {props.loading ? <Loader2 className="spin" size={18} /> : <RefreshCcw size={18} />}
-      </button>
-      <button className="primary-button" onClick={() => props.setUploadOpen(true)}>
-        <Upload size={17} />
-        Upload
-      </button>
-    </header>
+      </div>
+    </div>
   );
 }
 
-export function RuntimeIdentityBadge(props: { runtime: LineageRuntimeInfo | null; unavailable?: boolean }) {
+export function RuntimeIdentityBadge(props: { runtime: LineageRuntimeInfo | null; unavailable?: boolean; compact?: boolean }) {
   if (props.unavailable) {
-    return <div aria-label="Lineage runtime identity unavailable" className="runtime-identity-badge unavailable">IDENTITY UNAVAILABLE</div>;
+    return (
+      <div
+        aria-label="Lineage runtime identity unavailable"
+        className={`runtime-identity-badge unavailable ${props.compact ? 'compact' : ''}`}
+      >
+        {props.compact ? 'N/A' : 'IDENTITY UNAVAILABLE'}
+      </div>
+    );
   }
   if (!props.runtime) {
-    return <div aria-label="Loading Lineage runtime identity" className="runtime-identity-badge loading">IDENTITY LOADING</div>;
+    return (
+      <div
+        aria-label="Loading Lineage runtime identity"
+        className={`runtime-identity-badge loading ${props.compact ? 'compact' : ''}`}
+      >
+        {props.compact ? '…' : 'IDENTITY LOADING'}
+      </div>
+    );
   }
   const { profile } = props.runtime;
   const binding = profile.bound ? '' : ' · UNBOUND';
@@ -124,12 +95,12 @@ export function RuntimeIdentityBadge(props: { runtime: LineageRuntimeInfo | null
   return (
     <div
       aria-label={`Lineage ${profile.environment} profile ${profile.id}${profile.bound ? '' : ' unbound'}`}
-      className={`runtime-identity-badge ${profile.environment} ${profile.bound ? 'bound' : 'unbound'}`}
+      className={`runtime-identity-badge ${profile.environment} ${profile.bound ? 'bound' : 'unbound'} ${props.compact ? 'compact' : ''}`}
       data-profile-id={profile.id}
       title={title}
     >
       <strong>{profile.environment.toUpperCase()}</strong>
-      <span>{profile.id}{binding}</span>
+      {!props.compact && <span>{profile.id}{binding}</span>}
     </div>
   );
 }

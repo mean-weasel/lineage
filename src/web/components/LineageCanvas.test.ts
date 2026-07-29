@@ -113,6 +113,15 @@ describe('portrait canvas semantic zoom', () => {
   });
 });
 
+describe('lineage canvas view aids', () => {
+  it('renders the minimap only when its Canvas preference is visible', async () => {
+    const source = await import('node:fs').then(({ readFileSync }) =>
+      readFileSync(new URL('./LineageCanvas.tsx', import.meta.url), 'utf8'));
+
+    expect(source).toContain('{minimapVisible && <MiniMap pannable zoomable />}');
+  });
+});
+
 function node(overrides: Partial<LineageNode> = {}): LineageNode {
   return {
     asset_id: 'local-node',

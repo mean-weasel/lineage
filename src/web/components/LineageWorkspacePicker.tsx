@@ -9,16 +9,14 @@ export function LineageWorkspacePicker({
   activeWorkspace,
   closeSignal,
   loading,
-  onNewLineage,
-  onRefresh,
+  onArchive,
   onSelect,
   workspaces,
 }: {
   activeWorkspace: LineageWorkspace | null;
   closeSignal?: number;
   loading: boolean;
-  onNewLineage: () => void;
-  onRefresh: () => void;
+  onArchive: () => void;
   onSelect: (workspaceId: string) => void;
   workspaces: LineageWorkspace[];
 }) {
@@ -98,17 +96,22 @@ export function LineageWorkspacePicker({
             ))}
           </div>
           <footer>
-            <button className="secondary-button" disabled={loading} onClick={onRefresh} type="button">Refresh</button>
-            <button
-              className="primary-button"
-              onClick={() => {
-                setOpen(false);
-                onNewLineage();
-              }}
-              type="button"
-            >
-              New lineage
-            </button>
+            <details className="lineage-workspace-overflow">
+              <summary>Workspace options</summary>
+              <div>
+                <button
+                  className="lineage-archive-workspace"
+                  disabled={loading || !activeWorkspace}
+                  onClick={() => {
+                    setOpen(false);
+                    onArchive();
+                  }}
+                  type="button"
+                >
+                  Archive current lineage
+                </button>
+              </div>
+            </details>
           </footer>
         </div>
       )}

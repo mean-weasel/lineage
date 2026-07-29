@@ -5,8 +5,7 @@ type WorkspaceListResponse = {
 };
 
 async function loadDemoLineage(page: Page, button: Locator) {
-  const actionMenu = page.locator('header.lineage-header .lineage-overflow');
-  await expect(actionMenu.getByText('Checking media')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).getByText('Checking media')).toHaveCount(0);
   await expect(button).toBeEnabled();
   let completedSeedRequests = 0;
   const finalLineageResponse = page.waitForResponse(response => {
@@ -53,30 +52,21 @@ test('loads the public demo project and app shell', async ({ page, request }) =>
   await expect(page.getByText('Lineage').first()).toBeVisible();
 });
 
-test('keeps topbar More and lineage Actions mutually exclusive', async ({ page }) => {
+test('exposes contextual Canvas tooling without legacy More or Actions menus', async ({ page }) => {
   await page.goto('/');
-  const more = page.getByRole('button', { name: /More/ });
-  const morePopover = page.locator('.more-menu-popover');
-  const actions = page.locator('header.lineage-header .lineage-overflow');
+  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
 
-  await more.click();
-  await expect(more).toHaveAttribute('aria-expanded', 'true');
-  await expect(morePopover).toBeVisible();
-
-  await actions.locator('summary').click();
-  await expect(actions).toHaveAttribute('open', '');
-  await expect(more).toHaveAttribute('aria-expanded', 'false');
-  await expect(morePopover).toHaveCount(0);
-
-  await more.click();
-  await expect(morePopover).toBeVisible();
-  await expect(actions).not.toHaveAttribute('open', '');
+  await expect(canvasTools).toBeVisible();
+  await expect(canvasTools.getByText('Maintenance', { exact: true })).toBeVisible();
+  await expect(canvasTools.getByText('Demo/QA', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /More/ })).toHaveCount(0);
+  await expect(page.getByText('Actions', { exact: true })).toHaveCount(0);
 });
 
 test('shows runtime channel and SQLite identity in settings', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
 
   const release = page.getByLabel('Release information');
   await expect(release).toBeVisible();
@@ -91,38 +81,40 @@ test('shows runtime channel and SQLite identity in settings', async ({ page }) =
 
 test('lets users disable lineage hover previews without disabling details', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Settings' }).click();
+  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
+  await canvasTools.getByText('Demo/QA', { exact: true }).click();
+  await loadDemoLineage(page, canvasTools.getByRole('button', { name: 'Load demo lineage' }).first());
+  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
 
-  const hoverPreviewSwitch = page.getByRole('switch', { name: 'Enable lineage hover previews' });
-  await expect(hoverPreviewSwitch).toBeChecked();
-  await hoverPreviewSwitch.click();
-  await expect(hoverPreviewSwitch).not.toBeChecked();
+  await openCanvasSettings(page);
+  const hoverPreviews = page.getByRole('switch', { name: 'Canvas hover previews' });
+  await expect(hoverPreviews).toHaveAttribute('aria-checked', 'true');
+  await hoverPreviews.click();
+  await expect(hoverPreviews).toHaveAttribute('aria-checked', 'false');
   await page.reload();
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('switch', { name: 'Enable lineage hover previews' })).not.toBeChecked();
-
-  await page.getByRole('button', { name: 'Lineage' }).click();
-  await page.locator('header.lineage-header .lineage-overflow summary').click();
-  await loadDemoLineage(page, page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first());
-  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
+  await openCanvasSettings(page);
+  await expect(page.getByRole('switch', { name: 'Canvas hover previews' })).toHaveAttribute('aria-checked', 'false');
+  await page.getByRole('button', { name: 'Close Canvas settings' }).click();
   const rootNode = page.locator('.lineage-node.root-node');
   await expect(rootNode).toBeVisible();
   await rootNode.hover();
   await expect(page.getByTestId('lineage-hover-preview')).toHaveCount(0);
 
   await rootNode.dblclick();
+  await page.getByRole('button', { name: 'Open full detail for Initial Demo Concept' }).click();
   await expect(page.getByRole('dialog', { name: 'Initial Demo Concept' })).toBeVisible();
 });
 
 test('loads the demo lineage from first-run lineage controls', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.locator('header.lineage-header').getByText('No workspace selected')).toBeVisible();
-  await page.locator('header.lineage-header .lineage-overflow summary').click();
-  const loadDemo = page.locator('header.lineage-header .lineage-overflow').getByRole('button', { name: 'Load demo lineage' }).first();
+  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
+  await expect(canvasTools.getByText('No workspace selected')).toBeVisible();
+  await canvasTools.getByText('Demo/QA', { exact: true }).click();
+  const loadDemo = canvasTools.getByRole('button', { name: 'Load demo lineage' }).first();
   await loadDemoLineage(page, loadDemo);
 
-  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
   await expect(page.locator('.lineage-scope-bar')).toHaveCount(0);
   await expect(page.locator('.lineage-selection-strip')).toHaveCount(0);
@@ -176,12 +168,14 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(hoverPreview).toContainText(anotherNodeTitle!);
   await anotherNode.press('Enter');
   await expect(hoverPreview).toHaveCount(0);
+  await page.getByRole('button', { name: `Open full detail for ${anotherNodeTitle}` }).click();
   const keyboardDialog = page.getByRole('dialog').first();
   await expect(keyboardDialog).toBeVisible();
   await keyboardDialog.getByRole('button', { name: 'Close' }).click();
 
   await rootNode.focus();
   await rootNode.press('d');
+  await page.getByRole('button', { name: 'Open full detail for Initial Demo Concept' }).click();
   const shortcutDetailDialog = page.getByRole('dialog', { name: 'Initial Demo Concept' });
   await expect(shortcutDetailDialog).toBeVisible();
   await shortcutDetailDialog.getByTitle('Close detail').click();
@@ -195,6 +189,7 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(page.getByRole('menu')).toHaveCount(0);
 
   await rootNode.dblclick();
+  await page.getByRole('button', { name: 'Open full detail for Initial Demo Concept' }).click();
   const detailDialog = page.getByRole('dialog', { name: 'Initial Demo Concept' });
   await expect(detailDialog).toBeVisible();
   await expect(hoverPreview).toHaveCount(0);
@@ -203,21 +198,19 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await rootNode.focus();
   await page.mouse.move(0, 0);
   await expect(hoverPreview).toContainText('Initial Demo Concept');
-  await page.getByLabel('Lineage graph direction').evaluate((select: HTMLSelectElement) => {
-    select.value = 'TB';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await openCanvasSettings(page);
+  await page.getByRole('radio', { name: 'Top to bottom' }).check();
   await expect(hoverPreview).toHaveCount(0);
 
-  await page.locator('header.lineage-header .lineage-overflow summary').click();
-  await page.getByRole('button', { name: 'Manage selection' }).click();
-  await expect(page.locator('#lineage-selection-panel')).toBeVisible();
+  await canvasTools.getByRole('button', { name: 'Manage selection' }).click();
+  await expect(page.locator('#lineage-canvas-panel')).toBeVisible();
 });
 
 test('creates a lineage workspace from a catalog asset through the modal', async ({ page }) => {
   await page.goto('/');
 
-  await page.locator('header.lineage-header').getByRole('button', { name: 'New lineage', exact: true }).click();
+  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
+  await canvasTools.getByRole('button', { name: 'New lineage', exact: true }).click();
   const modal = page.getByRole('form', { name: 'New lineage' });
   await expect(modal).toBeVisible();
   await page.getByPlaceholder('Search by title, id, campaign, channel...').fill('meta short-form');
@@ -225,6 +218,12 @@ test('creates a lineage workspace from a catalog asset through the modal', async
   await page.getByLabel('Name').fill('Catalog e2e lineage');
   await page.getByRole('button', { name: 'Create lineage' }).click();
 
-  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Catalog e2e lineage');
+  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Catalog e2e lineage');
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
 });
+
+async function openCanvasSettings(page: Page) {
+  const panel = page.getByRole('complementary', { name: 'Canvas settings' });
+  if (!await panel.isVisible()) await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+  await expect(panel).toBeVisible();
+}

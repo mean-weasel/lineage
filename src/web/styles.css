@@ -37,11 +37,17 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 344px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 220ms ease;
 }
 
-.app-shell.lineage-mode { grid-template-columns: 260px minmax(0, 1fr); }
+.app-shell.lineage-mode { grid-template-columns: 344px minmax(0, 1fr); }
+
+.app-shell.context-panel-collapsed,
+.app-shell.lineage-mode.context-panel-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
 
 .sidebar,
 .inspector {
@@ -207,6 +213,22 @@ dd {
   position: relative;
   min-width: 0;
   padding: 18px;
+}
+
+.lineage-mode .workspace {
+  height: 100vh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
 .topbar {

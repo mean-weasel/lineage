@@ -1,34 +1,17 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
-import type { LineageEdgeWeight } from '../lineagePreferences';
-import type { LineageCanvasPresentation } from './LineageAssetNode';
 import type { LineageWorkspaceProgress } from './LineageCanvas';
-import { LineageCanvasAppearanceControls } from './LineageCanvasAppearanceControls';
 import type { DemoSeedMediaStatus } from './useLineageWorkspaces';
-import type { LineageGraphDirection } from './lineageGraph';
 import { LineageWorkspacePicker } from './LineageWorkspacePicker';
 import './LineageToolbar.css';
 
 type LineageToolbarProps = {
   activeWorkspace: LineageWorkspace | null;
-  actionsOpen: boolean;
-  canvasPresentation: LineageCanvasPresentation;
   closeSignal: number;
   demoSeedStatus: DemoSeedMediaStatus | null;
-  edgeSummariesVisible: boolean;
-  edgeWeight: LineageEdgeWeight;
-  graphDirection: LineageGraphDirection;
-  hoverPreviewsEnabled: boolean;
   loading: boolean;
   onArchiveWorkspace: () => void;
-  onActionsOpenChange: (open: boolean) => void;
-  onCanvasPresentation: (presentation: LineageCanvasPresentation) => void;
   onDownloadSwissifierMedia: () => void;
-  onEdgeSummariesVisible: (visible: boolean) => void;
-  onEdgeWeight: (weight: LineageEdgeWeight) => void;
-  onFitGraph: () => void;
-  onGraphDirection: (direction: LineageGraphDirection) => void;
-  onHoverPreviewsEnabled: (enabled: boolean) => void;
   onIndexLocal: () => void;
   onNewLineage: () => void;
   onOpenGeneration?: () => void;
@@ -41,7 +24,6 @@ type LineageToolbarProps = {
   onSeedDemo: () => void;
   onSeedSwissifierDemo: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
-  onTidyGraph: () => void;
   onToggleNextPanel: () => void;
   sideOpen: boolean;
   replayActive: boolean;
@@ -55,24 +37,11 @@ type LineageToolbarProps = {
 
 export function LineageToolbar({
   activeWorkspace,
-  actionsOpen,
-  canvasPresentation,
   closeSignal,
   demoSeedStatus,
-  edgeSummariesVisible,
-  edgeWeight,
-  graphDirection,
-  hoverPreviewsEnabled,
   loading,
   onArchiveWorkspace,
-  onActionsOpenChange,
-  onCanvasPresentation,
   onDownloadSwissifierMedia,
-  onEdgeSummariesVisible,
-  onEdgeWeight,
-  onFitGraph,
-  onGraphDirection,
-  onHoverPreviewsEnabled,
   onIndexLocal,
   onNewLineage,
   onOpenGeneration,
@@ -85,7 +54,6 @@ export function LineageToolbar({
   onSeedDemo,
   onSeedSwissifierDemo,
   onSelectWorkspace,
-  onTidyGraph,
   onToggleNextPanel,
   sideOpen,
   replayActive,
@@ -96,6 +64,8 @@ export function LineageToolbar({
   workspaceRootAssetId,
   workspaces,
 }: LineageToolbarProps) {
+  const [demoToolsOpen, setDemoToolsOpen] = useState(false);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const mediaLabel = demoSeedStatus ? `${demoSeedStatus.present}/${demoSeedStatus.total} SVG placeholders` : 'Checking media';
   const swissifierMediaLabel = swissifierDemoStatus ? `${swissifierDemoStatus.present}/${swissifierDemoStatus.total} PNG images` : 'Checking media';
   const swissifierReady = Boolean(swissifierDemoStatus && swissifierDemoStatus.present === swissifierDemoStatus.total);
@@ -110,38 +80,28 @@ export function LineageToolbar({
   const workspaceBusy = workspaceLoading || ['downloading', 'seeding', 'indexing'].includes(workspaceProgress || '');
   const workspaceContext = progressLabel || (snapshot ? `${snapshot.nodes.length} nodes · ${snapshot.edges.length} links` : workspaceRootAssetId || 'Choose a lineage workspace');
   useEffect(() => {
-    onActionsOpenChange(false);
-  }, [closeSignal, onActionsOpenChange]);
+    setDemoToolsOpen(false);
+    setMaintenanceOpen(false);
+  }, [closeSignal]);
 
   useEffect(() => {
     function closeOnEscape(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape') return;
-      onActionsOpenChange(false);
+      setDemoToolsOpen(false);
+      setMaintenanceOpen(false);
     }
     document.addEventListener('keydown', closeOnEscape, true);
     return () => document.removeEventListener('keydown', closeOnEscape, true);
-  }, [onActionsOpenChange]);
-
-  function runAndClose(action: () => void) {
-    onActionsOpenChange(false);
-    action();
-  }
-
-  function closeMenusOnEscape(event: ReactKeyboardEvent) {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    onActionsOpenChange(false);
-  }
+  }, []);
 
   return (
-    <header className="lineage-header">
+    <section className="lineage-context-tools">
       <div className="lineage-primary-controls">
         <LineageWorkspacePicker
           activeWorkspace={activeWorkspace}
           closeSignal={closeSignal}
           loading={workspaceBusy}
-          onNewLineage={onNewLineage}
-          onRefresh={onRefreshWorkspaces}
+          onArchive={onArchiveWorkspace}
           onSelect={onSelectWorkspace}
           workspaces={workspaces}
         />
@@ -157,54 +117,44 @@ export function LineageToolbar({
         </button>
         <button className="primary-button" onClick={onNewLineage} type="button">New lineage</button>
         {onOpenGeneration && <button className="primary-button" disabled={!snapshot || snapshot.selected.length === 0} onClick={onOpenGeneration} type="button">Plan outputs</button>}
+        {onOpenOutputDefaults && <button className="secondary-button" disabled={!snapshot} onClick={onOpenOutputDefaults} type="button">Output target defaults</button>}
+        <button aria-controls="lineage-canvas-panel" aria-expanded={sideOpen} className="secondary-button" disabled={!snapshot} onClick={onToggleNextPanel} type="button">Manage selection</button>
       </div>
-      <details className="lineage-overflow" onToggle={event => onActionsOpenChange(event.currentTarget.open)} open={actionsOpen}>
-        <summary onKeyDown={closeMenusOnEscape} tabIndex={0}>Actions</summary>
-        <div>
-          {!activeWorkspace && (
-            <button disabled={workspaceBusy} onClick={() => runAndClose(onSeedDemo)} type="button">Load demo lineage</button>
-          )}
-          <p>
-            <strong>QA seed media</strong>
-            <span>{swissifierMediaLabel}</span>
-          </p>
-          <p>
-            <strong>Basic SVG demo</strong>
-            <span>{mediaLabel}</span>
-          </p>
-          <button disabled={workspaceBusy || demoSeedStatus?.present === demoSeedStatus?.total} onClick={onRestoreDemoMedia} type="button">Restore basic media</button>
-          <button disabled={workspaceBusy} onClick={() => runAndClose(onSeedDemo)} type="button">Load SVG placeholder demo</button>
-          <p>
-            <strong>Swissifier rich demo</strong>
-            <span>{swissifierMediaLabel}</span>
-          </p>
-          <button disabled={workspaceBusy || !swissifierCanDownload} onClick={onDownloadSwissifierMedia} type="button">Download rich images</button>
-          <button disabled={workspaceBusy || swissifierReady} onClick={onRestoreSwissifierMedia} type="button">Restore rich media</button>
-          <button disabled={workspaceBusy} onClick={() => runAndClose(onSeedSwissifierDemo)} type="button">Load rich image demo</button>
-          <LineageCanvasAppearanceControls
-            canvasPresentation={canvasPresentation}
-            edgeSummariesVisible={edgeSummariesVisible}
-            edgeWeight={edgeWeight}
-            graphDirection={graphDirection}
-            hoverPreviewsEnabled={hoverPreviewsEnabled}
-            loading={loading}
-            onCanvasPresentation={onCanvasPresentation}
-            onEdgeSummariesVisible={onEdgeSummariesVisible}
-            onEdgeWeight={onEdgeWeight}
-            onGraphDirection={onGraphDirection}
-            onHoverPreviewsEnabled={onHoverPreviewsEnabled}
-            snapshotAvailable={Boolean(snapshot)}
-          />
-          <button disabled={!snapshot} onClick={() => runAndClose(onFitGraph)} type="button">Fit graph</button>
-          <button disabled={!snapshot} onClick={() => runAndClose(onTidyGraph)} type="button">Tidy tree</button>
-          {onOpenOutputDefaults && <button disabled={!snapshot} onClick={() => runAndClose(onOpenOutputDefaults)} type="button">Output target defaults</button>}
-          <button aria-controls="lineage-selection-panel" aria-expanded={sideOpen} disabled={!snapshot} onClick={() => runAndClose(onToggleNextPanel)} type="button">Manage selection</button>
-          <button disabled={workspaceBusy || !activeWorkspace} onClick={() => runAndClose(onArchiveWorkspace)} type="button">Archive current lineage</button>
-          <button disabled={loading || workspaceBusy} onClick={() => runAndClose(onIndexLocal)} type="button">Index local</button>
-          <button disabled={loading || !snapshot} onClick={() => runAndClose(onRefreshLineage)} type="button">Refresh graph</button>
-          <button disabled={workspaceBusy} onClick={() => runAndClose(onRefreshWorkspaces)} type="button">Refresh workspaces</button>
-        </div>
-      </details>
-    </header>
+      <div className="lineage-tool-sections">
+        <details className="lineage-tool-section" onToggle={event => setMaintenanceOpen(event.currentTarget.open)} open={maintenanceOpen}>
+          <summary>Maintenance</summary>
+          <div>
+            <button disabled={loading || !snapshot} onClick={onRefreshLineage} type="button">Refresh graph</button>
+            <button disabled={workspaceBusy} onClick={onRefreshWorkspaces} type="button">Refresh workspaces</button>
+            <button disabled={loading || workspaceBusy} onClick={onIndexLocal} type="button">Index local</button>
+          </div>
+        </details>
+        <details className="lineage-tool-section" onToggle={event => setDemoToolsOpen(event.currentTarget.open)} open={demoToolsOpen}>
+          <summary>Demo/QA</summary>
+          <div>
+            {!activeWorkspace && (
+              <button disabled={workspaceBusy} onClick={onSeedDemo} type="button">Load demo lineage</button>
+            )}
+            <p>
+              <strong>QA seed media</strong>
+              <span>{swissifierMediaLabel}</span>
+            </p>
+            <p>
+              <strong>Basic SVG demo</strong>
+              <span>{mediaLabel}</span>
+            </p>
+            <button disabled={workspaceBusy || demoSeedStatus?.present === demoSeedStatus?.total} onClick={onRestoreDemoMedia} type="button">Restore basic media</button>
+            <button disabled={workspaceBusy} onClick={onSeedDemo} type="button">Load SVG placeholder demo</button>
+            <p>
+              <strong>Swissifier rich demo</strong>
+              <span>{swissifierMediaLabel}</span>
+            </p>
+            <button disabled={workspaceBusy || !swissifierCanDownload} onClick={onDownloadSwissifierMedia} type="button">Download rich images</button>
+            <button disabled={workspaceBusy || swissifierReady} onClick={onRestoreSwissifierMedia} type="button">Restore rich media</button>
+            <button disabled={workspaceBusy} onClick={onSeedSwissifierDemo} type="button">Load rich image demo</button>
+          </div>
+        </details>
+      </div>
+    </section>
   );
 }

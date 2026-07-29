@@ -3,7 +3,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AssetLibrarySnapshot } from '../../shared/types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import { Sidebar } from './Sidebar';
 
 let container: HTMLDivElement | null = null;
@@ -23,8 +25,8 @@ describe('Sidebar', () => {
     root = null;
   });
 
-  it('keeps project and essential asset filters in the default sidebar', () => {
-    renderSidebar();
+  it('keeps project and asset filters in the contextual panel for asset views', () => {
+    renderSidebar('assets');
 
     expect(select('Project').value).toBe('demo-project');
     expect(select('Source').value).toBe('local');
@@ -34,7 +36,7 @@ describe('Sidebar', () => {
   });
 
   it('removes quick sets and bucket stats from the default sidebar', () => {
-    renderSidebar();
+    renderSidebar('assets');
 
     expect(text()).not.toContain('Quick Sets');
     expect(text()).not.toContain('Review queue');
@@ -46,23 +48,116 @@ describe('Sidebar', () => {
     expect(text()).not.toContain('Size');
   });
 
-  it('labels the mobile disclosure as filters only', () => {
-    renderSidebar();
+  it('keeps asset filters out of Canvas context', () => {
+    renderSidebar('lineage');
 
-    const toggle = button('Filters');
+    expect(selectOrNull('Project')).not.toBeNull();
+    expect(container!.querySelector('#canvas-context-tools')?.getAttribute('aria-label')).toBe('Canvas workspace tools');
+    expect(selectOrNull('Source')).toBeNull();
+    expect(selectOrNull('Status')).toBeNull();
+    expect(selectOrNull('Channel')).toBeNull();
+    expect(selectOrNull('Placement')).toBeNull();
+  });
 
-    expect(toggle).not.toBeNull();
-    expect(toggle?.textContent).not.toContain('quick sets');
+  it('does not expose the Canvas tool host in non-Canvas context', () => {
+    renderSidebar('assets');
+
+    expect(container!.querySelector('#canvas-context-tools')).toBeNull();
+  });
+
+  it('renders every destination directly with Canvas selected', () => {
+    renderSidebar('lineage');
+
+    const labels = ['Canvas', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
+    for (const label of labels) expect(buttonByLabel(label)).not.toBeNull();
+    expect(buttonByLabel('Canvas')?.getAttribute('aria-current')).toBe('page');
+    expect(text()).not.toContain('More');
+  });
+
+  it('keeps destinations and create/upload reachable in the mobile drawer', () => {
+    renderSidebar('lineage');
+
+    const mobileDestinations = container!.querySelector('.mobile-context-destinations');
+    expect(mobileDestinations).not.toBeNull();
+    expect(mobileDestinations?.textContent).toContain('Canvas');
+    expect(mobileDestinations?.textContent).toContain('Backup queue');
+    expect(mobileDestinations?.textContent).toContain('Settings');
+    expect(mobileDestinations?.textContent).toContain('Create or upload');
+  });
+
+  it('keeps the exact runtime and environment identity reachable in the mobile drawer only at the responsive breakpoint', () => {
+    renderSidebar('lineage', { runtime });
+
+    const mobileIdentity = container!.querySelector('.mobile-runtime-identity');
+    const badge = mobileIdentity?.querySelector('.runtime-identity-badge');
+    expect(mobileIdentity?.getAttribute('aria-label')).toBe('Mobile runtime identity');
+    expect(badge?.getAttribute('aria-label')).toBe('Lineage development profile canvas-navigation-dev');
+    expect(badge?.getAttribute('data-profile-id')).toBe('canvas-navigation-dev');
+    expect(mobileIdentity?.textContent).toContain('DEVELOPMENT');
+    expect(mobileIdentity?.textContent).toContain('canvas-navigation-dev');
+
+    const css = readFileSync(join(process.cwd(), 'src/web/components/Sidebar.css'), 'utf8');
+    expect(css).toMatch(/\.mobile-runtime-identity\s*\{[\s\S]*?display:\s*none;/);
+    expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*?\.mobile-runtime-identity\s*\{[\s\S]*?display:\s*grid;/);
+  });
+
+  it('keeps the mobile disclosure independent from desktop context state', () => {
+    const onContextOpenChange = vi.fn();
+    const onMobileContextOpenChange = vi.fn();
+    renderSidebar('assets', { onContextOpenChange, onMobileContextOpenChange });
+
+    buttonByLabel('Open navigation panel')?.click();
+
+    expect(onMobileContextOpenChange).toHaveBeenCalledWith(true);
+    expect(onContextOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps the desktop contextual-panel expand control inside the navigation rail', () => {
+    const onContextOpenChange = vi.fn();
+    renderSidebar('lineage', { onContextOpenChange });
+
+    const expand = buttonByLabel('Expand contextual panel');
+    expect(expand?.closest('.navigation-rail')).not.toBeNull();
+    expect(expand?.closest('.context-panel')).toBeNull();
+
+    expand?.click();
+    expect(onContextOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it('moves focus into the mobile drawer and returns it to the trigger when closed', () => {
+    renderSidebar('lineage', { mobileContextOpen: false });
+    const trigger = buttonByLabel('Open navigation panel')!;
+    act(() => trigger.focus());
+
+    renderSidebar('lineage', { mobileContextOpen: true });
+    const close = container!.querySelector<HTMLButtonElement>('.mobile-context-close')!;
+    expect(document.activeElement).toBe(close);
+    expect(container!.querySelector('#contextual-navigation-panel')?.getAttribute('role')).toBe('dialog');
+    expect(container!.querySelector('#contextual-navigation-panel')?.getAttribute('aria-modal')).toBe('true');
+
+    renderSidebar('lineage', { mobileContextOpen: false });
+    expect(document.activeElement).toBe(trigger);
   });
 });
 
-function renderSidebar() {
+function renderSidebar(
+  view: 'lineage' | 'assets' = 'assets',
+  overrides: {
+    onContextOpenChange?: (open: boolean) => void;
+    onMobileContextOpenChange?: (open: boolean) => void;
+    mobileContextOpen?: boolean;
+    runtime?: LineageRuntimeInfo;
+  } = {}
+) {
   act(() => {
     root!.render(
       <Sidebar
         channel="all"
         channels={['all', 'tiktok']}
-        liveSync={false}
+        contextOpen
+        mobileContextOpen={overrides.mobileContextOpen || false}
+        onContextOpenChange={overrides.onContextOpenChange || vi.fn()}
+        onMobileContextOpenChange={overrides.onMobileContextOpenChange || vi.fn()}
         placementStatus="all"
         project="demo-project"
         projects={[{
@@ -78,13 +173,17 @@ function renderSidebar() {
         setProject={vi.fn()}
         setSource={vi.fn()}
         setStatus={vi.fn()}
+        setUploadOpen={vi.fn()}
         setView={vi.fn()}
         showBackupQueue={vi.fn()}
-        snapshot={snapshot}
         source="local"
         status="all"
-        totals={{ assets: 29, live: 0, orphan: 0, size: 21_000_000 }}
-      />
+        runtime={overrides.runtime || null}
+        runtimeIdentityUnavailable={false}
+        view={view}
+      >
+        <div>Context utilities</div>
+      </Sidebar>
     );
   });
 }
@@ -96,15 +195,37 @@ function select(label: string): HTMLSelectElement {
   return match!;
 }
 
-function button(label: string): HTMLButtonElement | null {
+function selectOrNull(label: string): HTMLSelectElement | null {
+  return Array.from(container!.querySelectorAll<HTMLSelectElement>('select'))
+    .find(item => item.getAttribute('aria-label') === label) || null;
+}
+
+function buttonByLabel(label: string): HTMLButtonElement | null {
   return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
-    .find(item => item.textContent?.trim().includes(label)) || null;
+    .find(item => item.getAttribute('aria-label') === label) || null;
 }
 
 function text(): string {
   return container?.textContent || '';
 }
 
-const snapshot = {
-  identity: { account: 'not checked' },
-} as AssetLibrarySnapshot;
+const runtime: LineageRuntimeInfo = {
+  asset_root: '/test/media',
+  channel: 'dev',
+  cli: { launcher: 'npm run lineage:dev --', runtime_selector: "--profile '/tmp/dev/profile.json'" },
+  database: { exists: true, path: '/test/lineage.sqlite' },
+  fetchedAt: '2026-07-28T00:00:00.000Z',
+  package_name: '@mean-weasel/lineage',
+  profile: {
+    bound: true,
+    environment: 'development',
+    id: 'canvas-navigation-dev',
+    service_origin: 'http://127.0.0.1:5301',
+  },
+  schema: {
+    migration_keys: [],
+    profile_environment: 'development',
+    profile_id: 'canvas-navigation-dev',
+  },
+  version: '0.1.30',
+};

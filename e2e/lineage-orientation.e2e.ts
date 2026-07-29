@@ -10,36 +10,36 @@ test('rotates lineage graph layout and handles without stale saved positions', a
 
   try {
     await page.goto('/');
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const root = lineageNode(page, 'swissifier linkedin root v1');
     const child = lineageNode(page, 'swissifier vertical drill v1');
     await expect(root).toBeVisible();
     await expect(child).toBeVisible();
 
-    await openLineageActions(page);
-    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await openCanvasSettings(page);
+    await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
     const topToBottomPath = await firstEdgePath(page);
     expect(topToBottomPath).toMatch(/V|Q/);
 
-    await page.getByLabel('Lineage graph direction').selectOption('LR');
+    await page.getByRole('radio', { name: 'Left to right' }).check();
     await assertRootLeftOfChild(root, child);
     const leftToRightPath = await firstEdgePath(page);
     expect(leftToRightPath).not.toBe(topToBottomPath);
 
-    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
 
-    await page.getByLabel('Lineage graph direction').selectOption('LR');
+    await page.getByRole('radio', { name: 'Left to right' }).check();
     await assertRootLeftOfChild(root, child);
 
-    await page.getByLabel('Canvas card style').selectOption('portrait');
-    await page.getByLabel('Lineage graph direction').selectOption('TB');
+    await page.getByRole('radio', { name: 'Portrait cards' }).check();
+    await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
 
-    await page.getByLabel('Canvas card style').selectOption('compact');
-    await expect(page.getByLabel('Lineage graph direction')).toHaveValue('LR');
+    await page.getByRole('radio', { name: 'Compact nodes' }).check();
+    await expect(page.getByRole('radio', { name: 'Left to right' })).toBeChecked();
     await assertRootLeftOfChild(root, child);
   } finally {
     if (workspaceId) {
@@ -82,9 +82,8 @@ async function firstEdgePath(page: Page): Promise<string> {
   return await page.locator('.react-flow__edge-path').first().getAttribute('d') || '';
 }
 
-async function openLineageActions(page: Page) {
-  const actions = page.locator('header.lineage-header .lineage-overflow');
-  if (await actions.getAttribute('open') === null) {
-    await actions.locator('summary').click();
-  }
+async function openCanvasSettings(page: Page) {
+  const panel = page.getByRole('complementary', { name: 'Canvas settings' });
+  if (!await panel.isVisible()) await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+  await expect(panel).toBeVisible();
 }

@@ -50,11 +50,13 @@ test('renders a 1080x1350 portrait detail preview without clipping', async ({ pa
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto(`/?project=${project}`);
 
-  await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Portrait 1080x1350 regression', { timeout: 20_000 });
+  await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Portrait 1080x1350 regression', { timeout: 20_000 });
   const node = page.locator('.lineage-node', { hasText: 'portrait 1080x1350' });
   await expect(node).toBeVisible();
 
   await node.dblclick();
+  await expect(page.getByRole('complementary', { name: 'Canvas asset details' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open full detail for portrait 1080x1350' }).click();
   await expect(page.getByRole('dialog', { name: 'portrait 1080x1350' })).toBeVisible();
   await page.waitForFunction(() => {
     const image = document.querySelector('.lineage-detail-preview img');

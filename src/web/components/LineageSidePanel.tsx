@@ -36,6 +36,7 @@ interface LineageSidePanelProps {
   sideOpen: boolean;
   snapshot: LineageSnapshot;
   markReview: (reviewState: AssetReviewState, assetId?: string) => Promise<void>;
+  mode: 'selection' | 'asset';
 }
 
 export function LineageSidePanel(props: LineageSidePanelProps) {
@@ -43,7 +44,7 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
   const {
     activeNode, brief, childAssetId, clearNextVariation, closePanel, latestNodes, linkChild, markReview, noteDirty, onSelectedAsset,
     nextVariationLimit, onToast, project, refreshBrief, saveRationale, selectNextBase, selectedNode, selectedNodes, selectionFull,
-    refreshLineage, replaceNextVariation, selectionNote, setActiveNodeId, setChildAssetId, setDetailNodeId, setSelected, setSelectionNote, sideOpen, snapshot,
+    refreshLineage, replaceNextVariation, selectionNote, setActiveNodeId, setChildAssetId, setDetailNodeId, setSelected, setSelectionNote, sideOpen, snapshot, mode,
   } = props;
   const activeStorage = activeNode ? storageStateFor({ hasLocal: Boolean(activeNode.local_path), hasS3: Boolean(activeNode.s3_key) }) : null;
   const staleSelectedNodes = selectedNodes.filter(node => !node.is_latest);
@@ -53,8 +54,42 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
     void linkChild();
   };
 
+  if (mode === 'asset') {
+    return (
+      <aside aria-hidden={!sideOpen} aria-label="Canvas asset details" className={`lineage-side ${sideOpen ? '' : 'collapsed'}`} id="lineage-canvas-panel">
+        <div className="lineage-side-head">
+          <div>
+            <h3>Asset details</h3>
+            <p className="muted-copy">Canvas-scoped details for the inspected node.</p>
+          </div>
+          <button aria-label="Close Canvas asset details" className="icon-button" onClick={closePanel} type="button">×</button>
+        </div>
+        {activeNode ? (
+          <section className="lineage-asset-panel">
+            <strong>{activeNode.title}</strong>
+            <code>{activeNode.asset_id}</code>
+            <dl>
+              <div><dt>Storage</dt><dd>{activeStorage && <span className={`storage-chip ${activeStorage.kind}`}>{activeStorage.label}</span>}</dd></div>
+              <div><dt>Source</dt><dd>{activeNode.source}</dd></div>
+              <div><dt>Review</dt><dd>{activeNode.review_state}</dd></div>
+              <div><dt>Latest</dt><dd>{activeNode.is_latest ? 'yes' : 'no'}</dd></div>
+              <div><dt>Next variation</dt><dd>{activeNode.user_selected ? 'yes' : 'no'}</dd></div>
+            </dl>
+            <div className="lineage-side-actions">
+              <button aria-label={activeNode.user_selected ? `Remove ${activeNode.title} from next variation` : `Use ${activeNode.title} for next variation`} className="primary-lite" disabled={!activeNode.user_selected && selectionFull} onClick={() => activeNode.user_selected ? void clearNextVariation(activeNode.asset_id) : setSelected()}>{activeNode.user_selected ? 'Remove from next variation' : selectionFull ? 'Selection full' : 'Use for next variation'}</button>
+              <button aria-label={`Open full detail for ${activeNode.title}`} onClick={() => setDetailNodeId(activeNode.asset_id)}>Open full detail</button>
+              <button aria-label={`Approve ${activeNode.title}`} onClick={() => void markReview('approved')}>Approve</button>
+              <button aria-label={`Reject ${activeNode.title}`} onClick={() => void markReview('rejected')}>Reject</button>
+              <button aria-label={`Ignore ${activeNode.title}`} onClick={() => void markReview('ignored')}>Ignore</button>
+            </div>
+          </section>
+        ) : <p className="muted-copy">No lineage node selected.</p>}
+      </aside>
+    );
+  }
+
   return (
-    <aside aria-hidden={!sideOpen} className={`lineage-side ${sideOpen ? '' : 'collapsed'}`} id="lineage-selection-panel">
+    <aside aria-hidden={!sideOpen} aria-label="Canvas selection" className={`lineage-side ${sideOpen ? '' : 'collapsed'}`} id="lineage-canvas-panel">
       <div className="lineage-side-head">
         <div>
           <h3>Next variation</h3>

@@ -31,17 +31,17 @@ test('canvas persists independent node targets, plans only from their digest, an
     expect(selectionResponse.ok()).toBe(true);
 
     await page.goto(`/?project=${project}`);
-    await expect(page.locator('header.lineage-header .lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+    const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
+    await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
 
-    await page.locator('.lineage-overflow summary').click();
-    await page.getByRole('button', { name: 'Output target defaults' }).click();
+    await canvasTools.getByRole('button', { name: 'Output target defaults' }).click();
     const defaults = page.getByRole('dialog', { name: 'Output target defaults' });
     await expect(defaults).toContainText('agents and CLI can read them but cannot change them');
     await defaults.getByRole('checkbox', { name: /Instagram · Story/ }).check();
     await defaults.getByRole('button', { name: 'Save human defaults' }).click();
     await expect(defaults).toBeHidden();
 
-    await page.getByRole('button', { name: 'Plan outputs' }).click();
+    await canvasTools.getByRole('button', { name: 'Plan outputs' }).click();
     const sheet = page.getByRole('dialog', { name: 'Plan next branch' });
     const sourceCards = sheet.locator('.lineage-node-target-source');
     await expect(sourceCards).toHaveCount(2);
@@ -113,7 +113,10 @@ test('canvas persists independent node targets, plans only from their digest, an
 
     const firstSourceTitle = snapshot.nodes.find(node => node.asset_id === firstSourceId)!.title;
     await page.getByRole('button', { name: `${firstSourceTitle} details`, exact: true }).dispatchEvent('dblclick');
+    await expect(page.getByRole('complementary', { name: 'Canvas asset details' })).toBeVisible();
+    await page.getByRole('button', { name: `Open full detail for ${firstSourceTitle}` }).click();
     const detail = page.getByRole('dialog', { name: firstSourceTitle });
+    await expect(detail).toBeVisible();
     await detail.locator('[data-testid="lineage-generation-proof"] summary').click();
     await expect(detail).toContainText('Frozen source target resolution');
     await expect(detail).toContainText(job.id);

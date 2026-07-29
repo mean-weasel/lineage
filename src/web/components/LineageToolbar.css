@@ -1,14 +1,22 @@
-.lineage-primary-controls {
-  display: flex;
-  flex-wrap: wrap;
-  flex: 1 1 auto;
-  gap: 9px;
-  align-items: center;
+.lineage-context-tools {
+  display: grid;
+  gap: 14px;
   min-width: 0;
 }
 
+.lineage-primary-controls {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.lineage-primary-controls > button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
 .lineage-toolbar-context {
-  flex: 1 1 150px;
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -19,14 +27,20 @@
   white-space: nowrap;
 }
 
-.lineage-overflow {
-  position: relative;
+.lineage-tool-sections {
+  display: grid;
+  gap: 8px;
 }
 
-.lineage-overflow summary {
-  display: inline-flex;
+.lineage-tool-section {
+  min-width: 0;
+}
+
+.lineage-tool-section summary {
+  display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  width: 100%;
   min-height: 38px;
   border: 1px solid #bdd5dc;
   border-radius: 8px;
@@ -39,29 +53,24 @@
   font-weight: 800;
 }
 
-.lineage-overflow summary::-webkit-details-marker {
+.lineage-tool-section summary::-webkit-details-marker {
   display: none;
 }
 
-.lineage-overflow > div {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 25;
+.lineage-tool-section > div {
   display: grid;
   gap: 6px;
-  min-width: 220px;
-  max-height: min(680px, calc(100vh - 164px));
+  max-height: min(520px, calc(100vh - 220px));
+  margin-top: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 16px 42px rgba(18, 31, 45, 0.16);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 8px;
 }
 
-.lineage-overflow p {
+.lineage-tool-section p {
   display: grid;
   gap: 2px;
   margin: 0;
@@ -69,13 +78,13 @@
   padding: 3px 3px 8px;
 }
 
-.lineage-overflow p span {
+.lineage-tool-section p span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
 }
 
-.lineage-overflow button {
+.lineage-tool-section button {
   justify-content: flex-start;
   min-height: 34px;
   border: 1px solid #d4dde3;
@@ -132,7 +141,10 @@
 
 @media (max-width: 960px) {
   .lineage-primary-controls {
-    display: flex;
     min-width: 0;
+  }
+
+  .lineage-tool-section > div {
+    max-height: min(52vh, 460px);
   }
 }

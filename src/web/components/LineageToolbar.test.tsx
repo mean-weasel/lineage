@@ -3,6 +3,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
 import { LineageToolbar } from './LineageToolbar';
 
@@ -40,15 +42,28 @@ describe('LineageToolbar', () => {
     expect(container!.querySelector('.lineage-toolbar-context')?.textContent).toContain('6 links');
   });
 
-  it('keeps replay, New lineage, and Actions as permanent toolbar commands', () => {
+  it('keeps workspace, layout, selection, and output commands visible without an Actions menu', () => {
     renderToolbar();
 
-    expect(container!.querySelector('.lineage-demo-menu')).toBeNull();
-    expect(container!.querySelector('.lineage-next-summary')).toBeNull();
-    expect(container!.querySelector('.lineage-direction-control')).toBeNull();
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Replay growth');
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('New lineage');
-    expect(container!.querySelector('.lineage-overflow summary')?.textContent).toBe('Actions');
+    expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Plan outputs');
+    expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Manage selection');
+    expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Output target defaults');
+    expect([...container!.querySelectorAll('summary')].some(summary => summary.textContent === 'Actions')).toBe(false);
+    expect(container!.textContent).not.toContain('Fit graph');
+    expect(container!.textContent).not.toContain('Tidy tree');
+    expect([...container!.querySelectorAll('button')].filter(button => button.textContent === 'New lineage')).toHaveLength(1);
+  });
+
+  it('keeps New lineage direct and does not duplicate it inside the workspace picker', () => {
+    renderToolbar();
+
+    act(() => container!.querySelector<HTMLButtonElement>('.lineage-workspace-trigger')!.click());
+    const workspaceMenu = container!.querySelector('.lineage-workspace-menu')!;
+
+    expect(workspaceMenu.textContent).not.toContain('New lineage');
+    expect([...container!.querySelectorAll('button')].filter(button => button.textContent === 'New lineage')).toHaveLength(1);
   });
 
   it('opens target planning from the selected branch and keeps defaults in human settings', () => {
@@ -83,30 +98,122 @@ describe('LineageToolbar', () => {
     expect(activeReplay.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('keeps moved graph, demo, refresh, and archive controls reachable in Actions', () => {
+  it('keeps maintenance and Demo/QA tools reachable in default-collapsed sections', () => {
     renderToolbar({ activeWorkspace: null });
 
-    const actions = container!.querySelector('.lineage-overflow')!;
+    const sections = [...container!.querySelectorAll<HTMLDetailsElement>('.lineage-tool-section')];
+    const maintenance = sections.find(section => section.querySelector('summary')?.textContent === 'Maintenance')!;
+    const demo = sections.find(section => section.querySelector('summary')?.textContent === 'Demo/QA')!;
 
-    expect(actions.textContent).toContain('QA seed media');
-    expect(actions.textContent).toContain('Load SVG placeholder demo');
-    expect(actions.textContent).toContain('Load rich image demo');
-    expect(actions.textContent).toContain('Canvas appearance');
-    expect(actions.textContent).toContain('Compact nodes');
-    expect(actions.textContent).toContain('Portrait cards');
-    expect(actions.textContent).toContain('Direction');
-    expect(actions.textContent).toContain('Edge labels');
-    expect(actions.textContent).toContain('Hover previews');
-    expect(actions.textContent).toContain('Bold');
-    expect(actions.textContent).toContain('Left to right');
-    expect(actions.textContent).toContain('Fit graph');
-    expect(actions.textContent).toContain('Tidy tree');
-    expect(actions.textContent).toContain('Manage selection');
-    expect(actions.textContent).toContain('Archive current lineage');
-    expect(actions.textContent).toContain('Index local');
-    expect(actions.textContent).toContain('Refresh graph');
-    expect(actions.textContent).toContain('Refresh workspaces');
-    expect(container!.textContent).not.toContain('Next variation');
+    expect(maintenance.open).toBe(false);
+    expect(demo.open).toBe(false);
+    expect(maintenance.textContent).toContain('Index local');
+    expect(maintenance.textContent).toContain('Refresh graph');
+    expect(maintenance.textContent).toContain('Refresh workspaces');
+    expect(demo.textContent).toContain('QA seed media');
+    expect(demo.textContent).toContain('Load demo lineage');
+    expect(demo.textContent).toContain('Restore basic media');
+    expect(demo.textContent).toContain('Load SVG placeholder demo');
+    expect(demo.textContent).toContain('Download rich images');
+    expect(demo.textContent).toContain('Restore rich media');
+    expect(demo.textContent).toContain('Load rich image demo');
+  });
+
+  it('keeps archive in destructive workspace overflow and preserves its callback', () => {
+    const onArchiveWorkspace = vi.fn();
+    renderToolbar({ onArchiveWorkspace });
+
+    const workspaceTrigger = container!.querySelector<HTMLButtonElement>('.lineage-workspace-trigger')!;
+    act(() => workspaceTrigger.click());
+    const archive = [...container!.querySelectorAll<HTMLButtonElement>('button')]
+      .find(button => button.textContent === 'Archive current lineage')!;
+
+    expect(archive).toBeTruthy();
+    expect(archive.classList.contains('lineage-archive-workspace')).toBe(true);
+    expect(archive.disabled).toBe(false);
+    act(() => archive.click());
+    expect(onArchiveWorkspace).toHaveBeenCalledOnce();
+  });
+
+  it('keeps workspace options and destructive overflow inside the contextual panel width', () => {
+    const css = readFileSync(join(process.cwd(), 'src/web/components/LineageWorkspacePicker.css'), 'utf8');
+    const menuRuleStart = css.indexOf('.lineage-workspace-menu {');
+    const menuRule = css.slice(menuRuleStart, css.indexOf('}', menuRuleStart) + 1);
+
+    expect(menuRule).toContain('width: 100%;');
+    expect(menuRule).toContain('max-width: 100%;');
+    expect(menuRule).not.toContain('420px');
+  });
+
+  it('preserves maintenance and Demo/QA command callbacks', () => {
+    const onRefreshLineage = vi.fn();
+    const onRefreshWorkspaces = vi.fn();
+    const onRestoreSwissifierMedia = vi.fn();
+    const onIndexLocal = vi.fn();
+    const onRestoreDemoMedia = vi.fn();
+    const onDownloadSwissifierMedia = vi.fn();
+    const onSeedDemo = vi.fn();
+    const onSeedSwissifierDemo = vi.fn();
+    renderToolbar({
+      demoSeedStatus: demoMediaStatus({ present: 9, total: 10 }),
+      onDownloadSwissifierMedia,
+      onIndexLocal,
+      onRefreshLineage,
+      onRefreshWorkspaces,
+      onRestoreDemoMedia,
+      onRestoreSwissifierMedia,
+      onSeedDemo,
+      onSeedSwissifierDemo,
+    });
+
+    for (const [label, callback] of [
+      ['Refresh graph', onRefreshLineage],
+      ['Refresh workspaces', onRefreshWorkspaces],
+      ['Index local', onIndexLocal],
+      ['Restore basic media', onRestoreDemoMedia],
+      ['Load SVG placeholder demo', onSeedDemo],
+      ['Download rich images', onDownloadSwissifierMedia],
+      ['Restore rich media', onRestoreSwissifierMedia],
+      ['Load rich image demo', onSeedSwissifierDemo],
+    ] as const) {
+      const button = [...container!.querySelectorAll<HTMLButtonElement>('button')]
+        .find(candidate => candidate.textContent === label)!;
+      act(() => button.click());
+      expect(callback).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('preserves direct workspace, selection, and output callbacks', () => {
+    const onNewLineage = vi.fn();
+    const onOpenGeneration = vi.fn();
+    const onOpenOutputDefaults = vi.fn();
+    const onSelectWorkspace = vi.fn();
+    const onToggleNextPanel = vi.fn();
+    renderToolbar({
+      onNewLineage,
+      onOpenGeneration,
+      onOpenOutputDefaults,
+      onSelectWorkspace,
+      onToggleNextPanel,
+      snapshot: { ...snapshot, selected: ['child-1'] },
+    });
+
+    for (const [label, callback] of [
+      ['New lineage', onNewLineage],
+      ['Plan outputs', onOpenGeneration],
+      ['Output target defaults', onOpenOutputDefaults],
+      ['Manage selection', onToggleNextPanel],
+    ] as const) {
+      const button = [...container!.querySelectorAll<HTMLButtonElement>('.lineage-primary-controls button')]
+        .find(candidate => candidate.textContent === label)!;
+      act(() => button.click());
+      expect(callback).toHaveBeenCalledOnce();
+    }
+
+    act(() => container!.querySelector<HTMLButtonElement>('.lineage-workspace-trigger')!.click());
+    const option = container!.querySelector<HTMLButtonElement>('.lineage-workspace-options [role="option"]')!;
+    act(() => option.click());
+    expect(onSelectWorkspace).toHaveBeenCalledWith(workspace.id);
   });
 
   it('shows automatic rich-demo indexing progress and disables duplicate index or seed actions', () => {
@@ -120,51 +227,20 @@ describe('LineageToolbar', () => {
     expect(container!.textContent).not.toContain('No lineage index yet');
   });
 
-  it('exposes canvas appearance choices and emits card, edge, direction, label, and preview changes', () => {
-    const onCanvasPresentation = vi.fn();
-    const onEdgeSummariesVisible = vi.fn();
-    const onEdgeWeight = vi.fn();
-    const onGraphDirection = vi.fn();
-    const onHoverPreviewsEnabled = vi.fn();
-    renderToolbar({ onCanvasPresentation, onEdgeSummariesVisible, onEdgeWeight, onGraphDirection, onHoverPreviewsEnabled });
-
-    changeSelect('Canvas card style', 'portrait');
-    changeSelect('Canvas edge weight', 'bold');
-    changeSelect('Lineage graph direction', 'TB');
-    changeSelect('Canvas edge labels', 'hide');
-    changeSelect('Canvas hover previews', 'disabled');
-
-    expect(onCanvasPresentation).toHaveBeenCalledWith('portrait');
-    expect(onEdgeWeight).toHaveBeenCalledWith('bold');
-    expect(onGraphDirection).toHaveBeenCalledWith('TB');
-    expect(onEdgeSummariesVisible).toHaveBeenCalledWith(false);
-    expect(onHoverPreviewsEnabled).toHaveBeenCalledWith(false);
-  });
 });
 
 function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> = {}) {
   const props: Parameters<typeof LineageToolbar>[0] = {
     activeWorkspace: workspace,
-    actionsOpen: false,
-    canvasPresentation: 'compact',
     closeSignal: 0,
     demoSeedStatus: demoMediaStatus({ present: 10, total: 10 }),
-    edgeSummariesVisible: true,
-    edgeWeight: 'standard',
-    graphDirection: 'LR',
-    hoverPreviewsEnabled: true,
     loading: false,
     onArchiveWorkspace: vi.fn(),
-    onActionsOpenChange: vi.fn(),
-    onCanvasPresentation: vi.fn(),
     onDownloadSwissifierMedia: vi.fn(),
-    onEdgeSummariesVisible: vi.fn(),
-    onEdgeWeight: vi.fn(),
-    onFitGraph: vi.fn(),
-    onGraphDirection: vi.fn(),
-    onHoverPreviewsEnabled: vi.fn(),
     onIndexLocal: vi.fn(),
     onNewLineage: vi.fn(),
+    onOpenGeneration: vi.fn(),
+    onOpenOutputDefaults: vi.fn(),
     onRefreshLineage: vi.fn(),
     onRefreshWorkspaces: vi.fn(),
     onReplayGrowth: vi.fn(),
@@ -173,7 +249,6 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
     onSeedDemo: vi.fn(),
     onSeedSwissifierDemo: vi.fn(),
     onSelectWorkspace: vi.fn(),
-    onTidyGraph: vi.fn(),
     onToggleNextPanel: vi.fn(),
     replayActive: false,
     sideOpen: false,
@@ -188,14 +263,6 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
 
   act(() => {
     root!.render(<LineageToolbar {...props} />);
-  });
-}
-
-function changeSelect(label: string, value: string) {
-  const select = container!.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement;
-  act(() => {
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
 
