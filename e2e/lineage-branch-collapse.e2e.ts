@@ -18,11 +18,20 @@ test('collapses lineage branches in both card modes while preserving nested choi
 
     const rootFlowNode = page.locator('.react-flow__node:has(.lineage-node.root-node)');
     const rootBeforeCollapse = await requiredBox(rootFlowNode);
-    await page.getByRole('button', { name: 'Collapse 9 descendants of Initial Demo Concept' }).click();
+    const rootCollapse = page.getByRole('button', { name: 'Collapse 9 descendants of Initial Demo Concept' });
+    await expect(rootCollapse).toHaveText('−');
+    await Promise.all([
+      expect(page.locator('.lineage-node-branch-exiting')).toHaveCount(9, { timeout: 1_000 }),
+      rootCollapse.click(),
+    ]);
     await expect(page.locator('.react-flow__node')).toHaveCount(1);
     assertSameAnchor(rootBeforeCollapse, await requiredBox(rootFlowNode));
-    await page.getByRole('button', { name: 'Expand 9 hidden descendants of Initial Demo Concept' }).click();
+    await Promise.all([
+      expect(page.locator('.lineage-node-branch-entering')).toHaveCount(9, { timeout: 1_000 }),
+      page.getByRole('button', { name: 'Expand 9 hidden descendants of Initial Demo Concept' }).click(),
+    ]);
     await expect(page.locator('.react-flow__node')).toHaveCount(10);
+    await expect(page.locator('.lineage-node-branch-entering')).toHaveCount(0);
     assertSameAnchor(rootBeforeCollapse, await requiredBox(rootFlowNode));
 
     const hookToggle = page.getByRole('button', { name: 'Collapse 3 descendants of Hook A v01' });

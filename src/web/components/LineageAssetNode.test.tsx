@@ -136,11 +136,25 @@ describe('AssetNode', () => {
 
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.getAttribute('aria-label')).toBe('Collapse 3 descendants of Swissifier node');
-    expect(toggle.textContent).toContain('3');
+    expect(toggle.textContent).toBe('−');
+    expect(toggle.querySelector('strong')).toBeNull();
     act(() => toggle.click());
 
     expect(onToggleCollapse).toHaveBeenCalledWith('local-node');
     expect(onOpenDetail).not.toHaveBeenCalled();
+  });
+
+  it('stages branch motion from the junction without exposing motion metadata', () => {
+    renderNode({
+      branchTransition: 'entering',
+      branchTransitionOffset: { x: -120, y: 36 },
+    });
+    const shell = container!.querySelector<HTMLElement>('.lineage-node-shell')!;
+
+    expect(shell.classList.contains('lineage-node-branch-entering')).toBe(true);
+    expect(shell.style.getPropertyValue('--lineage-branch-motion-x')).toBe('-120px');
+    expect(shell.style.getPropertyValue('--lineage-branch-motion-y')).toBe('36px');
+    expect(shell.getAttribute('aria-label')).toBeNull();
   });
 
   it('describes hidden descendants and disables branch changes during replay', () => {

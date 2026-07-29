@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import type { LineageNode, LineageTask } from '../../shared/types';
 import { storageStateFor } from '../assetUi';
@@ -13,6 +14,8 @@ type AssetNodeData = LineageNode & {
   active: boolean;
   branchCollapsed?: boolean;
   branchDescendantCount?: number;
+  branchTransition?: 'entering' | 'exiting';
+  branchTransitionOffset?: { x: number; y: number };
   canvasPresentation?: LineageCanvasPresentation;
   collapseInteractive?: boolean;
   focusRole: LineageFocusRole;
@@ -66,8 +69,15 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const collapseLabel = data.branchCollapsed
     ? `Expand ${branchCount} hidden ${branchCount === 1 ? 'descendant' : 'descendants'} of ${data.title}`
     : `Collapse ${branchCount} ${branchCount === 1 ? 'descendant' : 'descendants'} of ${data.title}`;
+  const branchTransitionStyle = data.branchTransitionOffset ? {
+    '--lineage-branch-motion-x': `${data.branchTransitionOffset.x}px`,
+    '--lineage-branch-motion-y': `${data.branchTransitionOffset.y}px`,
+  } as CSSProperties : undefined;
   return (
-    <div className={`lineage-node-shell lineage-node-shell-${portrait ? 'portrait' : 'compact'}`}>
+    <div
+      className={`lineage-node-shell lineage-node-shell-${portrait ? 'portrait' : 'compact'} ${data.branchTransition ? `lineage-node-branch-${data.branchTransition}` : ''}`}
+      style={branchTransitionStyle}
+    >
       <div
         aria-label={`${data.title} ${((data.attempt_count || 1) > 1) ? 'attempt history' : 'details'}`}
         aria-hidden={replayState === 'future' ? true : undefined}
@@ -223,7 +233,6 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
           type="button"
         >
           <span aria-hidden="true">{data.branchCollapsed ? '+' : '−'}</span>
-          <strong>{branchCount}</strong>
         </button>
       )}
     </div>

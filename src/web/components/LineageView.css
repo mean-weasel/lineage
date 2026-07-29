@@ -1383,14 +1383,12 @@
 .lineage-branch-toggle {
   position: absolute;
   z-index: 6;
-  display: flex;
-  min-width: 40px;
+  display: grid;
+  width: 28px;
   height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  place-items: center;
   border: 1px solid #b8c8d1;
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 5px 14px rgba(25, 45, 57, 0.18);
   color: #31536a;
@@ -1398,40 +1396,38 @@
   font: inherit;
   line-height: 1;
   opacity: 0.9;
-  padding: 0 8px;
+  padding: 0;
   transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 150ms ease;
 }
 
 .lineage-branch-toggle span {
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.lineage-branch-toggle strong {
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  transform: translateY(-0.5px);
 }
 
 .lineage-branch-toggle-right {
   top: 50%;
-  right: -22px;
+  right: -55px;
   transform: translate(50%, -50%);
 }
 
 .lineage-branch-toggle-left {
   top: 50%;
-  left: -22px;
+  left: -55px;
   transform: translate(-50%, -50%);
 }
 
 .lineage-branch-toggle-bottom {
-  bottom: -22px;
+  bottom: -55px;
   left: 50%;
   transform: translate(-50%, 50%);
 }
 
 .lineage-branch-toggle-top {
-  top: -22px;
+  top: -55px;
   left: 50%;
   transform: translate(-50%, -50%);
 }
@@ -1474,6 +1470,60 @@
 .lineage-branch-toggle:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.lineage-node-branch-entering {
+  animation: lineage-branch-node-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: center;
+}
+
+.lineage-node-branch-exiting {
+  animation: lineage-branch-node-exit 210ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.lineage-edge-branch-entering {
+  animation: lineage-branch-edge-enter 220ms ease-out both;
+}
+
+.lineage-edge-branch-exiting {
+  animation: lineage-branch-edge-exit 190ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes lineage-branch-node-enter {
+  from {
+    opacity: 0;
+    transform: translate(var(--lineage-branch-motion-x), var(--lineage-branch-motion-y)) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes lineage-branch-node-exit {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(var(--lineage-branch-motion-x), var(--lineage-branch-motion-y)) scale(0.96);
+  }
+}
+
+@keyframes lineage-branch-edge-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lineage-branch-edge-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .lineage-node.root-node::before {
@@ -1909,7 +1959,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lineage-branch-toggle {
+  .lineage-branch-toggle,
+  .lineage-node-branch-entering,
+  .lineage-node-branch-exiting,
+  .lineage-edge-branch-entering,
+  .lineage-edge-branch-exiting {
+    animation-duration: 1ms;
     transition: none;
   }
 }
