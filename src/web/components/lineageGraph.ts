@@ -39,7 +39,7 @@ export function toGraph(
       measured: nodeSize,
       type: 'assetNode' as const,
       height: nodeSize.height,
-      position: (canvasPresentation === 'compact' && collapsedNodeIds.size === 0 ? node.position : undefined) || tidyPositions.get(node.asset_id) || { x: 0, y: 0 },
+      position: (canvasPresentation === 'compact' ? node.position : undefined) || tidyPositions.get(node.asset_id) || { x: 0, y: 0 },
       sourcePosition: handlePositions.source,
       targetPosition: handlePositions.target,
       width: nodeSize.width,

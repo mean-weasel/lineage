@@ -98,6 +98,29 @@ describe('lineage graph layout', () => {
     expect(child).toEqual({ x: 777, y: 333 });
   });
 
+  it('keeps saved compact positions while other branches remain collapsed', () => {
+    const source = snapshot(
+      ['root', 'a', 'a1', 'b', 'b1'],
+      [['root', 'a'], ['a', 'a1'], ['root', 'b'], ['b', 'b1']],
+      {
+        root: { x: 10, y: 20 },
+        a: { x: 300, y: 40 },
+        a1: { x: 600, y: 60 },
+        b: { x: 300, y: 400 },
+        b1: { x: 600, y: 420 },
+      },
+    );
+
+    const partiallyExpanded = toGraph(source, null, 'LR', true, 'compact', new Set(['b']));
+
+    expect(partiallyExpanded.nodes.map(node => [node.id, node.position])).toEqual([
+      ['root', { x: 10, y: 20 }],
+      ['a', { x: 300, y: 40 }],
+      ['a1', { x: 600, y: 60 }],
+      ['b', { x: 300, y: 400 }],
+    ]);
+  });
+
   it('uses portrait dimensions and fresh layout positions in portrait lab mode', () => {
     const graph = toGraph(
       snapshot(['root', 'child'], [['root', 'child']], { child: { x: 777, y: 333 } }),
