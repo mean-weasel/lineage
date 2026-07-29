@@ -119,18 +119,8 @@ export function projectLineageBranches(
 
   const normalizedCollapsed = new Set([...collapsedNodeIds].filter(nodeId => validNodeIds.has(nodeId) && outgoing.has(nodeId)));
   const visibleNodeIds = visibleLineageNodeIds(snapshot, normalizedCollapsed, outgoing, incomingCount);
-  const branchCounts = new Map<string, number>();
-  for (const nodeId of visibleNodeIds) {
-    if (!outgoing.has(nodeId)) continue;
-    const toggled = new Set(normalizedCollapsed);
-    if (toggled.has(nodeId)) toggled.delete(nodeId);
-    else toggled.add(nodeId);
-    const toggledVisible = visibleLineageNodeIds(snapshot, toggled, outgoing, incomingCount);
-    const count = normalizedCollapsed.has(nodeId)
-      ? differenceSize(toggledVisible, visibleNodeIds)
-      : differenceSize(visibleNodeIds, toggledVisible);
-    if (count > 0) branchCounts.set(nodeId, count);
-  }
+  const branchCounts = forestBranchCounts(normalizedCollapsed, outgoing, incomingCount, visibleNodeIds)
+    || generalBranchCounts(snapshot, normalizedCollapsed, outgoing, incomingCount, visibleNodeIds);
 
   return {
     branchCounts,
@@ -149,6 +139,69 @@ export function projectLineageBranches(
     },
     visibleNodeIds,
   };
+}
+
+function forestBranchCounts(
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+  visibleNodeIds: ReadonlySet<string>,
+): Map<string, number> | null {
+  if ([...incomingCount.values()].some(count => count > 1)) return null;
+  const subtreeSizes = new Map<string, number>();
+  const visiting = new Set<string>();
+  const visibleSubtreeSize = (nodeId: string): number | null => {
+    const cached = subtreeSizes.get(nodeId);
+    if (cached !== undefined) return cached;
+    if (visiting.has(nodeId)) return null;
+    visiting.add(nodeId);
+    let size = 1;
+    if (!collapsedNodeIds.has(nodeId)) {
+      for (const childId of outgoing.get(nodeId) || []) {
+        const childSize = visibleSubtreeSize(childId);
+        if (childSize === null) return null;
+        size += childSize;
+      }
+    }
+    visiting.delete(nodeId);
+    subtreeSizes.set(nodeId, size);
+    return size;
+  };
+  const branchCounts = new Map<string, number>();
+  for (const nodeId of visibleNodeIds) {
+    const children = outgoing.get(nodeId);
+    if (!children) continue;
+    let count = 0;
+    for (const childId of children) {
+      const childSize = visibleSubtreeSize(childId);
+      if (childSize === null) return null;
+      count += childSize;
+    }
+    if (count > 0) branchCounts.set(nodeId, count);
+  }
+  return branchCounts;
+}
+
+function generalBranchCounts(
+  snapshot: LineageSnapshot,
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+  visibleNodeIds: ReadonlySet<string>,
+): Map<string, number> {
+  const branchCounts = new Map<string, number>();
+  for (const nodeId of visibleNodeIds) {
+    if (!outgoing.has(nodeId)) continue;
+    const toggled = new Set(collapsedNodeIds);
+    if (toggled.has(nodeId)) toggled.delete(nodeId);
+    else toggled.add(nodeId);
+    const toggledVisible = visibleLineageNodeIds(snapshot, toggled, outgoing, incomingCount);
+    const count = collapsedNodeIds.has(nodeId)
+      ? differenceSize(toggledVisible, visibleNodeIds)
+      : differenceSize(visibleNodeIds, toggledVisible);
+    if (count > 0) branchCounts.set(nodeId, count);
+  }
+  return branchCounts;
 }
 
 function visibleLineageNodeIds(

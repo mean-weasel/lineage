@@ -75,7 +75,7 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   } as CSSProperties : undefined;
   return (
     <div
-      className={`lineage-node-shell lineage-node-shell-${portrait ? 'portrait' : 'compact'} ${data.branchTransition ? `lineage-node-branch-${data.branchTransition}` : ''}`}
+      className={`lineage-node-shell lineage-node-shell-${portrait ? 'portrait' : 'compact'} ${replayState ? `lineage-node-shell-replay-${replayState}` : ''} ${data.branchTransition ? `lineage-node-branch-${data.branchTransition}` : ''}`}
       style={branchTransitionStyle}
     >
       <div

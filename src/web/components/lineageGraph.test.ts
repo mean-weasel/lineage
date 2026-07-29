@@ -261,4 +261,17 @@ describe('lineage graph layout', () => {
     expect(ancestorReopened.branchCounts.get('a1')).toBe(1);
   });
 
+  it('computes branch counts for a large tree within a bounded projection pass', () => {
+    const nodeCount = 4_000;
+    const ids = Array.from({ length: nodeCount }, (_, index) => `node-${index}`);
+    const edges = ids.slice(1).map((id, index) => [`node-${Math.floor(index / 2)}`, id] as [string, string]);
+    const source = snapshot(ids, edges);
+    const startedAt = performance.now();
+
+    const projection = projectLineageBranches(source, new Set());
+
+    expect(projection.branchCounts.get('node-0')).toBe(nodeCount - 1);
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+
 });

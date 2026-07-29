@@ -39,4 +39,20 @@ describe('lineage edge state', () => {
 
     expect(reconciled).toEqual([{ ...edge('root->child'), selected: true }]);
   });
+
+  it('preserves earlier edge selections when modifier selection reports only the new edge', () => {
+    const authoritativeEdges = [edge('root->a'), edge('root->b')];
+    const currentEdges = [
+      { ...edge('root->a'), selected: true },
+      edge('root->b'),
+    ];
+    const changes: EdgeChange[] = [{ id: 'root->b', type: 'select', selected: true }];
+
+    const reconciled = reconcileAuthoritativeEdgeChanges(changes, currentEdges, authoritativeEdges);
+
+    expect(reconciled.map(item => [item.id, item.selected])).toEqual([
+      ['root->a', true],
+      ['root->b', true],
+    ]);
+  });
 });

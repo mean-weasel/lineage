@@ -111,9 +111,11 @@ describe('AssetNode', () => {
 
   it('keeps future replay nodes mounted but hidden from keyboard and accessibility interaction', () => {
     renderNode({ branchDescendantCount: 2, collapseInteractive: false, replayInteractive: false, replayState: 'future', sourcePosition: Position.Right });
+    const shell = container!.querySelector<HTMLElement>('.lineage-node-shell')!;
     const node = container!.querySelector<HTMLElement>('.lineage-node')!;
     const toggle = container!.querySelector<HTMLButtonElement>('.lineage-branch-toggle')!;
 
+    expect(shell.classList.contains('lineage-node-shell-replay-future')).toBe(true);
     expect(node.classList.contains('lineage-node-replay-future')).toBe(true);
     expect(node.getAttribute('aria-hidden')).toBe('true');
     expect(node.getAttribute('tabindex')).toBe('-1');

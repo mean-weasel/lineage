@@ -1646,7 +1646,7 @@
   pointer-events: none;
 }
 
-.lineage-node.lineage-node-replay-future {
+.lineage-node-shell.lineage-node-shell-replay-future {
   opacity: 0;
   pointer-events: none;
   transform: scale(0.96);
