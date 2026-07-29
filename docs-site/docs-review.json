@@ -1,8 +1,10 @@
 {
-  "reviewedFor": "0.1.30",
+  "reviewedFor": "0.1.31",
   "result": "updated",
   "areas": [
     "reference-interface",
-    "lineage-canvas-appearance"
+    "navigation-shell",
+    "canvas-settings",
+    "about-lineage"
   ]
 }
