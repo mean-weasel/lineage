@@ -100,6 +100,15 @@ export function Sidebar(props: {
             <div className="brand-mark" aria-label={appDescription}>L</div>
           </div>
           <button
+            aria-label="Expand contextual panel"
+            className="rail-button context-expand-toggle"
+            onClick={() => props.onContextOpenChange(true)}
+            title="Expand contextual panel"
+            type="button"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+          <button
             aria-controls="contextual-navigation-panel"
             aria-expanded={mobileContextOpen}
             aria-label="Open navigation panel"
@@ -251,14 +260,6 @@ export function Sidebar(props: {
           </div>
         </section>
 
-        <button
-          aria-label="Expand contextual panel"
-          className="context-expand-toggle"
-          onClick={() => props.onContextOpenChange(true)}
-          type="button"
-        >
-          <PanelLeftOpen size={18} />
-        </button>
       </aside>
       {mobileContextOpen && (
         <button

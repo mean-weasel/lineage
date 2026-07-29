@@ -25,6 +25,31 @@ test('offers the Canvas settings hint once without obstructing its gear', async 
     window.localStorage.getItem('lineage.preferences.canvas-settings-hint-dismissed'))).toBe('true');
 });
 
+test('keeps the collapsed contextual-panel trigger inside the navigation rail', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/?project=demo-project');
+
+  await page.getByRole('button', { name: 'Collapse contextual panel' }).click();
+  const expand = page.getByRole('button', { name: 'Expand contextual panel' });
+  await expect(expand).toBeVisible();
+
+  await expect.poll(async () => expand.evaluate(element => {
+    const buttonBox = element.getBoundingClientRect();
+    const railBox = element.closest('.navigation-rail')?.getBoundingClientRect();
+    const workspaceBox = document.querySelector('.workspace')?.getBoundingClientRect();
+    return Boolean(
+      railBox
+      && workspaceBox
+      && buttonBox.left >= railBox.left
+      && buttonBox.right <= railBox.right
+      && buttonBox.right <= workspaceBox.left
+    );
+  })).toBe(true);
+
+  await expand.click();
+  await expect(page.getByRole('button', { name: 'Collapse contextual panel' })).toBeVisible();
+});
+
 test('keeps Canvas full-height and restores focus when its shared panel closes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/?project=demo-project&lineageCanvas=portrait');

@@ -50,8 +50,7 @@
 }
 
 .rail-button,
-.context-close,
-.context-expand-toggle {
+.context-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -127,8 +126,7 @@
   font-weight: 800;
 }
 
-.context-close,
-.context-expand-toggle {
+.context-close {
   width: 34px;
   min-height: 34px;
   border: 1px solid var(--line);
@@ -159,13 +157,11 @@
 }
 
 .context-expand-toggle {
-  position: fixed;
-  top: 14px;
-  left: 78px;
-  z-index: 20;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
+  display: none;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #dcecef;
 }
 
 .mobile-context-close,
@@ -188,8 +184,7 @@
 }
 
 .app-shell.context-panel-collapsed .context-expand-toggle {
-  opacity: 1;
-  pointer-events: auto;
+  display: inline-flex;
 }
 
 @media (max-width: 760px) {
@@ -247,7 +242,7 @@
   }
 
   .desktop-context-close,
-  .context-expand-toggle {
+  .app-shell.context-panel-collapsed .context-expand-toggle {
     display: none;
   }
 

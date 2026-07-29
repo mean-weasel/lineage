@@ -112,6 +112,18 @@ describe('Sidebar', () => {
     expect(onContextOpenChange).not.toHaveBeenCalled();
   });
 
+  it('keeps the desktop contextual-panel expand control inside the navigation rail', () => {
+    const onContextOpenChange = vi.fn();
+    renderSidebar('lineage', { onContextOpenChange });
+
+    const expand = buttonByLabel('Expand contextual panel');
+    expect(expand?.closest('.navigation-rail')).not.toBeNull();
+    expect(expand?.closest('.context-panel')).toBeNull();
+
+    expand?.click();
+    expect(onContextOpenChange).toHaveBeenCalledWith(true);
+  });
+
   it('moves focus into the mobile drawer and returns it to the trigger when closed', () => {
     renderSidebar('lineage', { mobileContextOpen: false });
     const trigger = buttonByLabel('Open navigation panel')!;
