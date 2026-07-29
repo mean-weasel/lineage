@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.32
+
 - Add reachability-aware branch controls to compact and portrait lineage cards so large trees can be collapsed without hiding descendants that remain connected through another visible branch.
 
 ## 0.1.31
