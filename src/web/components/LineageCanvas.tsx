@@ -45,6 +45,7 @@ export function lineageCanvasEmptyState(workspaceRootAssetId: string, progress: 
 
 export function LineageCanvas({
   canvasPresentation,
+  collapseInteractive,
   flowEdges,
   flowNodes,
   graphKey,
@@ -62,6 +63,7 @@ export function LineageCanvas({
   onNodeOpenDetail,
   onNodeOpenHistory,
   onNodePosition,
+  onToggleCollapse,
   onNodesChange,
   onReady,
   onSelectedAsset,
@@ -75,6 +77,7 @@ export function LineageCanvas({
   workspaceRootAssetId,
 }: {
   canvasPresentation: LineageCanvasPresentation;
+  collapseInteractive: boolean;
   flowEdges: Edge[];
   flowNodes: AssetFlowNode[];
   graphKey: string;
@@ -92,6 +95,7 @@ export function LineageCanvas({
   onNodeOpenDetail: (assetId: string) => void;
   onNodeOpenHistory: (assetId: string) => void;
   onNodePosition: (node: AssetFlowNode) => void;
+  onToggleCollapse: (assetId: string) => void;
   onNodesChange: (changes: NodeChange<AssetFlowNode>[]) => void;
   onReady: (instance: ReactFlowInstance<AssetFlowNode, Edge>) => void;
   onSelectedAsset: (assetId: string) => void;
@@ -179,11 +183,13 @@ export function LineageCanvas({
     data: {
       ...node.data,
       canvasPresentation,
+      collapseInteractive,
       hoverPreviewsEnabled,
       onOpenDetail: openDetail,
       onOpenHistory: openHistory,
       onPreviewChange: hoverPreviewsEnabled ? changePreview : undefined,
       onPreviewDismiss: dismissPreview,
+      onToggleCollapse,
       onToggleBranch: (target: LineageNode) => {
         if (quickActionState(target, selectionFull).branchDisabled) return;
         void runQuickAction('branch', target);
@@ -198,7 +204,7 @@ export function LineageCanvas({
       },
       semanticZoomTier: canvasPresentation === 'portrait' ? semanticZoomTier : 'near',
     },
-  })), [canvasPresentation, changePreview, dismissPreview, flowNodes, hoverPreviewsEnabled, openDetail, openHistory, runQuickAction, selectionFull, semanticZoomTier]);
+  })), [canvasPresentation, changePreview, collapseInteractive, dismissPreview, flowNodes, hoverPreviewsEnabled, onToggleCollapse, openDetail, openHistory, runQuickAction, selectionFull, semanticZoomTier]);
 
   if (!flowNodes.length) {
     const emptyState = lineageCanvasEmptyState(workspaceRootAssetId, workspaceProgress);

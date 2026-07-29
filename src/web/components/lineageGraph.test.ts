@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Position } from '@xyflow/react';
 import type { LineageSnapshot } from '../../shared/types';
-import { layoutLineageTree, lineageFocus, toGraph, type LineageGraphDirection } from './lineageGraph';
+import { layoutLineageTree, lineageFocus, projectLineageBranches, toGraph, type LineageGraphDirection } from './lineageGraph';
 
 const nodeSize = { height: 164, width: 212 };
 
@@ -180,4 +180,62 @@ describe('lineage graph layout', () => {
     expect(graph.edges[1]).toMatchObject({ ariaLabel: 'root to legacy' });
     expect(graph.edges[1].label).toBeUndefined();
   });
+
+  it('projects a collapsed branch without mutating the lineage snapshot', () => {
+    const source = snapshot(
+      ['root', 'a', 'b', 'a1', 'a2', 'a1x'],
+      [['root', 'a'], ['root', 'b'], ['a', 'a1'], ['a', 'a2'], ['a1', 'a1x']],
+    );
+    const projection = projectLineageBranches(source, new Set(['a']));
+    const graph = toGraph(source, null, 'LR', true, 'compact', new Set(['a']));
+
+    expect(projection.snapshot.nodes.map(node => node.asset_id)).toEqual(['root', 'a', 'b']);
+    expect(projection.snapshot.edges.map(edge => edge.id)).toEqual(['root-a', 'root-b']);
+    expect(projection.branchCounts.get('a')).toBe(3);
+    expect(graph.nodes.map(node => node.id)).toEqual(['root', 'a', 'b']);
+    expect(graph.nodes.find(node => node.id === 'a')?.data).toMatchObject({
+      branchCollapsed: true,
+      branchDescendantCount: 3,
+    });
+    expect(source.nodes).toHaveLength(6);
+    expect(source.edges).toHaveLength(5);
+  });
+
+  it('keeps a shared descendant visible through another expanded branch', () => {
+    const source = snapshot(
+      ['root', 'a', 'b', 'unique', 'shared', 'leaf'],
+      [['root', 'a'], ['root', 'b'], ['a', 'unique'], ['a', 'shared'], ['b', 'shared'], ['shared', 'leaf']],
+    );
+    const projection = projectLineageBranches(source, new Set(['a']));
+
+    expect(projection.snapshot.nodes.map(node => node.asset_id)).toEqual(['root', 'a', 'b', 'shared', 'leaf']);
+    expect(projection.snapshot.edges.map(edge => edge.id)).toEqual(['root-a', 'root-b', 'b-shared', 'shared-leaf']);
+    expect(projection.branchCounts.get('a')).toBe(1);
+  });
+
+  it('preserves a disconnected cyclic component while collapsing the rooted tree', () => {
+    const source = snapshot(
+      ['root', 'child', 'orphan-a', 'orphan-b'],
+      [['root', 'child'], ['orphan-a', 'orphan-b'], ['orphan-b', 'orphan-a']],
+    );
+    const projection = projectLineageBranches(source, new Set(['root']));
+
+    expect(projection.snapshot.nodes.map(node => node.asset_id)).toEqual(['root', 'orphan-a', 'orphan-b']);
+    expect(projection.snapshot.edges.map(edge => edge.id)).toEqual(['orphan-a-orphan-b', 'orphan-b-orphan-a']);
+  });
+
+  it('preserves nested collapse state when an ancestor is closed and reopened', () => {
+    const source = snapshot(
+      ['root', 'a', 'a1', 'a1x', 'a2'],
+      [['root', 'a'], ['a', 'a1'], ['a1', 'a1x'], ['a', 'a2']],
+    );
+    const nestedCollapsed = new Set(['a', 'a1']);
+    const ancestorClosed = projectLineageBranches(source, nestedCollapsed);
+    const ancestorReopened = projectLineageBranches(source, new Set(['a1']));
+
+    expect(ancestorClosed.snapshot.nodes.map(node => node.asset_id)).toEqual(['root', 'a']);
+    expect(ancestorReopened.snapshot.nodes.map(node => node.asset_id)).toEqual(['root', 'a', 'a1', 'a2']);
+    expect(ancestorReopened.branchCounts.get('a1')).toBe(1);
+  });
+
 });

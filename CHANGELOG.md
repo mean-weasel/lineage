@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add reachability-aware branch controls to compact and portrait lineage cards so large trees can be collapsed without hiding descendants that remain connected through another visible branch.
+
 ## 0.1.31
 
 - Replace the stacked top navigation and growing Canvas Actions menu with a full-height destination rail, contextual left panel, and full-page canvas that stay usable across desktop and mobile layouts.

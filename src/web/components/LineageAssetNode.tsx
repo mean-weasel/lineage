@@ -11,13 +11,17 @@ export type LineageSemanticZoomTier = 'far' | 'medium' | 'near';
 
 type AssetNodeData = LineageNode & {
   active: boolean;
+  branchCollapsed?: boolean;
+  branchDescendantCount?: number;
   canvasPresentation?: LineageCanvasPresentation;
+  collapseInteractive?: boolean;
   focusRole: LineageFocusRole;
   hoverPreviewsEnabled?: boolean;
   onOpenDetail?: (assetId: string) => void;
   onOpenHistory?: (assetId: string) => void;
   onPreviewChange?: (source: LineagePreviewSource, assetId: string, position: HoverPreviewPosition | null) => void;
   onPreviewDismiss?: () => void;
+  onToggleCollapse?: (assetId: string) => void;
   onToggleBranch?: (node: LineageNode) => void;
   onToggleReroll?: (node: LineageNode) => void;
   onToggleSocial?: (node: LineageNode) => void;
@@ -47,6 +51,7 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const replayState = data.replayState;
   const replayInteractive = data.replayInteractive !== false;
   const portrait = data.canvasPresentation === 'portrait';
+  const collapseInteractive = data.collapseInteractive !== false;
   const semanticZoomTier = data.semanticZoomTier || 'near';
   const hasWork = taskBadges.length > 0 || (data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll);
   const openFromNode = () => {
@@ -57,8 +62,13 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const showPreview = (source: LineagePreviewSource, element: HTMLElement) => {
     data.onPreviewChange?.(source, data.asset_id, hoverPreviewPosition(element.getBoundingClientRect(), window.innerWidth, window.innerHeight));
   };
+  const branchCount = data.branchDescendantCount || 0;
+  const collapseLabel = data.branchCollapsed
+    ? `Expand ${branchCount} hidden ${branchCount === 1 ? 'descendant' : 'descendants'} of ${data.title}`
+    : `Collapse ${branchCount} ${branchCount === 1 ? 'descendant' : 'descendants'} of ${data.title}`;
   return (
-    <div
+    <div className={`lineage-node-shell lineage-node-shell-${portrait ? 'portrait' : 'compact'}`}>
+      <div
         aria-label={`${data.title} ${((data.attempt_count || 1) > 1) ? 'attempt history' : 'details'}`}
         aria-hidden={replayState === 'future' ? true : undefined}
         className={`lineage-node lineage-node-${portrait ? 'portrait' : 'compact'} lineage-zoom-${semanticZoomTier} lineage-review-${data.review_state} ${hasWork ? 'lineage-has-work' : ''} ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
@@ -188,6 +198,34 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
             <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
           </>
         )}
+      </div>
+      {branchCount > 0 && (
+        <button
+          aria-expanded={!data.branchCollapsed}
+          aria-hidden={replayState === 'future' ? true : undefined}
+          aria-label={collapseLabel}
+          className={`lineage-branch-toggle lineage-branch-toggle-${String(data.sourcePosition).toLowerCase()} ${data.branchCollapsed ? 'collapsed' : ''}`}
+          disabled={!collapseInteractive}
+          onClick={event => {
+            event.preventDefault();
+            event.stopPropagation();
+            data.onPreviewDismiss?.();
+            data.onToggleCollapse?.(data.asset_id);
+          }}
+          onDoubleClick={event => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onKeyDown={event => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
+          tabIndex={replayState === 'future' ? -1 : undefined}
+          title={collapseInteractive ? collapseLabel : 'Branch collapsing is unavailable during replay'}
+          type="button"
+        >
+          <span aria-hidden="true">{data.branchCollapsed ? '+' : '−'}</span>
+          <strong>{branchCount}</strong>
+        </button>
+      )}
     </div>
   );
 }

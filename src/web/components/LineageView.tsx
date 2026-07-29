@@ -45,7 +45,7 @@ import { OutputTargetPreferencesDialog } from './OutputTargetPreferencesDialog';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
 import { lineageReviewConflict } from './lineageReviewConflict';
-import { layoutLineageTree, lineageGraphKey, toGraph, type LineageGraphDirection } from './lineageGraph';
+import { layoutLineageTree, lineageGraphKey, projectLineageBranches, toGraph, type LineageGraphDirection } from './lineageGraph';
 import { buildLineageReplayTimeline, isLineageReplayable, projectLineageReplay, type LineageReplayPhase } from './lineageReplay';
 import { useEscapeClear } from './useEscapeClear';
 import { useLineageWorkspaces } from './useLineageWorkspaces';
@@ -69,6 +69,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       readLineageCanvasPresentation(),
     ));
   const [snapshot, setSnapshot] = useState<LineageSnapshot | null>(null);
+  const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() => new Set());
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [childAssetId, setChildAssetId] = useState('');
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
@@ -118,6 +119,10 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     [generationJobs, nodeTargetStates, snapshot],
   );
   const graphSnapshot = replaySnapshot && !replayAtEnd ? replaySnapshot : decoratedSnapshot;
+  const effectiveCollapsedNodeIds = useMemo(
+    () => replaySnapshot ? new Set<string>() : collapsedNodeIds,
+    [collapsedNodeIds, replaySnapshot],
+  );
   const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
   const editingEdge = snapshot?.edges.find(edge => edge.id === edgeEditor?.edgeId);
   const latestNodes = snapshot?.nodes.filter(node => snapshot.latest.includes(node.asset_id)) || [];
@@ -149,6 +154,16 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const currentProjectRef = useRef(project);
   useEffect(() => { currentProjectRef.current = project; }, [project]);
   const clearFocus = useCallback(() => { setActiveNodeId(null); closeTransientMenus(); }, [closeTransientMenus]);
+  const toggleCollapsedBranch = useCallback((assetId: string) => {
+    if (!decoratedSnapshot || replaySnapshot) return;
+    const next = new Set(collapsedNodeIds);
+    if (next.has(assetId)) next.delete(assetId);
+    else next.add(assetId);
+    const projection = projectLineageBranches(decoratedSnapshot, next);
+    if (activeNodeId && !projection.visibleNodeIds.has(activeNodeId)) setActiveNodeId(null);
+    setCollapsedNodeIds(next);
+    closeTransientMenus();
+  }, [activeNodeId, closeTransientMenus, collapsedNodeIds, decoratedSnapshot, replaySnapshot]);
   const resetLineage = useCallback(() => {
     setSnapshot(null);
     setActiveNodeId(null);
@@ -160,6 +175,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     setReplayPlaying(false);
     setReplayPhase('settled');
     setReplayStageIndex(-1);
+    setCollapsedNodeIds(new Set());
   }, []);
   const refreshNodeTargets = useCallback(async (targetSnapshot: LineageSnapshot | null = snapshot) => {
     if (!targetSnapshot) return;
@@ -179,6 +195,19 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     if (!snapshot) return;
     void refreshNodeTargets(snapshot);
   }, [refreshNodeTargets, snapshotTargetKey]);
+
+  useEffect(() => {
+    setCollapsedNodeIds(new Set());
+  }, [project, snapshot?.root_asset_id]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const collapsibleIds = new Set(snapshot.edges.map(edge => edge.parent_asset_id));
+    setCollapsedNodeIds(current => {
+      const next = new Set([...current].filter(nodeId => collapsibleIds.has(nodeId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [snapshot]);
   const {
     activateWorkspace,
     activeWorkspace,
@@ -730,8 +759,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   }, [reduceReplayMotion, replayLastStage, replayPhase, replayPlaying, replaySnapshot, replaySpeed, replayStageIndex, replayTimeline.stages]);
 
   const baseGraph = useMemo(
-    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation),
-    [activeNodeId, canvasPresentation, edgeSummariesVisible, graphDirection, graphSnapshot],
+    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation, effectiveCollapsedNodeIds),
+    [activeNodeId, canvasPresentation, edgeSummariesVisible, effectiveCollapsedNodeIds, graphDirection, graphSnapshot],
   );
   const graph = useMemo(() => replaySnapshot && !replayAtEnd
     ? projectLineageReplay(baseGraph.nodes, baseGraph.edges, replayTimeline, replayStageIndex, replayPhase)
@@ -768,10 +797,10 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
 
   useEffect(() => {
     if (workspaceProgress !== 'indexing' || !indexingRefreshStarted.current || !snapshot?.nodes.length) return;
-    if (renderedGraphKey.current !== graphKey || flowNodes.length !== snapshot.nodes.length) return;
+    if (renderedGraphKey.current !== graphKey || flowNodes.length !== graph.nodes.length) return;
     indexingRefreshStarted.current = false;
     setWorkspaceProgress('ready');
-  }, [flowNodes.length, graphKey, snapshot, workspaceProgress]);
+  }, [flowNodes.length, graph.nodes.length, graphKey, snapshot, workspaceProgress]);
 
   useEscapeClear(Boolean(activeNodeId), clearFocus);
 
@@ -844,6 +873,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           )}
           <LineageCanvas
             canvasPresentation={canvasPresentation}
+            collapseInteractive={!replaySnapshot}
             flowEdges={graphSnapshot ? flowEdges : []}
             flowNodes={graphSnapshot ? flowNodes : []}
             graphKey={graphKey}
@@ -863,6 +893,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             onNodePosition={node => {
               if (canvasPresentation === 'compact') void saveNodePosition(node);
             }}
+            onToggleCollapse={toggleCollapsedBranch}
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
             onSelectedAsset={onSelectedAsset}
