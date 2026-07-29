@@ -10,19 +10,28 @@ const nodeSizes: Record<LineageCanvasPresentation, { height: number; width: numb
 
 export type LineageGraphDirection = 'BT' | 'LR' | 'RL' | 'TB';
 
+export type LineageBranchProjection = {
+  branchCounts: Map<string, number>;
+  snapshot: LineageSnapshot;
+  visibleNodeIds: Set<string>;
+};
+
 export function toGraph(
   snapshot: LineageSnapshot | null,
   activeNodeId: string | null,
   direction: LineageGraphDirection = 'LR',
   edgeSummariesVisible = true,
   canvasPresentation: LineageCanvasPresentation = 'compact',
+  collapsedNodeIds: ReadonlySet<string> = new Set(),
 ): { nodes: AssetFlowNode[]; edges: Edge[] } {
   if (!snapshot) return { nodes: [], edges: [] };
+  const projection = projectLineageBranches(snapshot, collapsedNodeIds);
+  const visibleSnapshot = projection.snapshot;
   const nodeSize = nodeSizes[canvasPresentation];
-  const tidyPositions = layoutLineageTree(snapshot, direction, canvasPresentation);
+  const tidyPositions = layoutLineageTree(visibleSnapshot, direction, canvasPresentation);
   const handlePositions = lineageHandlePositions(direction);
-  const focus = lineageFocus(snapshot, activeNodeId);
-  const nodes = snapshot.nodes.map(node => {
+  const focus = lineageFocus(visibleSnapshot, activeNodeId);
+  const nodes = visibleSnapshot.nodes.map(node => {
     return {
       id: node.asset_id,
       initialHeight: nodeSize.height,
@@ -37,16 +46,18 @@ export function toGraph(
       data: {
         ...node,
         active: node.asset_id === activeNodeId,
+        branchCollapsed: collapsedNodeIds.has(node.asset_id),
+        branchDescendantCount: projection.branchCounts.get(node.asset_id) || 0,
         canvasPresentation,
         focusRole: focus.roles.get(node.asset_id) || 'none',
-        root: node.asset_id === snapshot.root_asset_id,
+        root: node.asset_id === visibleSnapshot.root_asset_id,
         sourcePosition: handlePositions.source,
         targetPosition: handlePositions.target,
       },
     };
   });
-  const nodeTitles = new Map(snapshot.nodes.map(node => [node.asset_id, node.title]));
-  const edges = snapshot.edges.map(edge => {
+  const nodeTitles = new Map(visibleSnapshot.nodes.map(node => [node.asset_id, node.title]));
+  const edges = visibleSnapshot.edges.map(edge => {
     const summaryClass = edge.summary ? 'lineage-edge-summary' : '';
     const className = [focus.edgeClasses.get(edge.id), summaryClass].filter(Boolean).join(' ') || undefined;
     const relationship = `${nodeTitles.get(edge.parent_asset_id) || edge.parent_asset_id} to ${nodeTitles.get(edge.child_asset_id) || edge.child_asset_id}`;
@@ -61,7 +72,7 @@ export function toGraph(
       source: edge.parent_asset_id,
       target: edge.child_asset_id,
       type: 'smoothstep',
-      animated: snapshot.selected.includes(edge.child_asset_id),
+      animated: visibleSnapshot.selected.includes(edge.child_asset_id),
       ...(edge.summary && edgeSummariesVisible ? {
         label: edge.summary,
         labelBgBorderRadius: 4,
@@ -91,6 +102,261 @@ export function lineageGraphKey(
   const nodeIds = snapshot.nodes.map(node => node.asset_id).sort().join(',');
   const edgeIds = snapshot.edges.map(edge => edge.id).sort().join(',');
   return `${snapshot.root_asset_id}:${direction}:${canvasPresentation}:${nodeIds}:${edgeIds}`;
+}
+
+export function projectLineageBranches(
+  snapshot: LineageSnapshot,
+  collapsedNodeIds: ReadonlySet<string>,
+): LineageBranchProjection {
+  const validNodeIds = new Set(snapshot.nodes.map(node => node.asset_id));
+  const outgoing = new Map<string, string[]>();
+  const incomingCount = new Map(snapshot.nodes.map(node => [node.asset_id, 0]));
+  for (const edge of snapshot.edges) {
+    if (!validNodeIds.has(edge.parent_asset_id) || !validNodeIds.has(edge.child_asset_id)) continue;
+    outgoing.set(edge.parent_asset_id, [...(outgoing.get(edge.parent_asset_id) || []), edge.child_asset_id]);
+    incomingCount.set(edge.child_asset_id, (incomingCount.get(edge.child_asset_id) || 0) + 1);
+  }
+
+  const normalizedCollapsed = new Set([...collapsedNodeIds].filter(nodeId => validNodeIds.has(nodeId) && outgoing.has(nodeId)));
+  const visibleNodeIds = visibleLineageNodeIds(snapshot, normalizedCollapsed, outgoing, incomingCount);
+  const branchCounts = forestBranchCounts(normalizedCollapsed, outgoing, incomingCount, visibleNodeIds)
+    || dagBranchCounts(snapshot, normalizedCollapsed, outgoing, incomingCount, visibleNodeIds)
+    || generalBranchCounts(snapshot, normalizedCollapsed, outgoing, incomingCount, visibleNodeIds);
+
+  return {
+    branchCounts,
+    snapshot: {
+      ...snapshot,
+      active_asset_id: visibleNodeIds.has(snapshot.active_asset_id) ? snapshot.active_asset_id : snapshot.root_asset_id,
+      edges: snapshot.edges.filter(edge =>
+        !normalizedCollapsed.has(edge.parent_asset_id)
+        && visibleNodeIds.has(edge.parent_asset_id)
+        && visibleNodeIds.has(edge.child_asset_id)),
+      latest: snapshot.latest.filter(nodeId => visibleNodeIds.has(nodeId)),
+      nodes: snapshot.nodes.filter(node => visibleNodeIds.has(node.asset_id)),
+      selected: snapshot.selected.filter(nodeId => visibleNodeIds.has(nodeId)),
+      selection: snapshot.selection && visibleNodeIds.has(snapshot.selection.asset_id) ? snapshot.selection : null,
+      selections: snapshot.selections.filter(selection => visibleNodeIds.has(selection.asset_id)),
+    },
+    visibleNodeIds,
+  };
+}
+
+function forestBranchCounts(
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+  visibleNodeIds: ReadonlySet<string>,
+): Map<string, number> | null {
+  if ([...incomingCount.values()].some(count => count > 1)) return null;
+  if (!topologicalVisibleOrder(new Set(incomingCount.keys()), outgoing, new Set())) return null;
+  const subtreeSizes = new Map<string, number>();
+  const visiting = new Set<string>();
+  const visibleSubtreeSize = (nodeId: string): number | null => {
+    const cached = subtreeSizes.get(nodeId);
+    if (cached !== undefined) return cached;
+    if (visiting.has(nodeId)) return null;
+    visiting.add(nodeId);
+    let size = 1;
+    if (!collapsedNodeIds.has(nodeId)) {
+      for (const childId of outgoing.get(nodeId) || []) {
+        const childSize = visibleSubtreeSize(childId);
+        if (childSize === null) return null;
+        size += childSize;
+      }
+    }
+    visiting.delete(nodeId);
+    subtreeSizes.set(nodeId, size);
+    return size;
+  };
+  const branchCounts = new Map<string, number>();
+  for (const nodeId of visibleNodeIds) {
+    const children = outgoing.get(nodeId);
+    if (!children) continue;
+    let count = 0;
+    for (const childId of children) {
+      const childSize = visibleSubtreeSize(childId);
+      if (childSize === null) return null;
+      count += childSize;
+    }
+    if (count > 0) branchCounts.set(nodeId, count);
+  }
+  return branchCounts;
+}
+
+function dagBranchCounts(
+  snapshot: LineageSnapshot,
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+  visibleNodeIds: ReadonlySet<string>,
+): Map<string, number> | null {
+  const orderedNodeIds = topologicalVisibleOrder(visibleNodeIds, outgoing, collapsedNodeIds);
+  if (!orderedNodeIds) return null;
+  const nodeIndex = new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]));
+  const entries = new Set(lineageEntryNodeIds(snapshot, outgoing, incomingCount));
+  const predecessors = new Map<string, string[]>();
+  for (const sourceId of visibleNodeIds) {
+    if (collapsedNodeIds.has(sourceId)) continue;
+    for (const targetId of outgoing.get(sourceId) || []) {
+      if (!visibleNodeIds.has(targetId)) continue;
+      predecessors.set(targetId, [...(predecessors.get(targetId) || []), sourceId]);
+    }
+  }
+
+  const wordCount = Math.ceil(orderedNodeIds.length / 32);
+  const dominators = orderedNodeIds.map(() => new Uint32Array(wordCount));
+  for (const nodeId of orderedNodeIds) {
+    const index = nodeIndex.get(nodeId)!;
+    const nodeDominators = dominators[index];
+    const nodePredecessors = predecessors.get(nodeId) || [];
+    if (!entries.has(nodeId) && nodePredecessors.length > 0) {
+      nodeDominators.set(dominators[nodeIndex.get(nodePredecessors[0])!]);
+      for (const predecessorId of nodePredecessors.slice(1)) {
+        const predecessorDominators = dominators[nodeIndex.get(predecessorId)!];
+        for (let wordIndex = 0; wordIndex < wordCount; wordIndex += 1) {
+          nodeDominators[wordIndex] &= predecessorDominators[wordIndex];
+        }
+      }
+    }
+    nodeDominators[index >> 5] |= 1 << (index & 31);
+  }
+
+  const dominatedCounts = new Uint32Array(orderedNodeIds.length);
+  for (const nodeDominators of dominators) {
+    for (let wordIndex = 0; wordIndex < wordCount; wordIndex += 1) {
+      let word = nodeDominators[wordIndex] >>> 0;
+      while (word !== 0) {
+        const bit = 31 - Math.clz32(word & -word);
+        dominatedCounts[(wordIndex << 5) + bit] += 1;
+        word = (word & (word - 1)) >>> 0;
+      }
+    }
+  }
+
+  const branchCounts = new Map<string, number>();
+  for (const nodeId of visibleNodeIds) {
+    if (!outgoing.has(nodeId)) continue;
+    if (collapsedNodeIds.has(nodeId)) {
+      const count = toggledBranchCount(snapshot, collapsedNodeIds, outgoing, incomingCount, visibleNodeIds, nodeId);
+      if (count > 0) branchCounts.set(nodeId, count);
+      continue;
+    }
+    const count = dominatedCounts[nodeIndex.get(nodeId)!] - 1;
+    if (count > 0) branchCounts.set(nodeId, count);
+  }
+  return branchCounts;
+}
+
+function generalBranchCounts(
+  snapshot: LineageSnapshot,
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+  visibleNodeIds: ReadonlySet<string>,
+): Map<string, number> {
+  const branchCounts = new Map<string, number>();
+  for (const nodeId of visibleNodeIds) {
+    if (!outgoing.has(nodeId)) continue;
+    const count = toggledBranchCount(snapshot, collapsedNodeIds, outgoing, incomingCount, visibleNodeIds, nodeId);
+    if (count > 0) branchCounts.set(nodeId, count);
+  }
+  return branchCounts;
+}
+
+function toggledBranchCount(
+  snapshot: LineageSnapshot,
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+  visibleNodeIds: ReadonlySet<string>,
+  nodeId: string,
+): number {
+  const toggled = new Set(collapsedNodeIds);
+  if (toggled.has(nodeId)) toggled.delete(nodeId);
+  else toggled.add(nodeId);
+  const toggledVisible = visibleLineageNodeIds(snapshot, toggled, outgoing, incomingCount);
+  return collapsedNodeIds.has(nodeId)
+    ? differenceSize(toggledVisible, visibleNodeIds)
+    : differenceSize(visibleNodeIds, toggledVisible);
+}
+
+function topologicalVisibleOrder(
+  visibleNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  collapsedNodeIds: ReadonlySet<string>,
+): string[] | null {
+  const indegree = new Map([...visibleNodeIds].map(nodeId => [nodeId, 0]));
+  for (const sourceId of visibleNodeIds) {
+    if (collapsedNodeIds.has(sourceId)) continue;
+    for (const targetId of outgoing.get(sourceId) || []) {
+      if (visibleNodeIds.has(targetId)) indegree.set(targetId, (indegree.get(targetId) || 0) + 1);
+    }
+  }
+  const queue = [...indegree].filter(([, degree]) => degree === 0).map(([nodeId]) => nodeId);
+  const ordered: string[] = [];
+  for (let index = 0; index < queue.length; index += 1) {
+    const sourceId = queue[index];
+    ordered.push(sourceId);
+    if (collapsedNodeIds.has(sourceId)) continue;
+    for (const targetId of outgoing.get(sourceId) || []) {
+      if (!visibleNodeIds.has(targetId)) continue;
+      const nextDegree = (indegree.get(targetId) || 0) - 1;
+      indegree.set(targetId, nextDegree);
+      if (nextDegree === 0) queue.push(targetId);
+    }
+  }
+  return ordered.length === visibleNodeIds.size ? ordered : null;
+}
+
+function visibleLineageNodeIds(
+  snapshot: LineageSnapshot,
+  collapsedNodeIds: ReadonlySet<string>,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+): Set<string> {
+  const visible = new Set<string>();
+  const entries = lineageEntryNodeIds(snapshot, outgoing, incomingCount);
+  const visit = (nodeId: string) => {
+    if (visible.has(nodeId)) return;
+    visible.add(nodeId);
+    if (collapsedNodeIds.has(nodeId)) return;
+    for (const childId of outgoing.get(nodeId) || []) visit(childId);
+  };
+  for (const nodeId of entries) visit(nodeId);
+  return visible;
+}
+
+function lineageEntryNodeIds(
+  snapshot: LineageSnapshot,
+  outgoing: ReadonlyMap<string, string[]>,
+  incomingCount: ReadonlyMap<string, number>,
+): string[] {
+  const entries = [
+    snapshot.root_asset_id,
+    ...snapshot.nodes.filter(node => (incomingCount.get(node.asset_id) || 0) === 0).map(node => node.asset_id),
+  ];
+  const reachable = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (reachable.has(nodeId)) return;
+    reachable.add(nodeId);
+    for (const childId of outgoing.get(nodeId) || []) visit(childId);
+  };
+  for (const nodeId of entries) visit(nodeId);
+  for (const node of snapshot.nodes) {
+    if (reachable.has(node.asset_id)) continue;
+    entries.push(node.asset_id);
+    visit(node.asset_id);
+  }
+  return entries;
+}
+
+function differenceSize(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+  let count = 0;
+  for (const value of left) {
+    if (!right.has(value)) count += 1;
+  }
+  return count;
 }
 
 export function lineageFocus(snapshot: LineageSnapshot, activeNodeId: string | null): { edgeClasses: Map<string, string>; roles: Map<string, LineageFocusRole> } {

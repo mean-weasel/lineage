@@ -126,6 +126,12 @@ becomes a bottom sheet. Panel and control transitions respect the system's
 reduced-motion preference. Agent handoff now flows through the direct agent/UX
 bridge and the Agents view rather than a separate bottom Agent Context drawer.
 
+Nodes with descendants show a small count control beside their outgoing
+connection. Select it to collapse or expand that branch. Collapse state is
+view-only and session-local, nested choices are preserved, shared descendants
+remain visible through any other expanded path, and growth replay temporarily
+shows the complete lineage.
+
 ### Install the published channels
 
 Use the currently published npm dist-tags when you want installed rather than

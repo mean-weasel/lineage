@@ -1355,6 +1355,21 @@
   font-weight: 800;
 }
 
+.lineage-node-shell {
+  position: relative;
+  box-sizing: border-box;
+}
+
+.lineage-node-shell-compact {
+  width: 212px;
+  min-height: 164px;
+}
+
+.lineage-node-shell-portrait {
+  width: 224px;
+  height: 400px;
+}
+
 .lineage-node {
   position: relative;
   width: 188px;
@@ -1363,6 +1378,152 @@
   background: #fff;
   box-shadow: 0 10px 24px rgba(24, 36, 46, 0.08);
   padding: 10px;
+}
+
+.lineage-branch-toggle {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid #b8c8d1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 14px rgba(25, 45, 57, 0.18);
+  color: #31536a;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  opacity: 0.9;
+  padding: 0;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.lineage-branch-toggle span {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.lineage-branch-toggle-right {
+  top: 50%;
+  right: 2px;
+  transform: translate(50%, -50%);
+}
+
+.lineage-branch-toggle-left {
+  top: 50%;
+  left: 2px;
+  transform: translate(-50%, -50%);
+}
+
+.lineage-branch-toggle-bottom {
+  bottom: 2px;
+  left: calc(50% + 48px);
+  transform: translate(-50%, 50%);
+}
+
+.lineage-branch-toggle-top {
+  top: 2px;
+  left: calc(50% + 48px);
+  transform: translate(-50%, -50%);
+}
+
+.lineage-branch-toggle:hover,
+.lineage-branch-toggle:focus-visible {
+  border-color: #477586;
+  background: #f5fbfc;
+  box-shadow: 0 7px 18px rgba(25, 45, 57, 0.24);
+  color: #0f6570;
+  opacity: 1;
+}
+
+.lineage-branch-toggle-right:hover,
+.lineage-branch-toggle-right:focus-visible {
+  transform: translate(50%, -50%) scale(1.06);
+}
+
+.lineage-branch-toggle-left:hover,
+.lineage-branch-toggle-left:focus-visible {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.lineage-branch-toggle-bottom:hover,
+.lineage-branch-toggle-bottom:focus-visible {
+  transform: translate(-50%, 50%) scale(1.06);
+}
+
+.lineage-branch-toggle-top:hover,
+.lineage-branch-toggle-top:focus-visible {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.lineage-branch-toggle.collapsed {
+  border-color: #79a8b1;
+  background: #e9f5f6;
+  color: #0d6872;
+}
+
+.lineage-branch-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lineage-node-branch-entering {
+  animation: lineage-branch-node-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: center;
+}
+
+.lineage-node-branch-exiting {
+  animation: lineage-branch-node-exit 210ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.lineage-edge-branch-entering {
+  animation: lineage-branch-edge-enter 220ms ease-out both;
+}
+
+.lineage-edge-branch-exiting {
+  animation: lineage-branch-edge-exit 210ms ease-in;
+  pointer-events: none;
+}
+
+@keyframes lineage-branch-node-enter {
+  from {
+    opacity: 0;
+    transform: translate(var(--lineage-branch-motion-x), var(--lineage-branch-motion-y)) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes lineage-branch-node-exit {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(var(--lineage-branch-motion-x), var(--lineage-branch-motion-y)) scale(0.96);
+  }
+}
+
+@keyframes lineage-branch-edge-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lineage-branch-edge-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .lineage-node.root-node::before {
@@ -1485,7 +1646,7 @@
   pointer-events: none;
 }
 
-.lineage-node.lineage-node-replay-future {
+.lineage-node-shell.lineage-node-shell-replay-future {
   opacity: 0;
   pointer-events: none;
   transform: scale(0.96);
@@ -1633,6 +1794,11 @@
   border-radius: 14px;
   padding: 8px;
   transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.lineage-node-shell-portrait .lineage-node {
+  width: 100%;
+  height: 100%;
 }
 
 .lineage-node-portrait .lineage-thumb {
@@ -1790,6 +1956,17 @@
 .lineage-node-portrait.lineage-zoom-far .lineage-node-portrait-footer {
   visibility: hidden;
   opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lineage-branch-toggle,
+  .lineage-node-branch-entering,
+  .lineage-node-branch-exiting,
+  .lineage-edge-branch-entering,
+  .lineage-edge-branch-exiting {
+    animation-duration: 1ms;
+    transition: none;
+  }
 }
 
 .lineage-thumb span {

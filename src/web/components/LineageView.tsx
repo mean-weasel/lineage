@@ -45,7 +45,7 @@ import { OutputTargetPreferencesDialog } from './OutputTargetPreferencesDialog';
 import { saveLineagePositions } from './lineageLayoutApi';
 import { reconcileAuthoritativeEdgeChanges } from './lineageEdgeState';
 import { lineageReviewConflict } from './lineageReviewConflict';
-import { layoutLineageTree, lineageGraphKey, toGraph, type LineageGraphDirection } from './lineageGraph';
+import { layoutLineageTree, lineageGraphKey, projectLineageBranches, toGraph, type LineageGraphDirection } from './lineageGraph';
 import { buildLineageReplayTimeline, isLineageReplayable, projectLineageReplay, type LineageReplayPhase } from './lineageReplay';
 import { useEscapeClear } from './useEscapeClear';
 import { useLineageWorkspaces } from './useLineageWorkspaces';
@@ -60,6 +60,17 @@ export function lineageCanvasPresentationFromSearch(
   return requested === 'portrait' || requested === 'compact' ? requested : fallback;
 }
 
+type LineageBranchMotion = {
+  edgeIds: ReadonlySet<string>;
+  nodeOffsets: ReadonlyMap<string, { x: number; y: number }>;
+  phase: 'entering' | 'exiting';
+};
+
+const branchMotionDuration = {
+  entering: 240,
+  exiting: 210,
+} as const;
+
 export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, onToast }: {
   asset?: GrowthAsset; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
 }) {
@@ -69,6 +80,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       readLineageCanvasPresentation(),
     ));
   const [snapshot, setSnapshot] = useState<LineageSnapshot | null>(null);
+  const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() => new Set());
+  const [branchMotion, setBranchMotion] = useState<LineageBranchMotion | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [childAssetId, setChildAssetId] = useState('');
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
@@ -118,6 +131,10 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     [generationJobs, nodeTargetStates, snapshot],
   );
   const graphSnapshot = replaySnapshot && !replayAtEnd ? replaySnapshot : decoratedSnapshot;
+  const effectiveCollapsedNodeIds = useMemo(
+    () => replaySnapshot ? new Set<string>() : collapsedNodeIds,
+    [collapsedNodeIds, replaySnapshot],
+  );
   const activeNode = snapshot?.nodes.find(node => node.asset_id === activeNodeId) || snapshot?.nodes[0];
   const editingEdge = snapshot?.edges.find(edge => edge.id === edgeEditor?.edgeId);
   const latestNodes = snapshot?.nodes.filter(node => snapshot.latest.includes(node.asset_id)) || [];
@@ -136,6 +153,8 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const renderedGraphKey = useRef('');
   const workspaceRootRef = useRef('');
   const panelReturnFocusRef = useRef<HTMLElement | null>(null);
+  const branchMotionRef = useRef<LineageBranchMotion | null>(null);
+  const branchMotionTimer = useRef<number | null>(null);
   const { fitGraph, markViewportInteraction } = useLineageViewportFit(
     flowApi,
     snapshot?.root_asset_id,
@@ -149,6 +168,46 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const currentProjectRef = useRef(project);
   useEffect(() => { currentProjectRef.current = project; }, [project]);
   const clearFocus = useCallback(() => { setActiveNodeId(null); closeTransientMenus(); }, [closeTransientMenus]);
+  const toggleCollapsedBranch = useCallback((assetId: string) => {
+    if (!decoratedSnapshot || replaySnapshot || branchMotionRef.current) return;
+    const next = new Set(collapsedNodeIds);
+    const expanding = next.has(assetId);
+    if (expanding) next.delete(assetId);
+    else next.add(assetId);
+    const currentProjection = projectLineageBranches(decoratedSnapshot, collapsedNodeIds);
+    const nextProjection = projectLineageBranches(decoratedSnapshot, next);
+    const motionNodeIds = expanding
+      ? setDifference(nextProjection.visibleNodeIds, currentProjection.visibleNodeIds)
+      : setDifference(currentProjection.visibleNodeIds, nextProjection.visibleNodeIds);
+    if (activeNodeId && !nextProjection.visibleNodeIds.has(activeNodeId)) setActiveNodeId(null);
+    if (motionNodeIds.size === 0) {
+      setCollapsedNodeIds(next);
+      closeTransientMenus();
+      return;
+    }
+
+    const nextGraph = toGraph(decoratedSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation, next);
+    const motionNodes = expanding ? nextGraph.nodes : flowNodes;
+    const motionEdges = expanding ? nextGraph.edges : flowEdges;
+    const sourceNode = flowNodes.find(node => node.id === assetId) || nextGraph.nodes.find(node => node.id === assetId);
+    const motion: LineageBranchMotion = {
+      edgeIds: new Set(motionEdges
+        .filter(edge => motionNodeIds.has(edge.source) || motionNodeIds.has(edge.target))
+        .map(edge => edge.id)),
+      nodeOffsets: branchMotionOffsets(motionNodes, sourceNode, motionNodeIds, graphDirection),
+      phase: expanding ? 'entering' : 'exiting',
+    };
+    branchMotionRef.current = motion;
+    setBranchMotion(motion);
+    if (expanding) setCollapsedNodeIds(next);
+    branchMotionTimer.current = window.setTimeout(() => {
+      if (!expanding) setCollapsedNodeIds(next);
+      branchMotionRef.current = null;
+      branchMotionTimer.current = null;
+      setBranchMotion(null);
+    }, reduceReplayMotion ? 1 : branchMotionDuration[motion.phase]);
+    closeTransientMenus();
+  }, [activeNodeId, canvasPresentation, closeTransientMenus, collapsedNodeIds, decoratedSnapshot, edgeSummariesVisible, flowEdges, flowNodes, graphDirection, reduceReplayMotion, replaySnapshot]);
   const resetLineage = useCallback(() => {
     setSnapshot(null);
     setActiveNodeId(null);
@@ -160,6 +219,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     setReplayPlaying(false);
     setReplayPhase('settled');
     setReplayStageIndex(-1);
+    setCollapsedNodeIds(new Set());
   }, []);
   const refreshNodeTargets = useCallback(async (targetSnapshot: LineageSnapshot | null = snapshot) => {
     if (!targetSnapshot) return;
@@ -179,6 +239,29 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     if (!snapshot) return;
     void refreshNodeTargets(snapshot);
   }, [refreshNodeTargets, snapshotTargetKey]);
+
+  useEffect(() => {
+    if (branchMotionTimer.current !== null) {
+      window.clearTimeout(branchMotionTimer.current);
+      branchMotionTimer.current = null;
+    }
+    branchMotionRef.current = null;
+    setBranchMotion(null);
+    setCollapsedNodeIds(new Set());
+  }, [project, snapshot?.root_asset_id]);
+
+  useEffect(() => () => {
+    if (branchMotionTimer.current !== null) window.clearTimeout(branchMotionTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const collapsibleIds = new Set(snapshot.edges.map(edge => edge.parent_asset_id));
+    setCollapsedNodeIds(current => {
+      const next = new Set([...current].filter(nodeId => collapsibleIds.has(nodeId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [snapshot]);
   const {
     activateWorkspace,
     activeWorkspace,
@@ -730,18 +813,40 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   }, [reduceReplayMotion, replayLastStage, replayPhase, replayPlaying, replaySnapshot, replaySpeed, replayStageIndex, replayTimeline.stages]);
 
   const baseGraph = useMemo(
-    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation),
-    [activeNodeId, canvasPresentation, edgeSummariesVisible, graphDirection, graphSnapshot],
+    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation, effectiveCollapsedNodeIds),
+    [activeNodeId, canvasPresentation, edgeSummariesVisible, effectiveCollapsedNodeIds, graphDirection, graphSnapshot],
   );
   const graph = useMemo(() => replaySnapshot && !replayAtEnd
     ? projectLineageReplay(baseGraph.nodes, baseGraph.edges, replayTimeline, replayStageIndex, replayPhase)
     : baseGraph,
   [baseGraph, replayAtEnd, replayPhase, replaySnapshot, replayStageIndex, replayTimeline]);
+  const renderedGraph = useMemo(() => {
+    if (!branchMotion) return graph;
+    const motionClass = `lineage-edge-branch-${branchMotion.phase}`;
+    return {
+      nodes: graph.nodes.map(node => {
+        const offset = branchMotion.nodeOffsets.get(node.id);
+        if (!offset) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            branchTransition: branchMotion.phase,
+            branchTransitionOffset: offset,
+          },
+        };
+      }),
+      edges: graph.edges.map(edge => branchMotion.edgeIds.has(edge.id) ? {
+        ...edge,
+        className: [edge.className, motionClass].filter(Boolean).join(' '),
+      } : edge),
+    };
+  }, [branchMotion, graph]);
   const graphKey = useMemo(
     () => lineageGraphKey(graphSnapshot, graphDirection, canvasPresentation),
     [canvasPresentation, graphDirection, graphSnapshot],
   );
-  authoritativeEdges.current = graph.edges;
+  authoritativeEdges.current = renderedGraph.edges;
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     setFlowEdges(current => reconcileAuthoritativeEdgeChanges(changes, current, authoritativeEdges.current));
@@ -759,19 +864,19 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   useEffect(() => {
     const resetPositions = renderedGraphKey.current !== graphKey;
     renderedGraphKey.current = graphKey;
-    setFlowNodes(current => graph.nodes.map(node => ({
+    setFlowNodes(current => renderedGraph.nodes.map(node => ({
       ...node,
       position: resetPositions ? node.position : current.find(existing => existing.id === node.id)?.position || node.position,
     })));
-    setFlowEdges(graph.edges);
-  }, [graph.edges, graph.nodes, graphKey, setFlowEdges, setFlowNodes]);
+    setFlowEdges(renderedGraph.edges);
+  }, [graphKey, renderedGraph.edges, renderedGraph.nodes, setFlowEdges, setFlowNodes]);
 
   useEffect(() => {
     if (workspaceProgress !== 'indexing' || !indexingRefreshStarted.current || !snapshot?.nodes.length) return;
-    if (renderedGraphKey.current !== graphKey || flowNodes.length !== snapshot.nodes.length) return;
+    if (renderedGraphKey.current !== graphKey || flowNodes.length !== renderedGraph.nodes.length) return;
     indexingRefreshStarted.current = false;
     setWorkspaceProgress('ready');
-  }, [flowNodes.length, graphKey, snapshot, workspaceProgress]);
+  }, [flowNodes.length, graphKey, renderedGraph.nodes.length, snapshot, workspaceProgress]);
 
   useEscapeClear(Boolean(activeNodeId), clearFocus);
 
@@ -820,7 +925,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       )}
       <div className="lineage-workbench" data-testid="lineage-workbench">
         <div
-          className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
+          className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${branchMotion ? `lineage-branch-motion lineage-branch-motion-${branchMotion.phase}` : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
           data-lineage-canvas-presentation={canvasPresentation}
           data-lineage-edge-weight={edgeWeight}
           style={replaySnapshot ? {
@@ -844,6 +949,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           )}
           <LineageCanvas
             canvasPresentation={canvasPresentation}
+            collapseInteractive={!replaySnapshot && !branchMotion}
             flowEdges={graphSnapshot ? flowEdges : []}
             flowNodes={graphSnapshot ? flowNodes : []}
             graphKey={graphKey}
@@ -863,6 +969,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             onNodePosition={node => {
               if (canvasPresentation === 'compact') void saveNodePosition(node);
             }}
+            onToggleCollapse={toggleCollapsedBranch}
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
             onSelectedAsset={onSelectedAsset}
@@ -1033,6 +1140,37 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
       <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
     </section>
   );
+}
+
+function setDifference(left: ReadonlySet<string>, right: ReadonlySet<string>): Set<string> {
+  return new Set([...left].filter(value => !right.has(value)));
+}
+
+function branchMotionOffsets(
+  nodes: readonly AssetFlowNode[],
+  sourceNode: AssetFlowNode | undefined,
+  movingNodeIds: ReadonlySet<string>,
+  direction: LineageGraphDirection,
+): Map<string, { x: number; y: number }> {
+  if (!sourceNode) return new Map();
+  const sourceWidth = sourceNode.width || sourceNode.measured?.width || 212;
+  const sourceHeight = sourceNode.height || sourceNode.measured?.height || 164;
+  const junction = {
+    BT: { x: sourceNode.position.x + sourceWidth / 2, y: sourceNode.position.y - 55 },
+    LR: { x: sourceNode.position.x + sourceWidth + 55, y: sourceNode.position.y + sourceHeight / 2 },
+    RL: { x: sourceNode.position.x - 55, y: sourceNode.position.y + sourceHeight / 2 },
+    TB: { x: sourceNode.position.x + sourceWidth / 2, y: sourceNode.position.y + sourceHeight + 55 },
+  }[direction];
+  return new Map(nodes
+    .filter(node => movingNodeIds.has(node.id))
+    .map(node => {
+      const width = node.width || node.measured?.width || sourceWidth;
+      const height = node.height || node.measured?.height || sourceHeight;
+      return [node.id, {
+        x: Math.round(junction.x - (node.position.x + width / 2)),
+        y: Math.round(junction.y - (node.position.y + height / 2)),
+      }];
+    }));
 }
 
 function nextBrowserPaint(): Promise<void> {

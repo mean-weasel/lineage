@@ -45,10 +45,12 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     await expect(legacyEdge).toHaveCount(1);
     await expect(legacyEdge.locator('.react-flow__edge-text')).toHaveCount(0);
     await expect(page.locator('.react-flow__edge-text')).toHaveCount(12);
+    await assertBranchTogglesClearEdgeLabels(page);
 
     for (const direction of ['TB', 'RL', 'BT', 'LR']) {
       await selectDirection(page, direction);
       await expectHorizontalLabel(posterEdge.locator('.react-flow__edge-text'));
+      await assertBranchTogglesClearEdgeLabels(page);
     }
 
     const interactionBackground = await visibleSummaryBackground(page);
@@ -161,6 +163,36 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     }
   }
 });
+
+async function assertBranchTogglesClearEdgeLabels(page: Page) {
+  const result = await page.locator('.lineage-canvas').evaluate(canvas => {
+    const toggles = [...canvas.querySelectorAll<HTMLElement>('.lineage-branch-toggle')];
+    const overlaps: Array<{ edgeId: string; label: DOMRect; nodeId: string; toggle: DOMRect }> = [];
+    let labelCount = 0;
+    for (const toggle of toggles) {
+      const nodeId = toggle.closest<HTMLElement>('.react-flow__node')?.dataset.id;
+      if (!nodeId) continue;
+      const toggleBox = toggle.getBoundingClientRect();
+      for (const edge of canvas.querySelectorAll<HTMLElement>('.react-flow__edge')) {
+        const edgeId = edge.dataset.id || '';
+        if (!edgeId.includes(`:${nodeId}:derived_from:`)) continue;
+        const label = edge.querySelector<SVGGraphicsElement>('.react-flow__edge-textbg');
+        if (!label) continue;
+        labelCount += 1;
+        const labelBox = label.getBoundingClientRect();
+        const clear = toggleBox.right <= labelBox.left
+          || toggleBox.left >= labelBox.right
+          || toggleBox.bottom <= labelBox.top
+          || toggleBox.top >= labelBox.bottom;
+        if (!clear) overlaps.push({ edgeId, label: labelBox.toJSON(), nodeId, toggle: toggleBox.toJSON() });
+      }
+    }
+    return { labelCount, overlaps, toggleCount: toggles.length };
+  });
+  expect(result.toggleCount).toBeGreaterThan(0);
+  expect(result.labelCount).toBeGreaterThan(0);
+  expect(result.overlaps).toEqual([]);
+}
 
 function edgeById(page: Page, id: string): Locator {
   return page.locator(`.react-flow__edge[data-id="${id}"]`);

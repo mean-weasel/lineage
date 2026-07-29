@@ -39,6 +39,19 @@ Canvas appearance choices are remembered in the current browser. Use **Fit
 graph** to frame the current tree, **Tidy tree** to restore automatic spacing,
 or **Reset appearance** to return all Canvas settings to their defaults.
 
+## Collapsing branches
+
+Cards with descendants show a count control beside their outgoing connection.
+Select the minus control to collapse that branch and the plus control to reveal
+it again. The count describes how many cards that action will hide or reveal.
+
+Collapse choices apply only to the current Canvas session and never change the
+stored lineage. Nested collapse choices are preserved when an ancestor is
+closed and reopened. If a descendant is also connected through another
+expanded branch, it stays visible through that path. Growth replay temporarily
+shows the complete tree and restores the previous collapse choices when replay
+closes.
+
 ## About Lineage
 
 Select the **L** brand mark in the destination rail, or the Lineage name in the

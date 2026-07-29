@@ -3,7 +3,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
+import { Position, ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { AssetNode, type AssetFlowNode } from './LineageAssetNode';
 import { hoverPreviewPosition } from './lineageHoverPreview';
 
@@ -110,12 +110,72 @@ describe('AssetNode', () => {
   });
 
   it('keeps future replay nodes mounted but hidden from keyboard and accessibility interaction', () => {
-    renderNode({ replayInteractive: false, replayState: 'future' });
+    renderNode({ branchDescendantCount: 2, collapseInteractive: false, replayInteractive: false, replayState: 'future', sourcePosition: Position.Right });
+    const shell = container!.querySelector<HTMLElement>('.lineage-node-shell')!;
     const node = container!.querySelector<HTMLElement>('.lineage-node')!;
+    const toggle = container!.querySelector<HTMLButtonElement>('.lineage-branch-toggle')!;
 
+    expect(shell.classList.contains('lineage-node-shell-replay-future')).toBe(true);
     expect(node.classList.contains('lineage-node-replay-future')).toBe(true);
     expect(node.getAttribute('aria-hidden')).toBe('true');
     expect(node.getAttribute('tabindex')).toBe('-1');
+    expect(toggle.getAttribute('aria-hidden')).toBe('true');
+    expect(toggle.getAttribute('tabindex')).toBe('-1');
+    expect(toggle.disabled).toBe(true);
+  });
+
+  it('offers an accessible branch collapse control without opening the asset', () => {
+    const onOpenDetail = vi.fn();
+    const onToggleCollapse = vi.fn();
+    renderNode({
+      branchCollapsed: false,
+      branchDescendantCount: 3,
+      onOpenDetail,
+      onToggleCollapse,
+      sourcePosition: Position.Right,
+    });
+    const toggle = container!.querySelector<HTMLButtonElement>('.lineage-branch-toggle')!;
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-label')).toBe('Collapse 3 descendants of Swissifier node');
+    expect(toggle.textContent).toBe('−');
+    expect(toggle.querySelector('strong')).toBeNull();
+    act(() => toggle.click());
+
+    expect(onToggleCollapse).toHaveBeenCalledWith('local-node');
+    expect(onOpenDetail).not.toHaveBeenCalled();
+  });
+
+  it('stages branch motion from the junction without exposing motion metadata', () => {
+    renderNode({
+      branchTransition: 'entering',
+      branchTransitionOffset: { x: -120, y: 36 },
+    });
+    const shell = container!.querySelector<HTMLElement>('.lineage-node-shell')!;
+
+    expect(shell.classList.contains('lineage-node-branch-entering')).toBe(true);
+    expect(shell.style.getPropertyValue('--lineage-branch-motion-x')).toBe('-120px');
+    expect(shell.style.getPropertyValue('--lineage-branch-motion-y')).toBe('36px');
+    expect(shell.getAttribute('aria-label')).toBeNull();
+  });
+
+  it('describes hidden descendants and disables branch changes during replay', () => {
+    const onToggleCollapse = vi.fn();
+    renderNode({
+      branchCollapsed: true,
+      branchDescendantCount: 1,
+      collapseInteractive: false,
+      onToggleCollapse,
+      sourcePosition: Position.Bottom,
+    });
+    const toggle = container!.querySelector<HTMLButtonElement>('.lineage-branch-toggle')!;
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-label')).toBe('Expand 1 hidden descendant of Swissifier node');
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.classList.contains('lineage-branch-toggle-bottom')).toBe(true);
+    act(() => toggle.click());
+    expect(onToggleCollapse).not.toHaveBeenCalled();
   });
 
   it.each(['compact', 'portrait'] as const)('requests the full media preview from %s cards without opening detail', canvasPresentation => {
