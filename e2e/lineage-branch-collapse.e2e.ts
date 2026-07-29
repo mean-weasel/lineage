@@ -33,6 +33,16 @@ test('collapses lineage branches in both card modes while preserving nested choi
     await expect(page.locator('.react-flow__node')).toHaveCount(10);
     await expect(page.locator('.lineage-node-branch-entering')).toHaveCount(0);
     assertSameAnchor(rootBeforeCollapse, await requiredBox(rootFlowNode));
+    await assertRenderedEdges(page, 9);
+
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      await page.getByRole('button', { name: 'Collapse 3 descendants of Hook A v01' }).click();
+      await expect(page.locator('.react-flow__node')).toHaveCount(7);
+      await assertRenderedEdges(page, 6);
+      await page.getByRole('button', { name: 'Expand 3 hidden descendants of Hook A v01' }).click();
+      await expect(page.locator('.react-flow__node')).toHaveCount(10);
+      await assertRenderedEdges(page, 9);
+    }
 
     const hookToggle = page.getByRole('button', { name: 'Collapse 3 descendants of Hook A v01' });
     await expect(hookToggle).toHaveAttribute('aria-expanded', 'true');
@@ -85,4 +95,20 @@ async function requiredBox(locator: import('playwright/test').Locator) {
 function assertSameAnchor(expected: { x: number; y: number }, actual: { x: number; y: number }) {
   expect(Math.abs(actual.x - expected.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(actual.y - expected.y)).toBeLessThanOrEqual(1);
+}
+
+async function assertRenderedEdges(page: import('playwright/test').Page, expectedCount: number) {
+  const edges = page.locator('.react-flow__edge');
+  await expect(edges).toHaveCount(expectedCount);
+  await expect(page.locator('.lineage-edge-branch-entering, .lineage-edge-branch-exiting')).toHaveCount(0);
+  const rendered = await edges.evaluateAll(items => items.map(edge => {
+    const path = edge.querySelector<SVGPathElement>('.react-flow__edge-path');
+    return {
+      opacity: getComputedStyle(edge).opacity,
+      path: path?.getAttribute('d') || '',
+      visibility: getComputedStyle(edge).visibility,
+    };
+  }));
+  expect(rendered).toHaveLength(expectedCount);
+  expect(rendered.every(edge => edge.opacity !== '0' && edge.visibility === 'visible' && edge.path.length > 0)).toBe(true);
 }

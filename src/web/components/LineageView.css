@@ -1488,7 +1488,7 @@
 }
 
 .lineage-edge-branch-exiting {
-  animation: lineage-branch-edge-exit 190ms ease-in forwards;
+  animation: lineage-branch-edge-exit 210ms ease-in;
   pointer-events: none;
 }
 
