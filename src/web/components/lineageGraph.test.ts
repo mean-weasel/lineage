@@ -247,6 +247,18 @@ describe('lineage graph layout', () => {
     expect(projection.snapshot.edges.map(edge => edge.id)).toEqual(['orphan-a-orphan-b', 'orphan-b-orphan-a']);
   });
 
+  it('counts each newly visible node once when expanding a collapsed cycle', () => {
+    const source = snapshot(
+      ['a', 'b'],
+      [['a', 'b'], ['b', 'a']],
+    );
+
+    const projection = projectLineageBranches(source, new Set(['a']));
+
+    expect(projection.snapshot.nodes.map(node => node.asset_id)).toEqual(['a']);
+    expect(projection.branchCounts.get('a')).toBe(1);
+  });
+
   it('preserves nested collapse state when an ancestor is closed and reopened', () => {
     const source = snapshot(
       ['root', 'a', 'a1', 'a1x', 'a2'],
@@ -265,6 +277,7 @@ describe('lineage graph layout', () => {
     const nodeCount = 4_000;
     const ids = Array.from({ length: nodeCount }, (_, index) => `node-${index}`);
     const edges = ids.slice(1).map((id, index) => [`node-${Math.floor(index / 2)}`, id] as [string, string]);
+    edges.push(['node-1', `node-${nodeCount - 1}`]);
     const source = snapshot(ids, edges);
     const startedAt = performance.now();
 
