@@ -119,11 +119,27 @@ describe('ProjectOverview', () => {
     expect(document.activeElement).toBe(archived);
     expect(container.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('workspace-archived-tab');
   });
+
+  it('invalidates the remembered Canvas when its workspace is archived', async () => {
+    const onWorkspaceInvalidated = vi.fn<(workspaceId: string) => void>();
+    render({ onWorkspaceInvalidated });
+    await act(settle);
+
+    act(() => exactButton('Archive').click());
+    await act(settle);
+    await act(async () => {
+      exactButton('Archive workspace').click();
+      await settle();
+    });
+
+    expect(onWorkspaceInvalidated).toHaveBeenCalledWith('workspace-a');
+  });
 });
 
 function render(overrides: {
   onAllProjects?: () => void;
   onOpenCanvas?: (project: string, workspace: LineageWorkspace) => void;
+  onWorkspaceInvalidated?: (workspaceId: string) => void;
 } = {}) {
   act(() => root.render(
     <ProjectOverview
@@ -131,6 +147,7 @@ function render(overrides: {
       onNewWorkspace={vi.fn()}
       onOpenCanvas={overrides.onOpenCanvas || vi.fn()}
       onToast={vi.fn()}
+      onWorkspaceInvalidated={overrides.onWorkspaceInvalidated || vi.fn()}
       projectId="summer-launch"
     />
   ));
@@ -138,6 +155,10 @@ function render(overrides: {
 
 function button(text: string) {
   return Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent?.includes(text))!;
+}
+
+function exactButton(text: string) {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent?.trim() === text)!;
 }
 
 function response(payload: unknown) {

@@ -58,11 +58,11 @@ test('offers the Canvas settings hint once without obstructing its gear', async 
   const hint = page.getByRole('note', { name: 'Canvas settings tip' });
   await expect(hint).toBeVisible();
   await expect(hint).toContainText('Customize your canvas');
-  await expect(page.locator('.lineage-workspace-exit')).toBeVisible();
+  await expect(page.locator('.lineage-workspace-identity')).toBeVisible();
   const separated = await hint.evaluate((element, gearLabel) => {
     const hintBox = element.getBoundingClientRect();
     const gearBox = document.querySelector(`[aria-label="${gearLabel}"]`)?.getBoundingClientRect();
-    const workspaceBox = document.querySelector('.lineage-workspace-exit')?.getBoundingClientRect();
+    const workspaceBox = document.querySelector('.lineage-workspace-identity')?.getBoundingClientRect();
     return {
       gear: Boolean(gearBox && hintBox.right <= gearBox.left),
       workspace: Boolean(workspaceBox && hintBox.bottom <= workspaceBox.top),
@@ -84,13 +84,64 @@ test('uses the active destination to collapse and reopen the contextual panel', 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(canvasPath());
 
-  const workspaces = page.getByRole('button', { name: 'Workspaces', exact: true });
-  await expect(workspaces).toHaveAttribute('aria-expanded', 'true');
+  const canvas = page.getByRole('button', { name: 'Canvas', exact: true });
+  await expect(canvas).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('button', { name: 'Expand contextual panel' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Collapse contextual panel' }).click();
-  await expect(workspaces).toHaveAttribute('aria-expanded', 'false');
-  await workspaces.click();
+  await expect(canvas).toHaveAttribute('aria-expanded', 'false');
+  await canvas.click();
   await expect(page.getByRole('button', { name: 'Collapse contextual panel' })).toBeVisible();
+});
+
+test('returns to the last exact Canvas while keeping Workspaces as the directory', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/projects');
+  await page.evaluate(() => window.localStorage.setItem('lineage.preferences.canvas-presentation', 'portrait'));
+  await page.goto(canvasPath());
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree');
+  await expect(page.locator('.lineage-canvas')).toHaveAttribute('data-lineage-canvas-presentation', 'portrait');
+  await page.getByRole('button', { name: 'Assets', exact: true }).click();
+  await page.evaluate(() => window.localStorage.setItem('lineage.preferences.canvas-presentation', 'compact'));
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await expect(page).toHaveURL(canvasPath('?lineageCanvas=portrait'));
+  await expect(page.locator('.lineage-canvas')).toHaveAttribute('data-lineage-canvas-presentation', 'portrait');
+
+  await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+  await page.getByRole('radio', { name: 'Compact nodes' }).check();
+  await expect(page).toHaveURL(canvasPath());
+  await page.getByRole('radio', { name: 'Portrait cards' }).check();
+  await expect(page).toHaveURL(canvasPath('?lineageCanvas=portrait'));
+  await page.getByRole('button', { name: 'Reset appearance' }).click();
+  await expect(page).toHaveURL(canvasPath());
+
+  await page.getByRole('button', { name: 'Assets', exact: true }).click();
+  await expect(page).toHaveURL('/projects/demo-project/studio/assets');
+  await page.evaluate(() => window.localStorage.setItem('lineage.preferences.canvas-presentation', 'portrait'));
+  const canvas = page.getByRole('button', { name: 'Canvas', exact: true });
+  await expect(canvas).toBeEnabled();
+  await canvas.click();
+  await expect(page).toHaveURL(canvasPath('?lineageCanvas=compact'));
+  await expect(page.locator('.lineage-canvas')).toHaveAttribute('data-lineage-canvas-presentation', 'compact');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree');
+
+  await page.getByRole('button', { name: 'Assets', exact: true }).click();
+  await page.getByRole('button', { name: 'Workspaces', exact: true }).click();
+  await expect(page).toHaveURL('/projects/demo-project/workspaces');
+  await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible();
+  await expect(canvas).toBeEnabled();
+});
+
+test('keeps a valid Canvas return when an unrelated workspace URL is unavailable', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(canvasPath('?lineageCanvas=portrait'));
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree');
+  await page.goto('/projects/demo-project/workspaces/not-a-workspace');
+  await expect(page).toHaveURL('/projects/demo-project/workspaces');
+
+  const canvas = page.getByRole('button', { name: 'Canvas', exact: true });
+  await expect(canvas).toBeEnabled();
+  await canvas.click();
+  await expect(page).toHaveURL(canvasPath('?lineageCanvas=portrait'));
 });
 
 test('keeps Canvas full-height and restores focus when its shared panel closes', async ({ page }) => {
@@ -99,7 +150,7 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
 
   await expect(page.locator('header.lineage-header')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Canvas workspace tools' })).toBeVisible();
-  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Demo: Content iteration tree');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree');
   await expect(page.locator('.lineage-workbench')).toBeVisible();
   await expect(page.getByRole('button', { name: /Agent context/i })).toHaveCount(0);
   await expect(page).toHaveURL(/projects\/demo-project\/workspaces/);

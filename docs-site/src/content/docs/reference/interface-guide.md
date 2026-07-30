@@ -19,14 +19,16 @@ description: Find the main Lineage views without treating application tabs as th
 - **Backup Queue** prepares approved assets for external storage.
 
 Project-scoped destinations appear in the left rail after you open a project.
-Use the **L** mark to return to Projects. The adjacent contextual panel holds
-tools for the current view; collapse it when you want the Canvas to use the
-full window, then select the active rail destination to reopen it. On mobile,
-the menu button opens the same destinations and contextual tools as a drawer.
+**Workspaces** opens the project directory, while **Canvas** returns to the
+last exact workspace opened in the current browser tab. Use the **L** mark to
+return to Projects. The adjacent contextual panel holds tools for the current
+view; collapse it when you want the Canvas to use the full window, then select
+the active rail destination to reopen it. On mobile, the menu button opens the
+same destinations and contextual tools as a drawer.
 
-Canvas identifies its exact workspace with a **Back to workspaces** control.
-Workspace switching and lifecycle actions live on the Workspaces page instead
-of inside Canvas.
+Canvas identifies its exact workspace in a compact location bar with a
+separate **Workspaces** back action. Workspace switching and lifecycle actions
+live on the Workspaces page instead of inside Canvas.
 
 ## Lineage canvas appearance
 

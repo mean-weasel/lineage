@@ -77,6 +77,7 @@ export function LineageView({
   asset,
   newWorkspaceRequest,
   onAssetsChanged,
+  onCanvasPresentationChange,
   onExitWorkspace,
   onNewWorkspaceCancelled,
   onSelectedAsset,
@@ -89,6 +90,7 @@ export function LineageView({
   asset?: GrowthAsset;
   newWorkspaceRequest?: number;
   onAssetsChanged?: () => Promise<void> | void;
+  onCanvasPresentationChange: (presentation: LineageCanvasPresentation) => void;
   onExitWorkspace: () => void;
   onNewWorkspaceCancelled: () => void;
   onSelectedAsset: (assetId: string) => void;
@@ -311,6 +313,9 @@ export function LineageView({
     project,
     workspaceId,
   });
+  useEffect(() => {
+    if (activeWorkspace?.id === workspaceId) onCanvasPresentationChange(canvasPresentation);
+  }, [activeWorkspace?.id, canvasPresentation, onCanvasPresentationChange, workspaceId]);
   workspaceRootRef.current = workspaceRootAssetId;
   useEffect(() => { void refreshDemoSeedStatus(); }, [refreshDemoSeedStatus]);
   const refresh = useCallback(async (options: { quiet?: boolean; rootAssetId?: string } = {}) => {
@@ -961,18 +966,22 @@ export function LineageView({
         data-testid="lineage-workbench"
       >
         {activeWorkspace && (
-          <button
-            aria-label={`Back to workspaces from ${activeWorkspace.title}`}
-            className="lineage-workspace-exit"
-            onClick={onExitWorkspace}
-            type="button"
-          >
-            <ArrowLeft aria-hidden="true" size={17} />
-            <span>
-              <small>Back to workspaces</small>
+          <nav aria-label="Canvas location" className="lineage-workspace-identity">
+            <button
+              aria-label={`Back to workspaces from ${activeWorkspace.title}`}
+              className="lineage-workspace-exit"
+              onClick={onExitWorkspace}
+              type="button"
+            >
+              <ArrowLeft aria-hidden="true" size={16} />
+              <span>Workspaces</span>
+            </button>
+            <span aria-hidden="true" className="lineage-workspace-divider" />
+            <span className="lineage-workspace-title">
+              <small>Canvas</small>
               <strong>{activeWorkspace.title}</strong>
             </span>
-          </button>
+          </nav>
         )}
         <div
           className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${branchMotion ? `lineage-branch-motion lineage-branch-motion-${branchMotion.phase}` : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}

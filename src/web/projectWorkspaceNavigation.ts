@@ -2,6 +2,15 @@ import type { StudioView } from './assetUi';
 import type { ProjectWorkspaceSummary } from '../shared/projectWorkspaceTypes';
 
 type ProjectStudioView = Exclude<StudioView, 'lineage'>;
+type CanvasDestination = Extract<ProjectWorkspaceDestination, { kind: 'canvas' }>;
+
+export type CanvasReturnDestination = CanvasDestination & {
+  search: string;
+};
+
+type CanvasReturnStorage = Pick<Storage, 'getItem' | 'removeItem' | 'setItem'>;
+
+const canvasReturnStoragePrefix = 'lineage.canvas-return.v1.';
 
 export type ProjectWorkspaceDestination =
   | { kind: 'projects' }
@@ -46,6 +55,93 @@ export function projectRouteIsUnavailable(
 ): boolean {
   const project = projectFor(destination);
   return Boolean(project && !projects.some(item => item.id === project));
+}
+
+function canvasReturnStorage(): CanvasReturnStorage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function canvasReturnKey(projectId: string): string {
+  return `${canvasReturnStoragePrefix}${encodeURIComponent(projectId)}`;
+}
+
+function canvasPresentationSearch(search: string): string {
+  const presentation = new URLSearchParams(search).get('lineageCanvas');
+  return presentation === 'portrait' || presentation === 'compact'
+    ? `?${new URLSearchParams({ lineageCanvas: presentation }).toString()}`
+    : '';
+}
+
+export function rememberCanvasReturnDestination(
+  destination: CanvasDestination,
+  search = '',
+  storage: CanvasReturnStorage | null = canvasReturnStorage(),
+): CanvasReturnDestination {
+  const remembered = {
+    ...destination,
+    search: canvasPresentationSearch(search),
+  };
+  try {
+    storage?.setItem(canvasReturnKey(destination.projectId), JSON.stringify(remembered));
+  } catch {
+    // Navigation still works for the current Canvas when session storage is unavailable.
+  }
+  return remembered;
+}
+
+export function readCanvasReturnDestination(
+  projectId: string,
+  storage: CanvasReturnStorage | null = canvasReturnStorage(),
+): CanvasReturnDestination | null {
+  if (!projectId || !storage) return null;
+  try {
+    const value = storage.getItem(canvasReturnKey(projectId));
+    if (!value) return null;
+    const parsed = JSON.parse(value) as Partial<CanvasReturnDestination>;
+    if (
+      parsed.kind !== 'canvas'
+      || parsed.projectId !== projectId
+      || typeof parsed.workspaceId !== 'string'
+      || !parsed.workspaceId
+    ) {
+      storage.removeItem(canvasReturnKey(projectId));
+      return null;
+    }
+    return {
+      kind: 'canvas',
+      projectId,
+      workspaceId: parsed.workspaceId,
+      search: canvasPresentationSearch(typeof parsed.search === 'string' ? parsed.search : ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function forgetCanvasReturnDestination(
+  projectId: string,
+  storage: CanvasReturnStorage | null = canvasReturnStorage(),
+): void {
+  try {
+    storage?.removeItem(canvasReturnKey(projectId));
+  } catch {
+    // A stale entry is harmless when session storage is unavailable.
+  }
+}
+
+export function resolveCanvasReturnDestination(
+  projectId: string,
+  stored: CanvasReturnDestination | null,
+  current: CanvasReturnDestination | null,
+): CanvasReturnDestination | null {
+  if (current?.projectId === projectId) return current;
+  if (stored?.projectId === projectId) return stored;
+  return null;
 }
 
 export function parseProjectWorkspaceLocation(location: Pick<Location, 'pathname' | 'search'>): ProjectWorkspaceDestination {

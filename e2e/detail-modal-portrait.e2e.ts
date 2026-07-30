@@ -53,7 +53,7 @@ test('renders a 1080x1350 portrait detail preview without clipping', async ({ pa
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
 
-  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Portrait 1080x1350 regression', { timeout: 20_000 });
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Portrait 1080x1350 regression', { timeout: 20_000 });
   const node = page.locator('.lineage-node', { hasText: 'portrait 1080x1350' });
   await expect(node).toBeVisible();
 

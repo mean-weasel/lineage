@@ -8,6 +8,7 @@ import {
   Info,
   ListChecks,
   Menu,
+  Network,
   PanelLeftClose,
   Settings,
   Upload,
@@ -25,7 +26,7 @@ import { AboutLineageDialog } from './AboutLineageDialog';
 import './Sidebar.css';
 
 const navigationIcons = {
-  lineage: FolderKanban,
+  lineage: Network,
   assets: Images,
   content: FileStack,
   review: ListChecks,
@@ -47,6 +48,9 @@ export function Sidebar(props: {
   project: string;
   projects: ProjectWorkspaceSummary[];
   surface: 'projects' | 'project' | 'studio';
+  canvasActive: boolean;
+  canvasAvailable: boolean;
+  onCanvas: () => void;
   onProjects: () => void;
   onProjectOverview: () => void;
   onStudio: (view: StudioView) => void;
@@ -92,20 +96,23 @@ export function Sidebar(props: {
   }, [mobileContextOpen]);
 
   function openView(view: StudioView) {
-    if (view === 'lineage' && props.surface === 'project') {
+    const isActiveStudioView = props.surface === 'studio'
+      && props.view === view
+      && (view !== 'lineage' || props.canvasActive);
+    if (isActiveStudioView) {
+      if (!mobileContextOpen) props.onContextOpenChange(!props.contextOpen);
       props.onMobileContextOpenChange(false);
       return;
     }
-    const isActiveStudioView = props.surface === 'studio' && props.view === view;
-    if (isActiveStudioView) {
-      if (!mobileContextOpen) props.onContextOpenChange(!props.contextOpen);
+    if (view === 'lineage') {
+      props.onCanvas();
       props.onMobileContextOpenChange(false);
       return;
     }
     props.onStudio(view);
     if (view === 'backup') props.showBackupQueue();
     else props.setView(view);
-    if (view !== 'lineage') props.onContextOpenChange(true);
+    props.onContextOpenChange(true);
     props.onMobileContextOpenChange(false);
   }
 
@@ -145,11 +152,26 @@ export function Sidebar(props: {
             <Menu size={21} />
           </button>
           <div className="rail-destinations">
+            {hasProject && props.surface !== 'projects' && (
+              <button
+                aria-current={props.surface === 'project' ? 'page' : undefined}
+                aria-label="Workspaces"
+                className={`rail-button ${props.surface === 'project' ? 'active' : ''}`}
+                onClick={() => {
+                  props.onProjectOverview();
+                  props.onMobileContextOpenChange(false);
+                }}
+                title="Workspaces"
+                type="button"
+              >
+                <FolderKanban size={20} />
+              </button>
+            )}
             {hasProject && props.surface !== 'projects' && navigationViews.filter(item => item.view !== 'settings').map(item => {
               const Icon = navigationIcons[item.view];
-              const active = item.view === 'lineage'
-                ? props.surface === 'project' || (props.surface === 'studio' && props.view === 'lineage')
-                : props.surface === 'studio' && props.view === item.view;
+              const active = props.surface === 'studio'
+                && props.view === item.view
+                && (item.view !== 'lineage' || props.canvasActive);
               return (
                 <button
                   aria-controls={active && props.surface === 'studio' ? 'contextual-navigation-panel' : undefined}
@@ -157,9 +179,10 @@ export function Sidebar(props: {
                   aria-expanded={active && props.surface === 'studio' ? props.contextOpen : undefined}
                   aria-label={item.label}
                   className={`rail-button ${active ? 'active' : ''}`}
+                  disabled={item.view === 'lineage' && !props.canvasAvailable && !active}
                   key={item.view}
                   onClick={() => openView(item.view)}
-                  title={item.label}
+                  title={item.view === 'lineage' && !props.canvasAvailable && !active ? 'Open a workspace to use Canvas' : item.label}
                   type="button"
                 >
                   <Icon size={20} />
@@ -255,14 +278,28 @@ export function Sidebar(props: {
                 <FolderKanban size={18} />
                 All projects
               </button>
+              {hasProject && props.surface !== 'projects' && (
+                <button
+                  aria-current={props.surface === 'project' ? 'page' : undefined}
+                  onClick={() => {
+                    props.onProjectOverview();
+                    props.onMobileContextOpenChange(false);
+                  }}
+                  type="button"
+                >
+                  <FolderKanban size={18} />
+                  Workspaces
+                </button>
+              )}
               {hasProject && props.surface !== 'projects' && navigationViews.map(item => {
                 const Icon = navigationIcons[item.view];
-                const active = item.view === 'lineage'
-                  ? props.surface === 'project' || (props.surface === 'studio' && props.view === 'lineage')
-                  : props.surface === 'studio' && props.view === item.view;
+                const active = props.surface === 'studio'
+                  && props.view === item.view
+                  && (item.view !== 'lineage' || props.canvasActive);
                 return (
                   <button
                     aria-current={active ? 'page' : undefined}
+                    disabled={item.view === 'lineage' && !props.canvasAvailable && !active}
                     key={item.view}
                     onClick={() => openView(item.view)}
                     type="button"

@@ -11,6 +11,7 @@ import { AgentsView, type AgentWorkTarget } from './components/AgentsView';
 import { ContentBatchesView } from './components/ContentBatchesView';
 import { CopiedTextFallback } from './components/CopiedTextFallback';
 import { LedgerView } from './components/LedgerView';
+import type { LineageCanvasPresentation } from './components/LineageAssetNode';
 import { LineageView } from './components/LineageView';
 import { LocalBackupDrawer } from './components/LocalBackupDrawer';
 import { LocalBackupQueue } from './components/LocalBackupQueue';
@@ -31,10 +32,15 @@ import { readContextPanelOpen, writeContextPanelOpen } from './navigationPrefere
 import {
   parseProjectWorkspaceLocation,
   availableProjectSelection,
+  forgetCanvasReturnDestination,
   projectFor,
   projectRouteIsUnavailable,
   projectWorkspaceHref,
+  readCanvasReturnDestination,
+  rememberCanvasReturnDestination,
   rememberProjectSummary,
+  resolveCanvasReturnDestination,
+  type CanvasReturnDestination,
   type ProjectWorkspaceDestination,
 } from './projectWorkspaceNavigation';
 
@@ -57,6 +63,18 @@ function studioViewFor(destination: ProjectWorkspaceDestination): StudioView {
 
 function shouldRefreshAssetLibrary(surface: AppSurface, view: StudioView): boolean {
   return surface === 'studio' && view !== 'lineage';
+}
+
+type CanvasReturnDestinations = Record<string, CanvasReturnDestination>;
+
+function withoutCanvasReturnDestination(
+  destinations: CanvasReturnDestinations,
+  projectId: string,
+): CanvasReturnDestinations {
+  if (!destinations[projectId]) return destinations;
+  const next = { ...destinations };
+  delete next[projectId];
+  return next;
 }
 
 export function App() {
@@ -90,6 +108,31 @@ export function App() {
   const [runtimeIdentityUnavailable, setRuntimeIdentityUnavailable] = useState(false);
   const [contextPanelOpen, setContextPanelOpen] = useState(readContextPanelOpen);
   const [mobileContextOpen, setMobileContextOpen] = useState(false);
+  const [canvasReturnDestinations, setCanvasReturnDestinations] = useState<CanvasReturnDestinations>(() => {
+    const initial = initialDestination();
+    const initialProject = projectFor(initial);
+    if (!initialProject) return {};
+    const stored = readCanvasReturnDestination(initialProject);
+    if (initial.kind === 'canvas') {
+      return { [initialProject]: stored || {
+        ...initial,
+        search: typeof window === 'undefined' ? '' : window.location.search,
+      } };
+    }
+    return stored ? { [initialProject]: stored } : {};
+  });
+  const canvasReturnDestination = canvasReturnDestinations[project] || null;
+  const rememberCurrentCanvasPresentation = useCallback((presentation: LineageCanvasPresentation) => {
+    if (destination.kind !== 'canvas') return;
+    const remembered = rememberCanvasReturnDestination(
+      destination,
+      `?${new URLSearchParams({ lineageCanvas: presentation }).toString()}`,
+    );
+    setCanvasReturnDestinations(current => ({
+      ...current,
+      [destination.projectId]: remembered,
+    }));
+  }, [destination]);
   const surface = surfaceFor(destination);
   const workspaceId = destination.kind === 'canvas' ? destination.workspaceId : null;
   const setDesktopContextPanelOpen = useCallback((open: boolean) => {
@@ -113,9 +156,9 @@ export function App() {
   }, []);
   const navigate = useCallback((
     next: Exclude<ProjectWorkspaceDestination, { kind: 'invalid' }>,
-    options: { replace?: boolean } = {}
+    options: { replace?: boolean; search?: string } = {}
   ) => {
-    const href = projectWorkspaceHref(next, window.location.search);
+    const href = projectWorkspaceHref(next, options.search ?? window.location.search);
     window.history[options.replace ? 'replaceState' : 'pushState']({ lineageDestination: next }, '', href);
     applyDestination(next);
   }, [applyDestination]);
@@ -361,6 +404,17 @@ export function App() {
   }, [project]);
 
   useEffect(() => {
+    if (destination.kind === 'canvas') return;
+    const stored = readCanvasReturnDestination(project);
+    setCanvasReturnDestinations(current => {
+      const resolved = resolveCanvasReturnDestination(project, stored, current[project] || null);
+      return resolved && current[project] !== resolved
+        ? { ...current, [project]: resolved }
+        : current;
+    });
+  }, [destination, project]);
+
+  useEffect(() => {
     if (shouldRefreshAssetLibrary(surface, view)) void refresh();
   }, [page, pageSize, project, status, placementStatus, source, channel, query, liveSync, surface, view]);
 
@@ -419,12 +473,22 @@ export function App() {
         project={project}
         projects={projects}
         surface={surface}
+        canvasActive={destination.kind === 'canvas'}
         onProjects={() => navigate({ kind: 'projects' })}
         onProjectOverview={() => navigate({ kind: 'project', projectId: project })}
+        canvasAvailable={Boolean(canvasReturnDestination?.projectId === project)}
+        onCanvas={() => {
+          const remembered = canvasReturnDestination?.projectId === project
+            ? canvasReturnDestination
+            : readCanvasReturnDestination(project);
+          if (remembered) {
+            navigate(remembered, { search: remembered.search });
+            return;
+          }
+          navigate({ kind: 'project', projectId: project });
+        }}
         onStudio={nextView => {
           if (nextView === 'lineage') {
-            setView('lineage');
-            if (destination.kind !== 'canvas') navigate({ kind: 'project', projectId: project });
             return;
           }
           navigate({ kind: 'studio', projectId: project, view: nextView });
@@ -471,6 +535,10 @@ export function App() {
               navigate({ kind: 'project', projectId: nextProject.id });
             }}
             onProjectDeleted={deletedProjectId => {
+              forgetCanvasReturnDestination(deletedProjectId);
+              setCanvasReturnDestinations(current => (
+                withoutCanvasReturnDestination(current, deletedProjectId)
+              ));
               const knownRemainingProjects = projects.filter(item => item.id !== deletedProjectId);
               setProjects(knownRemainingProjects);
               if (project === deletedProjectId) setProject(knownRemainingProjects[0]?.id || '');
@@ -490,6 +558,16 @@ export function App() {
             onOpenCanvas={(nextProject: string, workspace: LineageWorkspace) => {
               setView('lineage');
               navigate({ kind: 'canvas', projectId: nextProject, workspaceId: workspace.id });
+            }}
+            onWorkspaceInvalidated={workspaceId => {
+              if (
+                canvasReturnDestination?.projectId !== project
+                || canvasReturnDestination.workspaceId !== workspaceId
+              ) return;
+              forgetCanvasReturnDestination(project);
+              setCanvasReturnDestinations(current => (
+                withoutCanvasReturnDestination(current, project)
+              ));
             }}
             onToast={showToast}
             projectId={project}
@@ -570,11 +648,20 @@ export function App() {
             onNewWorkspaceCancelled={() => navigate({ kind: 'project', projectId: project }, { replace: true })}
             onSelectedAsset={setSelectedId}
             onToast={showToast}
+            onCanvasPresentationChange={rememberCurrentCanvasPresentation}
             onWorkspaceChange={workspace => {
               if (workspace) navigate({ kind: 'canvas', projectId: workspace.project, workspaceId: workspace.id });
               else navigate({ kind: 'project', projectId: project }, { replace: true });
             }}
             onWorkspaceUnavailable={message => {
+              setCanvasReturnDestinations(current => {
+                if (
+                  destination.kind !== 'canvas'
+                  || current[destination.projectId]?.workspaceId !== destination.workspaceId
+                ) return current;
+                forgetCanvasReturnDestination(destination.projectId);
+                return withoutCanvasReturnDestination(current, destination.projectId);
+              });
               showToast('error', message);
               navigate({ kind: 'project', projectId: project }, { replace: true });
             }}

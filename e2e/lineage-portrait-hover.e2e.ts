@@ -13,7 +13,7 @@ test('toggles and remembers hover previews for portrait cards', async ({ page, r
 
   try {
     await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}?lineageCanvas=compact`);
-    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await openCanvasSettings(page);
     await page.getByRole('radio', { name: 'Portrait cards' }).check();
     const rootNode = page.locator('.lineage-node.root-node');
@@ -36,7 +36,7 @@ test('toggles and remembers hover previews for portrait cards', async ({ page, r
     await expect(preview).toHaveCount(0);
 
     await page.reload();
-    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await openCanvasSettings(page);
     await expect(page.getByRole('radio', { name: 'Portrait cards' })).toBeChecked();
     await expect(page.getByRole('switch', { name: 'Canvas hover previews' })).toHaveAttribute('aria-checked', 'false');

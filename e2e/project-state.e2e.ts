@@ -66,7 +66,7 @@ test('honors exact workspace URLs and clears stale lineage state through browser
   await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
 
   const workspaceExit = page.locator('.lineage-workspace-exit');
-  await expect(workspaceExit.locator('strong')).toHaveText(workspaceTitle);
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText(workspaceTitle);
   await expect(page).toHaveURL(new RegExp(`/projects/${project}/workspaces/`));
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
@@ -77,7 +77,7 @@ test('honors exact workspace URLs and clears stale lineage state through browser
 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/projects/${project}/workspaces/`));
-  await expect(workspaceExit.locator('strong')).toHaveText(workspaceTitle);
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText(workspaceTitle);
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
 

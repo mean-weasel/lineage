@@ -31,7 +31,7 @@ test('QA seed shows truthful progress and rich PNG previews in the first lineage
   expect(await download.isEnabled()).toBe(false);
   await expect(demoTools).toContainText('14/14 PNG images');
 
-  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText(richWorkspaceTitle, { timeout: 20_000 });
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText(richWorkspaceTitle, { timeout: 20_000 });
   await expect(page.locator('.lineage-node')).toHaveCount(14, { timeout: 20_000 });
   await expect(page.locator('.react-flow__edge')).toHaveCount(13);
   expect(consoleErrors).toEqual([]);

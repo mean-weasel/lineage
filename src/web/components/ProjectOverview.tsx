@@ -41,6 +41,7 @@ export function ProjectOverview(props: {
   onNewWorkspace: (project: string) => void;
   onOpenCanvas: (project: string, workspace: LineageWorkspace) => void;
   onToast: (type: 'ok' | 'error', message: string) => void;
+  onWorkspaceInvalidated: (workspaceId: string) => void;
   projectId: string;
 }) {
   const [snapshot, setSnapshot] = useState<WorkspaceCollectionSnapshot | null>(null);
@@ -132,7 +133,8 @@ export function ProjectOverview(props: {
     }
   }
 
-  async function lifecycleDone(message: string) {
+  async function lifecycleDone(message: string, invalidatedWorkspace?: LineageWorkspace) {
+    if (invalidatedWorkspace) props.onWorkspaceInvalidated(invalidatedWorkspace.id);
     props.onToast('ok', message);
     await load();
     window.requestAnimationFrame(() => headingRef.current?.focus());
@@ -300,7 +302,7 @@ export function ProjectOverview(props: {
       {dialog?.action === 'delete' && (
         <DeleteWorkspaceDialog
           onClose={() => setDialog(null)}
-          onDeleted={message => void lifecycleDone(message)}
+          onDeleted={message => void lifecycleDone(message, dialog.workspace)}
           project={props.projectId}
           returnFocusRef={dialogReturnRef}
           workspace={dialog.workspace}
@@ -310,7 +312,10 @@ export function ProjectOverview(props: {
         <WorkspaceStatusDialog
           action={dialog.action}
           onClose={() => setDialog(null)}
-          onDone={message => void lifecycleDone(message)}
+          onDone={message => void lifecycleDone(
+            message,
+            dialog.action === 'archive' ? dialog.workspace : undefined,
+          )}
           project={props.projectId}
           returnFocusRef={dialogReturnRef}
           workspace={dialog.workspace}

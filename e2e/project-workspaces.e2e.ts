@@ -73,7 +73,7 @@ test('successful new-workspace creation stays on its exact Canvas destination', 
   await dialog.getByRole('button', { name: 'Create lineage' }).click();
 
   await expect(page).toHaveURL(canvasPath(`${project}:lineage-workspace:${root}`));
-  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Created from project overview');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Created from project overview');
 });
 
 test('routes project-level destinations and create/upload onto an explicit studio surface', async ({ page }) => {
@@ -106,7 +106,7 @@ test('shows Swissifier as its own project and opens its populated Canvas directl
   await swissifier.getByRole('button', { name: 'Open demo' }).click();
 
   await expect(page).toHaveURL(/\/projects\/swissifier-demo\/workspaces\//);
-  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo');
   await expect(page.locator('.lineage-node')).toHaveCount(14);
 });
 
@@ -132,7 +132,7 @@ test('keeps explicit Swissifier deletion suppressed until Restore demo', async (
   await restore.click();
 
   await expect(page).toHaveURL(/\/projects\/swissifier-demo\/workspaces\//);
-  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo');
   await expect(page.locator('.lineage-node')).toHaveCount(14);
 });
 
@@ -144,26 +144,26 @@ test('keeps exact workspace identity independent in two tabs and switches throug
     secondPage.goto(canvasPath(secondWorkspaceId)),
   ]);
 
-  const firstWorkspace = firstPage.locator('.lineage-workspace-exit');
-  const secondWorkspace = secondPage.locator('.lineage-workspace-exit');
-  await expect(firstWorkspace.locator('strong')).toHaveText('Portrait launch concepts');
-  await expect(secondWorkspace.locator('strong')).toHaveText('Ledger story variants');
+  const firstWorkspace = firstPage.locator('.lineage-workspace-title strong');
+  const secondWorkspace = secondPage.locator('.lineage-workspace-title strong');
+  await expect(firstWorkspace).toHaveText('Portrait launch concepts');
+  await expect(secondWorkspace).toHaveText('Ledger story variants');
 
   const legacyActivation = await request.post(`/api/lineage-workspaces/${encodeURIComponent(secondWorkspaceId)}/activate`, {
     data: { confirmWrite: true, project },
   });
   expect(legacyActivation.ok()).toBe(true);
   await firstPage.waitForTimeout(250);
-  await expect(firstWorkspace.locator('strong')).toHaveText('Portrait launch concepts');
+  await expect(firstWorkspace).toHaveText('Portrait launch concepts');
   await expect(firstPage).toHaveURL(canvasPath(firstWorkspaceId));
 
-  await firstWorkspace.click();
+  await firstPage.locator('.lineage-workspace-exit').click();
   await expect(firstPage).toHaveURL(`/projects/${project}/workspaces`);
   await expect(firstPage.locator('.lineage-workspace-picker')).toHaveCount(0);
   const ledgerWorkspace = firstPage.locator('.organization-item').filter({ hasText: 'Ledger story variants' });
   await ledgerWorkspace.getByRole('button', { name: 'Open Canvas' }).click();
   await expect(firstPage).toHaveURL(canvasPath(secondWorkspaceId));
-  await expect(firstPage.locator('.lineage-workspace-exit strong')).toHaveText('Ledger story variants');
+  await expect(firstPage.locator('.lineage-workspace-title strong')).toHaveText('Ledger story variants');
 });
 
 test('Back and Forward traverse Projects, Workspaces, and exact Canvas', async ({ page }) => {

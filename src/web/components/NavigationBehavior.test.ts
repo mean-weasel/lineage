@@ -17,7 +17,7 @@ describe('Lineage navigation behavior', () => {
 
     expect(navSource).toContain("{ label: 'Agents', view: 'agents' }");
     expect(navSource.indexOf("{ label: 'Agents', view: 'agents' }")).toBeLessThan(navSource.indexOf("{ label: 'Settings', view: 'settings' }"));
-    expect(navSource).toContain("{ label: 'Workspaces', view: 'lineage' }");
+    expect(navSource).toContain("{ label: 'Canvas', view: 'lineage' }");
   });
 
   it('keeps desktop persistence separate from the mobile session disclosure', () => {
@@ -48,6 +48,9 @@ describe('Lineage navigation behavior', () => {
     expect(appSource).toContain("kind: 'canvas', projectId: nextProject, workspaceId: workspace.id");
     expect(appSource).toContain("navigate({ kind: 'studio', projectId: project, view: nextView })");
     expect(appSource).toContain("if (next.kind === 'canvas' || next.kind === 'new-workspace') setView('lineage')");
+    expect(appSource).toContain('onCanvasPresentationChange={rememberCurrentCanvasPresentation}');
+    expect(appSource).toContain('navigate(remembered, { search: remembered.search })');
+    expect(appSource).toContain('forgetCanvasReturnDestination(project)');
     expect(appSource).toContain('workspaceId={workspaceId}');
     expect(appSource).toContain('onExitWorkspace={() => navigate');
   });

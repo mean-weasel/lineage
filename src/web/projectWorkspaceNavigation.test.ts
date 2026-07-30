@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  forgetCanvasReturnDestination,
   parseProjectWorkspaceLocation,
   projectRouteIsUnavailable,
   projectWorkspaceHref,
+  readCanvasReturnDestination,
+  rememberCanvasReturnDestination,
   rememberProjectSummary,
+  resolveCanvasReturnDestination,
   sameProjectWorkspaceDestination,
+  type CanvasReturnDestination,
 } from './projectWorkspaceNavigation';
 
 describe('project workspace navigation', () => {
@@ -62,6 +67,84 @@ describe('project workspace navigation', () => {
     )).toBe(false);
   });
 
+  it('remembers an exact Canvas return per project and preserves only presentation state', () => {
+    const storage = memoryStorage();
+    rememberCanvasReturnDestination(
+      { kind: 'canvas', projectId: 'spring / launch', workspaceId: 'root:a/b' },
+      '?lineageCanvas=portrait&secret=no',
+      storage,
+    );
+    rememberCanvasReturnDestination(
+      { kind: 'canvas', projectId: 'autumn', workspaceId: 'other' },
+      '?lineageCanvas=compact',
+      storage,
+    );
+
+    expect(readCanvasReturnDestination('spring / launch', storage)).toEqual({
+      kind: 'canvas',
+      projectId: 'spring / launch',
+      workspaceId: 'root:a/b',
+      search: '?lineageCanvas=portrait',
+    });
+    expect(readCanvasReturnDestination('autumn', storage)?.search).toBe('?lineageCanvas=compact');
+    expect(readCanvasReturnDestination('missing', storage)).toBeNull();
+
+    forgetCanvasReturnDestination('spring / launch', storage);
+    expect(readCanvasReturnDestination('spring / launch', storage)).toBeNull();
+    expect(readCanvasReturnDestination('autumn', storage)?.workspaceId).toBe('other');
+  });
+
+  it('discards malformed or cross-project Canvas return state', () => {
+    const storage = memoryStorage();
+    storage.setItem('lineage.canvas-return.v1.spring', JSON.stringify({
+      kind: 'canvas',
+      projectId: 'other',
+      workspaceId: 'wrong-project',
+    }));
+
+    expect(readCanvasReturnDestination('spring', storage)).toBeNull();
+    expect(storage.getItem('lineage.canvas-return.v1.spring')).toBeNull();
+  });
+
+  it('keeps Canvas return identity independent between browser tabs', () => {
+    const firstTab = memoryStorage();
+    const secondTab = memoryStorage();
+    rememberCanvasReturnDestination({ kind: 'canvas', projectId: 'spring', workspaceId: 'portrait' }, '', firstTab);
+    rememberCanvasReturnDestination({ kind: 'canvas', projectId: 'spring', workspaceId: 'ledger' }, '', secondTab);
+
+    expect(readCanvasReturnDestination('spring', firstTab)?.workspaceId).toBe('portrait');
+    expect(readCanvasReturnDestination('spring', secondTab)?.workspaceId).toBe('ledger');
+  });
+
+  it('preserves the current-tab in-memory return when browser storage is unavailable', () => {
+    const current: ReturnType<typeof readCanvasReturnDestination> = {
+      kind: 'canvas',
+      projectId: 'spring',
+      workspaceId: 'portrait',
+      search: '?lineageCanvas=portrait',
+    };
+
+    expect(resolveCanvasReturnDestination('spring', null, current)).toEqual(current);
+    expect(resolveCanvasReturnDestination('autumn', null, current)).toBeNull();
+  });
+
+  it('prefers the current-tab return when a failed storage write leaves an older value behind', () => {
+    const current: CanvasReturnDestination = {
+      kind: 'canvas',
+      projectId: 'spring',
+      workspaceId: 'new-canvas',
+      search: '?lineageCanvas=portrait',
+    };
+    const staleStored: CanvasReturnDestination = {
+      kind: 'canvas',
+      projectId: 'spring',
+      workspaceId: 'old-canvas',
+      search: '',
+    };
+
+    expect(resolveCanvasReturnDestination('spring', staleStored, current)).toEqual(current);
+  });
+
   it('identifies project-scoped routes whose project no longer exists', () => {
     const projects = [{ id: 'survivor' }] as Parameters<typeof projectRouteIsUnavailable>[1];
     expect(projectRouteIsUnavailable({ kind: 'studio', projectId: 'deleted', view: 'assets' }, projects)).toBe(true);
@@ -86,4 +169,13 @@ describe('project workspace navigation', () => {
 
 function parse(pathname: string) {
   return parseProjectWorkspaceLocation({ pathname, search: '' });
+}
+
+function memoryStorage() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    removeItem: (key: string) => void values.delete(key),
+    setItem: (key: string, value: string) => void values.set(key, value),
+  };
 }
