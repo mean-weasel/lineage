@@ -6,7 +6,7 @@ import { navigationViews } from './Topbar.navigation';
 describe('navigation destinations', () => {
   it('exposes every destination directly in the agreed rail order', () => {
     expect(navigationViews).toEqual([
-      { label: 'Canvas', view: 'lineage' },
+      { label: 'Workspaces', view: 'lineage' },
       { label: 'Assets', view: 'assets' },
       { label: 'Content batches', view: 'content' },
       { label: 'Review', view: 'review' },

@@ -58,12 +58,17 @@ test('offers the Canvas settings hint once without obstructing its gear', async 
   const hint = page.getByRole('note', { name: 'Canvas settings tip' });
   await expect(hint).toBeVisible();
   await expect(hint).toContainText('Customize your canvas');
+  await expect(page.locator('.lineage-workspace-exit')).toBeVisible();
   const separated = await hint.evaluate((element, gearLabel) => {
     const hintBox = element.getBoundingClientRect();
     const gearBox = document.querySelector(`[aria-label="${gearLabel}"]`)?.getBoundingClientRect();
-    return Boolean(gearBox && hintBox.right <= gearBox.left);
+    const workspaceBox = document.querySelector('.lineage-workspace-exit')?.getBoundingClientRect();
+    return {
+      gear: Boolean(gearBox && hintBox.right <= gearBox.left),
+      workspace: Boolean(workspaceBox && hintBox.bottom <= workspaceBox.top),
+    };
   }, 'Open Canvas settings');
-  expect(separated).toBe(true);
+  expect(separated).toEqual({ gear: true, workspace: true });
 
   await gear.click();
   await expect(hint).toHaveCount(0);
@@ -75,28 +80,16 @@ test('offers the Canvas settings hint once without obstructing its gear', async 
     window.localStorage.getItem('lineage.preferences.canvas-settings-hint-dismissed'))).toBe('true');
 });
 
-test('keeps the collapsed contextual-panel trigger inside the navigation rail', async ({ page }) => {
+test('uses the active destination to collapse and reopen the contextual panel', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(canvasPath());
 
+  const workspaces = page.getByRole('button', { name: 'Workspaces', exact: true });
+  await expect(workspaces).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: 'Expand contextual panel' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Collapse contextual panel' }).click();
-  const expand = page.getByRole('button', { name: 'Expand contextual panel' });
-  await expect(expand).toBeVisible();
-
-  await expect.poll(async () => expand.evaluate(element => {
-    const buttonBox = element.getBoundingClientRect();
-    const railBox = element.closest('.navigation-rail')?.getBoundingClientRect();
-    const workspaceBox = document.querySelector('.workspace')?.getBoundingClientRect();
-    return Boolean(
-      railBox
-      && workspaceBox
-      && buttonBox.left >= railBox.left
-      && buttonBox.right <= railBox.right
-      && buttonBox.right <= workspaceBox.left
-    );
-  })).toBe(true);
-
-  await expand.click();
+  await expect(workspaces).toHaveAttribute('aria-expanded', 'false');
+  await workspaces.click();
   await expect(page.getByRole('button', { name: 'Collapse contextual panel' })).toBeVisible();
 });
 
@@ -106,6 +99,7 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
 
   await expect(page.locator('header.lineage-header')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Canvas workspace tools' })).toBeVisible();
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Demo: Content iteration tree');
   await expect(page.locator('.lineage-workbench')).toBeVisible();
   await expect(page.getByRole('button', { name: /Agent context/i })).toHaveCount(0);
   await expect(page).toHaveURL(/projects\/demo-project\/workspaces/);

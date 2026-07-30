@@ -192,14 +192,6 @@
   gap: 11px;
 }
 
-.context-expand-toggle {
-  display: none;
-  margin-bottom: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: #dcecef;
-}
-
 .mobile-context-close,
 .navigation-backdrop,
 .mobile-context-destinations,
@@ -217,10 +209,6 @@
   transform: translateX(-12px);
   visibility: hidden;
   transition-delay: 0s, 0s, 220ms;
-}
-
-.app-shell.context-panel-collapsed .context-expand-toggle {
-  display: inline-flex;
 }
 
 @media (max-width: 760px) {
@@ -244,6 +232,7 @@
   .rail-destinations,
   .rail-bottom .rail-upload,
   .rail-bottom > button[aria-label="Settings"],
+  .rail-bottom > button[aria-label="About Lineage"],
   .rail-bottom .runtime-identity-badge {
     display: none;
   }
@@ -277,8 +266,7 @@
     max-height: calc(100dvh - 64px);
   }
 
-  .desktop-context-close,
-  .app-shell.context-panel-collapsed .context-expand-toggle {
+  .desktop-context-close {
     display: none;
   }
 

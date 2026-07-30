@@ -156,14 +156,14 @@ export function ProjectOverview(props: {
     : 'Reorder is available in Manual sort with no search filter. Open and archived workspaces always keep separate orders.';
 
   return (
-    <section aria-labelledby="project-overview-title" className="organization-page project-overview-page">
+    <section aria-labelledby="project-workspaces-title" className="organization-page project-overview-page">
       <nav aria-label="Breadcrumb" className="project-breadcrumb">
         <button onClick={props.onAllProjects} type="button"><ArrowLeft aria-hidden="true" size={16} />All projects</button>
       </nav>
       <header className="organization-hero project-overview-hero">
         <div>
-          <span className="organization-eyebrow">Project overview</span>
-          <h1 id="project-overview-title" ref={headingRef} tabIndex={-1}>{snapshot?.project.display_name || props.projectId}</h1>
+          <span className="organization-eyebrow">{snapshot?.project.display_name || props.projectId}</span>
+          <h1 id="project-workspaces-title" ref={headingRef} tabIndex={-1}>Workspaces</h1>
           <p>Choose a workspace to open its canvas, or organize the collection before diving in.</p>
         </div>
         <button className="primary-button organization-primary-action" onClick={() => props.onNewWorkspace(props.projectId)} type="button">

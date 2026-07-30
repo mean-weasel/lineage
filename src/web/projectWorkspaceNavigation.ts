@@ -58,6 +58,10 @@ export function parseProjectWorkspaceLocation(location: Pick<Location, 'pathname
       const projectId = decodeURIComponent(segments[1]);
       return projectId ? { kind: 'project', projectId } : { kind: 'invalid', reason: 'Project ID is missing' };
     }
+    if (segments.length === 3 && segments[2] === 'workspaces') {
+      const projectId = decodeURIComponent(segments[1]);
+      return projectId ? { kind: 'project', projectId } : { kind: 'invalid', reason: 'Project ID is missing' };
+    }
     if (segments.length === 3 && segments[2] === 'new-workspace') {
       const projectId = decodeURIComponent(segments[1]);
       return projectId ? { kind: 'new-workspace', projectId } : { kind: 'invalid', reason: 'Project ID is missing' };
@@ -88,7 +92,7 @@ export function projectWorkspaceHref(
 ): string {
   if (destination.kind === 'projects') return '/projects';
   const projectPath = `/projects/${encodeURIComponent(destination.projectId)}`;
-  if (destination.kind === 'project') return projectPath;
+  if (destination.kind === 'project') return `${projectPath}/workspaces`;
   if (destination.kind === 'new-workspace') return `${projectPath}/new-workspace`;
   if (destination.kind === 'studio') return `${projectPath}/studio/${encodeURIComponent(destination.view)}`;
   const params = new URLSearchParams(currentSearch);

@@ -65,26 +65,23 @@ test.afterEach(() => {
 test('honors exact workspace URLs and clears stale lineage state through browser history', async ({ page }) => {
   await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
 
-  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  const workspaceTrigger = canvasTools.locator('.lineage-workspace-trigger');
-  await expect(workspaceTrigger.locator('strong')).toHaveText(workspaceTitle);
-  await expect(workspaceTrigger.locator('code')).toHaveText(rootAssetId);
+  const workspaceExit = page.locator('.lineage-workspace-exit');
+  await expect(workspaceExit.locator('strong')).toHaveText(workspaceTitle);
   await expect(page).toHaveURL(new RegExp(`/projects/${project}/workspaces/`));
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
 
-  await page.getByRole('button', { name: 'View project overview' }).click();
-  await expect(page).toHaveURL(`/projects/${project}`);
-  await expect(page.getByRole('heading', { name: project })).toBeVisible();
+  await workspaceExit.click();
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
+  await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/projects/${project}/workspaces/`));
-  await expect(workspaceTrigger.locator('strong')).toHaveText(workspaceTitle);
-  await expect(workspaceTrigger.locator('code')).toHaveText(rootAssetId);
+  await expect(workspaceExit.locator('strong')).toHaveText(workspaceTitle);
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
 
   await page.goForward();
-  await expect(page).toHaveURL(`/projects/${project}`);
-  await expect(page.getByRole('heading', { name: project })).toBeVisible();
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
+  await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible();
 });

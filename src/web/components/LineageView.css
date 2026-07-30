@@ -88,6 +88,56 @@
   border-radius: 0;
 }
 
+.lineage-workspace-exit {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 8;
+  display: inline-flex;
+  max-width: min(320px, calc(100% - 104px));
+  min-height: 46px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(157, 184, 193, 0.72);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 24px rgba(21, 55, 66, 0.12);
+  color: #1a4651;
+  padding: 7px 12px 7px 10px;
+  text-align: left;
+  backdrop-filter: blur(12px);
+  transition: top 180ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.lineage-workbench.settings-hint-visible .lineage-workspace-exit {
+  top: 92px;
+}
+
+.lineage-workspace-exit:hover,
+.lineage-workspace-exit:focus-visible {
+  border-color: #5f9ca7;
+  box-shadow: 0 11px 28px rgba(21, 55, 66, 0.18);
+  transform: translateY(-1px);
+}
+
+.lineage-workspace-exit > span {
+  display: grid;
+  min-width: 0;
+}
+
+.lineage-workspace-exit small {
+  color: #5a737b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.lineage-workspace-exit strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lineage-canvas {
   --lineage-edge-width: 2px;
   position: relative;
@@ -2216,6 +2266,7 @@
   .lineage-canvas-settings-trigger,
   .lineage-canvas-settings-trigger > span,
   .lineage-canvas-settings-hint button,
+  .lineage-workspace-exit,
   .lineage-setting-choice-surface,
   .lineage-setting-choice-icon,
   .lineage-setting-choice-check,
@@ -2228,6 +2279,7 @@
   }
 
   .lineage-canvas-settings-trigger:hover,
+  .lineage-workspace-exit:hover,
   .lineage-setting-choice:hover .lineage-setting-choice-surface,
   .lineage-setting-switch:hover:not(:disabled),
   .lineage-canvas-settings-actions button:hover:not(:disabled),
@@ -2268,6 +2320,16 @@
   .lineage-workbench {
     grid-template-columns: 1fr;
     min-height: 720px;
+  }
+
+  .lineage-workspace-exit {
+    top: 74px;
+    left: 12px;
+    max-width: calc(100% - 84px);
+  }
+
+  .lineage-workbench.settings-hint-visible .lineage-workspace-exit {
+    top: 96px;
   }
 
   .lineage-canvas {

@@ -5,11 +5,10 @@ import {
   FileStack,
   FolderKanban,
   Images,
+  Info,
   ListChecks,
   Menu,
-  Network,
   PanelLeftClose,
-  PanelLeftOpen,
   Settings,
   Upload,
   X,
@@ -26,7 +25,7 @@ import { AboutLineageDialog } from './AboutLineageDialog';
 import './Sidebar.css';
 
 const navigationIcons = {
-  lineage: Network,
+  lineage: FolderKanban,
   assets: Images,
   content: FileStack,
   review: ListChecks,
@@ -34,7 +33,7 @@ const navigationIcons = {
   agents: Bot,
   ledger: BookOpen,
   settings: Settings,
-} satisfies Record<StudioView, typeof Network>;
+} satisfies Record<StudioView, typeof FolderKanban>;
 
 export function Sidebar(props: {
   channel: string;
@@ -55,7 +54,6 @@ export function Sidebar(props: {
   runtimeIdentityUnavailable: boolean;
   setChannel: (value: string) => void;
   setPlacementStatus: (value: PlacementFilter) => void;
-  setProject: (value: string) => void;
   setSource: (value: SourceFilter) => void;
   setStatus: (value: StatusFilter) => void;
   setUploadOpen: (value: boolean) => void;
@@ -94,9 +92,20 @@ export function Sidebar(props: {
   }, [mobileContextOpen]);
 
   function openView(view: StudioView) {
+    if (view === 'lineage' && props.surface === 'project') {
+      props.onMobileContextOpenChange(false);
+      return;
+    }
+    const isActiveStudioView = props.surface === 'studio' && props.view === view;
+    if (isActiveStudioView) {
+      if (!mobileContextOpen) props.onContextOpenChange(!props.contextOpen);
+      props.onMobileContextOpenChange(false);
+      return;
+    }
     props.onStudio(view);
     if (view === 'backup') props.showBackupQueue();
     else props.setView(view);
+    if (view !== 'lineage') props.onContextOpenChange(true);
     props.onMobileContextOpenChange(false);
   }
 
@@ -112,26 +121,18 @@ export function Sidebar(props: {
         <nav className="navigation-rail" aria-label={`${appName} destinations`}>
           <div className="rail-brand">
             <button
-              aria-label="About Lineage"
+              aria-label="Lineage home"
               className="brand-mark brand-button"
-              onClick={openAbout}
-              title="About Lineage"
+              onClick={() => {
+                props.onProjects();
+                props.onMobileContextOpenChange(false);
+              }}
+              title="All projects"
               type="button"
             >
               L
             </button>
           </div>
-          {props.surface === 'studio' && (
-            <button
-              aria-label="Expand contextual panel"
-              className="rail-button context-expand-toggle"
-              onClick={() => props.onContextOpenChange(true)}
-              title="Expand contextual panel"
-              type="button"
-            >
-              <PanelLeftOpen size={18} />
-            </button>
-          )}
           <button
             aria-controls="contextual-navigation-panel"
             aria-expanded={mobileContextOpen}
@@ -144,27 +145,18 @@ export function Sidebar(props: {
             <Menu size={21} />
           </button>
           <div className="rail-destinations">
-            <button
-              aria-current={props.surface === 'projects' ? 'page' : undefined}
-              aria-label="Projects"
-              className={`rail-button ${props.surface === 'projects' ? 'active' : ''}`}
-              onClick={() => {
-                props.onProjects();
-                props.onMobileContextOpenChange(false);
-              }}
-              title="Projects"
-              type="button"
-            >
-              <FolderKanban size={20} />
-            </button>
-            {navigationViews.filter(item => item.view !== 'settings').map(item => {
+            {hasProject && props.surface !== 'projects' && navigationViews.filter(item => item.view !== 'settings').map(item => {
               const Icon = navigationIcons[item.view];
+              const active = item.view === 'lineage'
+                ? props.surface === 'project' || (props.surface === 'studio' && props.view === 'lineage')
+                : props.surface === 'studio' && props.view === item.view;
               return (
                 <button
-                  aria-current={props.surface === 'studio' && props.view === item.view ? 'page' : undefined}
+                  aria-controls={active && props.surface === 'studio' ? 'contextual-navigation-panel' : undefined}
+                  aria-current={active ? 'page' : undefined}
+                  aria-expanded={active && props.surface === 'studio' ? props.contextOpen : undefined}
                   aria-label={item.label}
-                  className={`rail-button ${props.surface === 'studio' && props.view === item.view ? 'active' : ''}`}
-                  disabled={!hasProject}
+                  className={`rail-button ${active ? 'active' : ''}`}
                   key={item.view}
                   onClick={() => openView(item.view)}
                   title={item.label}
@@ -176,26 +168,35 @@ export function Sidebar(props: {
             })}
           </div>
           <div className="rail-bottom">
-            <button
+            {hasProject && props.surface !== 'projects' && <button
               aria-label="Create or upload"
               className="rail-button rail-upload"
-              disabled={!hasProject}
               onClick={() => props.setUploadOpen(true)}
               title="Create or upload"
               type="button"
             >
               <Upload size={20} />
-            </button>
-            <button
+            </button>}
+            {hasProject && props.surface !== 'projects' && <button
+              aria-controls={props.surface === 'studio' && props.view === 'settings' ? 'contextual-navigation-panel' : undefined}
               aria-current={props.surface === 'studio' && props.view === 'settings' ? 'page' : undefined}
+              aria-expanded={props.surface === 'studio' && props.view === 'settings' ? props.contextOpen : undefined}
               aria-label="Settings"
               className={`rail-button ${props.surface === 'studio' && props.view === 'settings' ? 'active' : ''}`}
-              disabled={!hasProject}
               onClick={() => openView('settings')}
               title="Settings"
               type="button"
             >
               <Settings size={20} />
+            </button>}
+            <button
+              aria-label="About Lineage"
+              className="rail-button"
+              onClick={openAbout}
+              title="About Lineage"
+              type="button"
+            >
+              <Info size={19} />
             </button>
             <RuntimeIdentityBadge
               compact
@@ -252,14 +253,16 @@ export function Sidebar(props: {
                 type="button"
               >
                 <FolderKanban size={18} />
-                Projects
+                All projects
               </button>
-              {navigationViews.map(item => {
+              {hasProject && props.surface !== 'projects' && navigationViews.map(item => {
                 const Icon = navigationIcons[item.view];
+                const active = item.view === 'lineage'
+                  ? props.surface === 'project' || (props.surface === 'studio' && props.view === 'lineage')
+                  : props.surface === 'studio' && props.view === item.view;
                 return (
                   <button
-                    aria-current={props.surface === 'studio' && props.view === item.view ? 'page' : undefined}
-                    disabled={!hasProject}
+                    aria-current={active ? 'page' : undefined}
                     key={item.view}
                     onClick={() => openView(item.view)}
                     type="button"
@@ -269,8 +272,7 @@ export function Sidebar(props: {
                   </button>
                 );
               })}
-              <button
-                disabled={!hasProject}
+              {hasProject && props.surface !== 'projects' && <button
                 onClick={() => {
                   props.setUploadOpen(true);
                   props.onMobileContextOpenChange(false);
@@ -279,7 +281,7 @@ export function Sidebar(props: {
               >
                 <Upload size={18} />
                 Create or upload
-              </button>
+              </button>}
             </nav>
 
             <section className="mobile-runtime-identity" aria-label="Mobile runtime identity">
@@ -296,7 +298,7 @@ export function Sidebar(props: {
                 {props.surface === 'studio' ? (
                   <>
                     <strong className="context-project-name">{projects.find(item => item.id === project)?.display_name || project}</strong>
-                    <button className="text-button" onClick={props.onProjectOverview} type="button">View project overview</button>
+                    <button className="text-button" onClick={props.onProjectOverview} type="button">Back to workspaces</button>
                   </>
                 ) : (
                   <>

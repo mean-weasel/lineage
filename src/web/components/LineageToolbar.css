@@ -15,6 +15,32 @@
   width: 100%;
 }
 
+.lineage-workspace-context {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid #cfe0e5;
+  border-radius: 9px;
+  background: #f5fafb;
+  padding: 10px 11px;
+}
+
+.lineage-workspace-context span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lineage-workspace-context strong {
+  overflow: hidden;
+  color: #183f49;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lineage-toolbar-context {
   margin: 0;
   color: var(--muted);

@@ -12,6 +12,7 @@ describe('project workspace navigation', () => {
     expect(parse('/')).toEqual({ kind: 'projects' });
     expect(parse('/projects')).toEqual({ kind: 'projects' });
     expect(parse('/projects/summer-launch')).toEqual({ kind: 'project', projectId: 'summer-launch' });
+    expect(parse('/projects/summer-launch/workspaces')).toEqual({ kind: 'project', projectId: 'summer-launch' });
     expect(parse('/projects/summer-launch/workspaces/workspace%3Aportrait')).toEqual({
       kind: 'canvas',
       projectId: 'summer-launch',
@@ -30,7 +31,7 @@ describe('project workspace navigation', () => {
 
   it('builds encoded routes and preserves only Canvas presentation state', () => {
     expect(projectWorkspaceHref({ kind: 'projects' })).toBe('/projects');
-    expect(projectWorkspaceHref({ kind: 'project', projectId: 'spring / launch' })).toBe('/projects/spring%20%2F%20launch');
+    expect(projectWorkspaceHref({ kind: 'project', projectId: 'spring / launch' })).toBe('/projects/spring%20%2F%20launch/workspaces');
     expect(projectWorkspaceHref(
       { kind: 'canvas', projectId: 'spring', workspaceId: 'root:a/b' },
       '?project=legacy&lineageCanvas=portrait&secret=no'
@@ -40,7 +41,7 @@ describe('project workspace navigation', () => {
   });
 
   it('fails visibly on malformed, incomplete, and unrelated routes', () => {
-    expect(parse('/projects/summer/workspaces').kind).toBe('invalid');
+    expect(parse('/projects/summer/workspaces/one/extra').kind).toBe('invalid');
     expect(parse('/assets').kind).toBe('invalid');
     expect(parse('/projects/summer/studio/lineage').kind).toBe('invalid');
     expect(parse('/projects/%E0%A4%A').kind).toBe('invalid');

@@ -17,7 +17,7 @@ describe('Lineage navigation behavior', () => {
 
     expect(navSource).toContain("{ label: 'Agents', view: 'agents' }");
     expect(navSource.indexOf("{ label: 'Agents', view: 'agents' }")).toBeLessThan(navSource.indexOf("{ label: 'Settings', view: 'settings' }"));
-    expect(navSource).toContain("{ label: 'Canvas', view: 'lineage' }");
+    expect(navSource).toContain("{ label: 'Workspaces', view: 'lineage' }");
   });
 
   it('keeps desktop persistence separate from the mobile session disclosure', () => {
@@ -41,7 +41,7 @@ describe('Lineage navigation behavior', () => {
     expect(openDetailsSnippet).not.toContain("setView('assets')");
   });
 
-  it('uses canonical browser history for Projects, Project Overview, and exact Canvas identity', () => {
+  it('uses canonical browser history for Projects, Workspaces, and exact Canvas identity', () => {
     expect(appSource).toContain('parseProjectWorkspaceLocation(window.location)');
     expect(appSource).toContain("window.history[options.replace ? 'replaceState' : 'pushState']");
     expect(appSource).toContain("window.addEventListener('popstate', onPopState)");
@@ -49,6 +49,7 @@ describe('Lineage navigation behavior', () => {
     expect(appSource).toContain("navigate({ kind: 'studio', projectId: project, view: nextView })");
     expect(appSource).toContain("if (next.kind === 'canvas' || next.kind === 'new-workspace') setView('lineage')");
     expect(appSource).toContain('workspaceId={workspaceId}');
+    expect(appSource).toContain('onExitWorkspace={() => navigate');
   });
 
   it('keeps Canvas tab identity independent from the server-global active workspace', () => {

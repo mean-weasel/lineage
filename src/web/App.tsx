@@ -334,6 +334,11 @@ export function App() {
     } else if (parsed.kind === 'invalid') {
       showToast('error', `${parsed.reason}. Returned to Projects.`);
       navigate({ kind: 'projects' }, { replace: true });
+    } else if (
+      parsed.kind === 'project'
+      && window.location.pathname !== projectWorkspaceHref(parsed)
+    ) {
+      navigate(parsed, { replace: true });
     }
     function onPopState() {
       const next = parseProjectWorkspaceLocation(window.location);
@@ -428,7 +433,6 @@ export function App() {
         runtimeIdentityUnavailable={runtimeIdentityUnavailable}
         setChannel={setChannel}
         setPlacementStatus={setPlacementStatus}
-        setProject={nextProject => navigate({ kind: 'project', projectId: nextProject })}
         setSource={setSource}
         setStatus={setStatus}
         setUploadOpen={open => {
@@ -562,6 +566,7 @@ export function App() {
             asset={selected}
             newWorkspaceRequest={destination.kind === 'new-workspace' ? newWorkspaceRequest : undefined}
             onAssetsChanged={refresh}
+            onExitWorkspace={() => navigate({ kind: 'project', projectId: project })}
             onNewWorkspaceCancelled={() => navigate({ kind: 'project', projectId: project }, { replace: true })}
             onSelectedAsset={setSelectedId}
             onToast={showToast}

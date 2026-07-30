@@ -37,7 +37,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
 
   try {
     await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const posterEdge = page.locator('.react-flow__edge').filter({ has: page.locator('.react-flow__edge-text', { hasText: 'Poster focus' }) });
     const drillEdge = page.locator('.react-flow__edge').filter({ has: page.locator('.react-flow__edge-text', { hasText: 'Drill focus' }) });
@@ -89,7 +89,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     });
 
     await page.reload();
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);
 
     await openEdgeSummaryWithDoubleClick(page, posterEdgeId);
@@ -136,7 +136,7 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     });
 
     await page.reload();
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
     await expect(edgeById(page, posterEdgeId).locator('.react-flow__edge-text')).toHaveCount(0);
     await expect(edgeById(page, drillEdgeId)).toHaveAttribute('aria-label', 'swissifier linkedin root v1 to swissifier vertical drill v1: My edit');
     await expect(edgeById(page, legacyEdgeId)).toHaveAttribute('aria-label', `${legacyEdgeName}: Legacy label`);

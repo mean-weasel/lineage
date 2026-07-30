@@ -1,6 +1,7 @@
 import { type CSSProperties, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { type Edge, type EdgeChange, type ReactFlowInstance, useEdgesState, useNodesState } from '@xyflow/react';
+import { ArrowLeft } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './LineageView.css';
 import './LineageFocus.css';
@@ -76,6 +77,7 @@ export function LineageView({
   asset,
   newWorkspaceRequest,
   onAssetsChanged,
+  onExitWorkspace,
   onNewWorkspaceCancelled,
   onSelectedAsset,
   onToast,
@@ -87,6 +89,7 @@ export function LineageView({
   asset?: GrowthAsset;
   newWorkspaceRequest?: number;
   onAssetsChanged?: () => Promise<void> | void;
+  onExitWorkspace: () => void;
   onNewWorkspaceCancelled: () => void;
   onSelectedAsset: (assetId: string) => void;
   onToast: (type: 'ok' | 'error', message: string) => void;
@@ -285,9 +288,7 @@ export function LineageView({
     });
   }, [snapshot]);
   const {
-    activateWorkspace,
     activeWorkspace,
-    archiveWorkspace,
     demoSeedStatus,
     downloadSwissifierDemoMedia,
     handleWorkspaceCreated,
@@ -298,7 +299,6 @@ export function LineageView({
     seedDemoWorkspace,
     seedSwissifierDemoWorkspace,
     swissifierDemoStatus,
-    visibleWorkspaces,
     workspaceLoading,
     workspaceRootAssetId,
   } = useLineageWorkspaces({
@@ -934,9 +934,7 @@ export function LineageView({
           closeSignal={menuCloseSignal}
           loading={loading}
           demoSeedStatus={demoSeedStatus}
-          onArchiveWorkspace={() => { setWorkspaceProgress(null); void archiveWorkspace(); }}
           onIndexLocal={() => void indexAndRefresh()}
-          onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
           onOpenGeneration={() => setGenerationOpen(true)}
           onOpenOutputDefaults={() => setOutputDefaultsOpen(true)}
           onRefreshLineage={() => void refresh()}
@@ -947,7 +945,6 @@ export function LineageView({
           onDownloadSwissifierMedia={() => void downloadSwissifierAndTrack()}
           onSeedDemo={() => void seedDemoAndRefreshAssets()}
           onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
-          onSelectWorkspace={workspaceId => { setWorkspaceProgress(null); void activateWorkspace(workspaceId); }}
           onToggleNextPanel={() => togglePanel('selection')}
           replayActive={Boolean(replaySnapshot)}
           sideOpen={panelMode === 'selection'}
@@ -956,11 +953,27 @@ export function LineageView({
           workspaceLoading={workspaceLoading}
           workspaceProgress={workspaceProgress}
           workspaceRootAssetId={workspaceRootAssetId}
-          workspaces={visibleWorkspaces}
         />,
         canvasToolsHost,
       )}
-      <div className="lineage-workbench" data-testid="lineage-workbench">
+      <div
+        className={`lineage-workbench ${settingsHintVisible ? 'settings-hint-visible' : ''}`}
+        data-testid="lineage-workbench"
+      >
+        {activeWorkspace && (
+          <button
+            aria-label={`Back to workspaces from ${activeWorkspace.title}`}
+            className="lineage-workspace-exit"
+            onClick={onExitWorkspace}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" size={17} />
+            <span>
+              <small>Back to workspaces</small>
+              <strong>{activeWorkspace.title}</strong>
+            </span>
+          </button>
+        )}
         <div
           className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${branchMotion ? `lineage-branch-motion lineage-branch-motion-${branchMotion.phase}` : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
           data-lineage-canvas-presentation={canvasPresentation}
@@ -993,11 +1006,11 @@ export function LineageView({
             hoverPreviewsEnabled={canvasHoverPreviewsEnabled}
             loading={loading}
             minimapVisible={minimapVisible}
+            onBrowseWorkspaces={onExitWorkspace}
             onEdgesChange={handleEdgesChange}
             onEdgeEdit={(edgeId, returnFocus) => setEdgeEditor({ edgeId, returnFocus })}
             onClearFocus={clearFocus}
             onIndexNow={() => void indexAndRefresh()}
-            onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
             onSeedDemo={() => void seedDemoAndRefreshAssets()}
             onNodeActionMenu={(assetId, x, y) => setNodeMenu(assetId ? { assetId, x, y } : null)}
             onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}

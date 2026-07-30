@@ -120,6 +120,15 @@ describe('lineage canvas view aids', () => {
 
     expect(source).toContain('{minimapVisible && <MiniMap pannable zoomable />}');
   });
+
+  it('routes an unbound Canvas back to the Workspaces directory instead of creating in place', async () => {
+    const source = await import('node:fs').then(({ readFileSync }) =>
+      readFileSync(new URL('./LineageCanvas.tsx', import.meta.url), 'utf8'));
+
+    expect(source).toContain('onBrowseWorkspaces');
+    expect(source).toContain('Browse workspaces');
+    expect(source).not.toContain('>New lineage</button>');
+  });
 });
 
 function node(overrides: Partial<LineageNode> = {}): LineageNode {

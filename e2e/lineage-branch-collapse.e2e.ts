@@ -13,7 +13,7 @@ test('collapses lineage branches in both card modes while preserving nested choi
 
   try {
     await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}?lineageCanvas=portrait`);
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong'))
+    await expect(page.locator('.lineage-workspace-exit strong'))
       .toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
     await expect(page.locator('.react-flow__node')).toHaveCount(10);
     await expect(page.locator('.react-flow__edge')).toHaveCount(9);

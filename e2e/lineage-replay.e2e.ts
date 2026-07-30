@@ -30,7 +30,7 @@ test('replays and scrubs a stable branching lineage, isolates refreshes, and rem
 
   try {
     await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(richWorkspaceId)}`);
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText(richTitle, { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText(richTitle, { timeout: 20_000 });
     await expect(page.locator('.react-flow__node')).toHaveCount(14);
     await expect(page.locator('.react-flow__edge')).toHaveCount(13);
 
@@ -141,9 +141,10 @@ test('replays and scrubs a stable branching lineage, isolates refreshes, and rem
     ))).toBe('1ms');
     await expect(controls.locator('output')).toHaveText('Stage 14 of 14', { timeout: 5_000 });
 
-    await page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger').click();
-    await page.getByRole('option', { name: new RegExp(isolationTitle) }).click();
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText(isolationTitle);
+    await page.locator('.lineage-workspace-exit').click();
+    const isolationWorkspace = page.locator('.organization-item').filter({ hasText: isolationTitle });
+    await isolationWorkspace.getByRole('button', { name: 'Open Canvas' }).click();
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText(isolationTitle);
     await expect(controls).toHaveCount(0);
   } finally {
     if (isolation.workspace?.id) {

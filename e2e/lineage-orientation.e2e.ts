@@ -13,7 +13,7 @@ test('rotates lineage graph layout and handles without stale saved positions', a
 
   try {
     await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const root = lineageNode(page, 'swissifier linkedin root v1');
     const child = lineageNode(page, 'swissifier vertical drill v1');

@@ -46,7 +46,7 @@ test.afterAll(async ({ request }) => {
   }
 });
 
-test('starts on Projects and opens Project Overview before Canvas', async ({ page }) => {
+test('starts on Projects and opens Workspaces before Canvas', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL('/projects');
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
@@ -55,7 +55,8 @@ test('starts on Projects and opens Project Overview before Canvas', async ({ pag
   await expect(demoProject).toBeVisible();
   await demoProject.getByRole('button', { name: /Open (project|demo)/ }).click();
 
-  await expect(page).toHaveURL(`/projects/${project}`);
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
+  await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible();
   await expect(page.getByText('Choose a workspace to open its canvas')).toBeVisible();
   await expect(page.getByRole('button', { name: 'All projects' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Canvas' }).first()).toBeVisible();
@@ -72,11 +73,11 @@ test('successful new-workspace creation stays on its exact Canvas destination', 
   await dialog.getByRole('button', { name: 'Create lineage' }).click();
 
   await expect(page).toHaveURL(canvasPath(`${project}:lineage-workspace:${root}`));
-  await expect(page.getByText('Created from project overview', { exact: true })).toBeVisible();
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Created from project overview');
 });
 
 test('routes project-level destinations and create/upload onto an explicit studio surface', async ({ page }) => {
-  await page.goto(`/projects/${project}`);
+  await page.goto(`/projects/${project}/workspaces`);
   await page.getByRole('button', { name: 'Assets', exact: true }).click();
   await expect(page).toHaveURL(`/projects/${project}/studio/assets`);
   await expect(page.locator('.asset-board')).toBeVisible();
@@ -84,7 +85,7 @@ test('routes project-level destinations and create/upload onto an explicit studi
   await expect(page).toHaveURL(`/projects/${project}/studio/assets`);
   await expect(page.locator('.asset-board')).toBeVisible();
 
-  await page.goto(`/projects/${project}`);
+  await page.goto(`/projects/${project}/workspaces`);
   await page.getByRole('button', { name: 'Create or upload', exact: true }).click();
   await expect(page).toHaveURL(`/projects/${project}/studio/assets`);
   await expect(page.getByRole('heading', { name: 'Upload asset' })).toBeVisible();
@@ -105,7 +106,7 @@ test('shows Swissifier as its own project and opens its populated Canvas directl
   await swissifier.getByRole('button', { name: 'Open demo' }).click();
 
   await expect(page).toHaveURL(/\/projects\/swissifier-demo\/workspaces\//);
-  await expect(page.locator('.lineage-workspace-trigger').getByText('Swissifier rich demo')).toBeVisible();
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo');
   await expect(page.locator('.lineage-node')).toHaveCount(14);
 });
 
@@ -131,11 +132,11 @@ test('keeps explicit Swissifier deletion suppressed until Restore demo', async (
   await restore.click();
 
   await expect(page).toHaveURL(/\/projects\/swissifier-demo\/workspaces\//);
-  await expect(page.locator('.lineage-workspace-trigger').getByText('Swissifier rich demo')).toBeVisible();
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Swissifier rich demo');
   await expect(page.locator('.lineage-node')).toHaveCount(14);
 });
 
-test('keeps exact workspace identity independent in two tabs and switches by URL', async ({ context, request }) => {
+test('keeps exact workspace identity independent in two tabs and switches through Workspaces', async ({ context, request }) => {
   const firstPage = await context.newPage();
   const secondPage = await context.newPage();
   await Promise.all([
@@ -143,33 +144,33 @@ test('keeps exact workspace identity independent in two tabs and switches by URL
     secondPage.goto(canvasPath(secondWorkspaceId)),
   ]);
 
-  const firstPicker = firstPage.locator('.lineage-workspace-trigger');
-  const secondPicker = secondPage.locator('.lineage-workspace-trigger');
-  await expect(firstPicker.getByText('Portrait launch concepts')).toBeVisible();
-  await expect(secondPicker.getByText('Ledger story variants')).toBeVisible();
+  const firstWorkspace = firstPage.locator('.lineage-workspace-exit');
+  const secondWorkspace = secondPage.locator('.lineage-workspace-exit');
+  await expect(firstWorkspace.locator('strong')).toHaveText('Portrait launch concepts');
+  await expect(secondWorkspace.locator('strong')).toHaveText('Ledger story variants');
 
   const legacyActivation = await request.post(`/api/lineage-workspaces/${encodeURIComponent(secondWorkspaceId)}/activate`, {
     data: { confirmWrite: true, project },
   });
   expect(legacyActivation.ok()).toBe(true);
   await firstPage.waitForTimeout(250);
-  await expect(firstPicker.getByText('Portrait launch concepts')).toBeVisible();
+  await expect(firstWorkspace.locator('strong')).toHaveText('Portrait launch concepts');
   await expect(firstPage).toHaveURL(canvasPath(firstWorkspaceId));
 
-  await firstPicker.click();
-  const options = firstPage.getByRole('option');
-  await expect.poll(() => options.count()).toBeGreaterThanOrEqual(2);
-  await expect(firstPage.getByText('Recent', { exact: true })).toHaveCount(0);
-  await firstPage.getByRole('option', { name: /Ledger story variants/ }).click();
+  await firstWorkspace.click();
+  await expect(firstPage).toHaveURL(`/projects/${project}/workspaces`);
+  await expect(firstPage.locator('.lineage-workspace-picker')).toHaveCount(0);
+  const ledgerWorkspace = firstPage.locator('.organization-item').filter({ hasText: 'Ledger story variants' });
+  await ledgerWorkspace.getByRole('button', { name: 'Open Canvas' }).click();
   await expect(firstPage).toHaveURL(canvasPath(secondWorkspaceId));
-  await expect(firstPage.locator('.lineage-workspace-trigger').getByText('Ledger story variants')).toBeVisible();
+  await expect(firstPage.locator('.lineage-workspace-exit strong')).toHaveText('Ledger story variants');
 });
 
-test('Back and Forward traverse Projects, overview, and exact Canvas', async ({ page }) => {
+test('Back and Forward traverse Projects, Workspaces, and exact Canvas', async ({ page }) => {
   await page.goto('/projects');
   const demoProject = page.locator('.organization-item').filter({ hasText: project }).first();
   await demoProject.getByRole('button', { name: /Open (project|demo)/ }).click();
-  await expect(page).toHaveURL(`/projects/${project}`);
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
 
   await page.getByRole('button', { name: 'Show workspaces as a list' }).click();
   const workspace = page.locator('.organization-item').filter({ hasText: 'Portrait launch concepts' });
@@ -177,11 +178,11 @@ test('Back and Forward traverse Projects, overview, and exact Canvas', async ({ 
   await expect(page).toHaveURL(canvasPath(firstWorkspaceId));
 
   await page.goBack();
-  await expect(page).toHaveURL(`/projects/${project}`);
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
   await page.goBack();
   await expect(page).toHaveURL('/projects');
   await page.goForward();
-  await expect(page).toHaveURL(`/projects/${project}`);
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
   await page.goForward();
   await expect(page).toHaveURL(canvasPath(firstWorkspaceId));
 });
@@ -189,7 +190,7 @@ test('Back and Forward traverse Projects, overview, and exact Canvas', async ({ 
 test('an invalid workspace fails visibly and recovers to its project', async ({ page }) => {
   await page.goto(canvasPath('missing-workspace'));
 
-  await expect(page).toHaveURL(`/projects/${project}`);
+  await expect(page).toHaveURL(`/projects/${project}/workspaces`);
   await expect(page.getByRole('status').filter({ hasText: 'missing-workspace' })).toBeVisible();
   await expect(page.getByText('Choose a workspace to open its canvas')).toBeVisible();
 });
@@ -314,13 +315,13 @@ test('creates a project and completes workspace archive, restore, and permanent 
   expect(created.ok()).toBe(true);
   const lifecycleWorkspaceId = (await created.json()).workspace.id;
 
-  await page.goto(`/projects/${project}`);
+  await page.goto(`/projects/${project}/workspaces`);
   let workspace = page.locator('.organization-item').filter({ hasText: lifecycleTitle });
   await workspace.getByRole('button', { name: 'Archive' }).click();
   let lifecycleDialog = page.getByRole('dialog', { name: 'Archive workspace?' });
   await lifecycleDialog.getByRole('button', { name: 'Archive workspace', exact: true }).click();
   await expect(lifecycleDialog).toHaveCount(0);
-  await expect(page.locator('#project-overview-title')).toBeFocused();
+  await expect(page.locator('#project-workspaces-title')).toBeFocused();
 
   await page.getByRole('tab', { name: 'Archived' }).click();
   workspace = page.locator('.organization-item').filter({ hasText: lifecycleTitle });
@@ -337,7 +338,7 @@ test('creates a project and completes workspace archive, restore, and permanent 
   await expect(deleteDialog).toContainText('Asset records, local files, generated files, and cloud objects are preserved');
   await deleteDialog.getByRole('button', { name: 'Delete workspace permanently' }).click();
   await expect(deleteDialog).toHaveCount(0);
-  await expect(page.locator('#project-overview-title')).toBeFocused();
+  await expect(page.locator('#project-workspaces-title')).toBeFocused();
   await expect(page.locator('.organization-item').filter({ hasText: lifecycleTitle })).toHaveCount(0);
 
   const collection = await request.get(`/api/projects/${project}/workspaces?collection=open&pageSize=100`);

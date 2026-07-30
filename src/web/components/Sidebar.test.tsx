@@ -31,7 +31,7 @@ describe('Sidebar', () => {
 
     expect(text()).toContain('Demo Project');
     expect(selectOrNull('Project')).toBeNull();
-    expect(buttonWithText('View project overview')).not.toBeNull();
+    expect(buttonWithText('Back to workspaces')).not.toBeNull();
     expect(select('Source').value).toBe('local');
     expect(select('Status').value).toBe('all');
     expect(select('Channel').value).toBe('all');
@@ -69,16 +69,25 @@ describe('Sidebar', () => {
     expect(container!.querySelector('#canvas-context-tools')).toBeNull();
   });
 
-  it('renders every destination directly with Canvas selected', () => {
+  it('renders project destinations directly with Workspaces selected and no redundant Projects item', () => {
     renderSidebar('lineage');
 
-    const labels = ['Projects', 'Canvas', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
+    const labels = ['Workspaces', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
     for (const label of labels) expect(buttonByLabel(label)).not.toBeNull();
-    expect(buttonByLabel('Canvas')?.getAttribute('aria-current')).toBe('page');
+    expect(buttonByLabel('Projects')).toBeNull();
+    expect(buttonByLabel('Workspaces')?.getAttribute('aria-current')).toBe('page');
     expect(text()).not.toContain('More');
   });
 
-  it('opens About Lineage from the brand and restores focus when closed', () => {
+  it('uses the L brand as global home', () => {
+    const onProjects = vi.fn();
+    renderSidebar('lineage', { onProjects });
+
+    act(() => buttonByLabel('Lineage home')?.click());
+    expect(onProjects).toHaveBeenCalledOnce();
+  });
+
+  it('opens About Lineage from the secondary info action and restores focus when closed', () => {
     renderSidebar('lineage', { runtime });
     const opener = buttonByLabel('About Lineage')!;
     opener.focus();
@@ -111,20 +120,20 @@ describe('Sidebar', () => {
 
     const mobileDestinations = container!.querySelector('.mobile-context-destinations');
     expect(mobileDestinations).not.toBeNull();
-    expect(mobileDestinations?.textContent).toContain('Canvas');
+    expect(mobileDestinations?.textContent).toContain('Workspaces');
     expect(mobileDestinations?.textContent).toContain('Backup queue');
     expect(mobileDestinations?.textContent).toContain('Settings');
     expect(mobileDestinations?.textContent).toContain('Create or upload');
   });
 
-  it('disables project-scoped destinations when no project exists', () => {
+  it('hides project-scoped destinations until a project is open', () => {
     renderSidebar('lineage', { project: '', projects: [], surface: 'projects' });
 
-    expect(buttonByLabel('Projects')?.disabled).toBe(false);
-    expect(buttonByLabel('Canvas')?.disabled).toBe(true);
-    expect(buttonByLabel('Assets')?.disabled).toBe(true);
-    expect(buttonByLabel('Create or upload')?.disabled).toBe(true);
-    expect(buttonByLabel('Settings')?.disabled).toBe(true);
+    expect(buttonByLabel('Lineage home')).not.toBeNull();
+    expect(buttonByLabel('Workspaces')).toBeNull();
+    expect(buttonByLabel('Assets')).toBeNull();
+    expect(buttonByLabel('Create or upload')).toBeNull();
+    expect(buttonByLabel('Settings')).toBeNull();
   });
 
   it('keeps the exact runtime and environment identity reachable in the mobile drawer only at the responsive breakpoint', () => {
@@ -154,15 +163,17 @@ describe('Sidebar', () => {
     expect(onContextOpenChange).not.toHaveBeenCalled();
   });
 
-  it('keeps the desktop contextual-panel expand control inside the navigation rail', () => {
+  it('uses the active destination to collapse and reopen the desktop contextual panel', () => {
     const onContextOpenChange = vi.fn();
     renderSidebar('lineage', { onContextOpenChange });
 
-    const expand = buttonByLabel('Expand contextual panel');
-    expect(expand?.closest('.navigation-rail')).not.toBeNull();
-    expect(expand?.closest('.context-panel')).toBeNull();
+    expect(buttonByLabel('Expand contextual panel')).toBeNull();
+    act(() => buttonByLabel('Workspaces')?.click());
+    expect(onContextOpenChange).toHaveBeenCalledWith(false);
 
-    expand?.click();
+    onContextOpenChange.mockClear();
+    renderSidebar('lineage', { contextOpen: false, onContextOpenChange });
+    act(() => buttonByLabel('Workspaces')?.click());
     expect(onContextOpenChange).toHaveBeenCalledWith(true);
   });
 
@@ -187,6 +198,9 @@ function renderSidebar(
   overrides: {
     onContextOpenChange?: (open: boolean) => void;
     onMobileContextOpenChange?: (open: boolean) => void;
+    onProjects?: () => void;
+    onStudio?: (view: 'lineage' | 'assets' | 'content' | 'review' | 'backup' | 'agents' | 'ledger' | 'settings') => void;
+    contextOpen?: boolean;
     mobileContextOpen?: boolean;
     project?: string;
     projects?: ProjectWorkspaceSummary[];
@@ -199,7 +213,7 @@ function renderSidebar(
       <Sidebar
         channel="all"
         channels={['all', 'tiktok']}
-        contextOpen
+        contextOpen={overrides.contextOpen ?? true}
         mobileContextOpen={overrides.mobileContextOpen || false}
         onContextOpenChange={overrides.onContextOpenChange || vi.fn()}
         onMobileContextOpenChange={overrides.onMobileContextOpenChange || vi.fn()}
@@ -218,12 +232,11 @@ function renderSidebar(
           updated_at: '2026-07-29T00:00:00.000Z',
         }]}
         surface={overrides.surface || 'studio'}
-        onProjects={vi.fn()}
+        onProjects={overrides.onProjects || vi.fn()}
         onProjectOverview={vi.fn()}
-        onStudio={vi.fn()}
+        onStudio={overrides.onStudio || vi.fn()}
         setChannel={vi.fn()}
         setPlacementStatus={vi.fn()}
-        setProject={vi.fn()}
         setSource={vi.fn()}
         setStatus={vi.fn()}
         setUploadOpen={vi.fn()}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GrowthAsset, LineageWorkspace, LineageWorkspaceSnapshot } from '../../shared/types';
 import { api } from '../api';
-import { lineageWorkspaceRootAssetId } from './lineageWorkspacePickerModel';
+import { lineageWorkspaceRootAssetId } from './lineageWorkspaceModel';
 
 export interface DemoSeedMediaStatus {
   demo_id?: string;

@@ -5,7 +5,11 @@ description: Find the main Lineage views without treating application tabs as th
 
 ## Main views
 
-- **Canvas** displays the visual lineage graph, current attempts, and workspaces.
+- **Projects** is the global home for creating, organizing, and opening projects.
+- **Workspaces** is the project-level directory for creating, organizing,
+  archiving, deleting, and opening workspaces.
+- **Canvas** displays the visual lineage graph and current attempts for one
+  exact workspace.
 - **Review** presents assets that need human judgment.
 - **Assets** supports catalog-level inspection.
 - **Agents** shows open, released, stale, and revoked claims.
@@ -14,10 +18,15 @@ description: Find the main Lineage views without treating application tabs as th
 - **Content Batches** groups posts, targets, media, and handoffs.
 - **Backup Queue** prepares approved assets for external storage.
 
-Use the destination rail on the left to move between these views. The adjacent
-contextual panel holds project selection and tools for the current view; collapse
-it when you want the Canvas to use the full window. On mobile, the menu button
-opens the same destinations and contextual tools as a drawer.
+Project-scoped destinations appear in the left rail after you open a project.
+Use the **L** mark to return to Projects. The adjacent contextual panel holds
+tools for the current view; collapse it when you want the Canvas to use the
+full window, then select the active rail destination to reopen it. On mobile,
+the menu button opens the same destinations and contextual tools as a drawer.
+
+Canvas identifies its exact workspace with a **Back to workspaces** control.
+Workspace switching and lifecycle actions live on the Workspaces page instead
+of inside Canvas.
 
 ## Lineage canvas appearance
 
@@ -54,10 +63,11 @@ closes.
 
 ## About Lineage
 
-Select the **L** brand mark in the destination rail, or the Lineage name in the
-mobile drawer, to open **About Lineage**. The dialog shows the app version,
-release and runtime channels, environment, profile, and revision when verified.
-It also links to the repository and documentation.
+Select the information button at the bottom of the destination rail, or the
+Lineage name in the mobile drawer, to open **About Lineage**. The **L** brand
+mark returns to Projects. The dialog shows the app version, release and runtime
+channels, environment, profile, and revision when verified. It also links to
+the repository and documentation.
 
 **Copy diagnostics** copies only this limited identity summary. It does not
 include local filesystem paths, the SQLite database path, the asset root, or

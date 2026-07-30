@@ -79,7 +79,7 @@ test('lets users disable lineage hover previews without disabling details', asyn
   const workspaceId = await seedDemo(request);
   await page.goto(demoCanvasPath(workspaceId));
   const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Demo: Content iteration tree');
 
   await openCanvasSettings(page);
   const hoverPreviews = page.getByRole('switch', { name: 'Canvas hover previews' });
@@ -105,7 +105,7 @@ test('loads the demo lineage at its canonical project and workspace route', asyn
   await page.goto(demoCanvasPath(workspaceId));
 
   const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
   await expect(page.locator('.lineage-scope-bar')).toHaveCount(0);
   await expect(page.locator('.lineage-selection-strip')).toHaveCount(0);
@@ -197,12 +197,12 @@ test('loads the demo lineage at its canonical project and workspace route', asyn
   await expect(page.locator('#lineage-canvas-panel')).toBeVisible();
 });
 
-test('creates a lineage workspace from a catalog asset through the modal', async ({ page, request }) => {
+test('creates a lineage workspace from its Workspaces page', async ({ page, request }) => {
   const workspaceId = await seedDemo(request);
   await page.goto(demoCanvasPath(workspaceId));
 
-  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  await canvasTools.getByRole('button', { name: 'New lineage', exact: true }).click();
+  await page.locator('.lineage-workspace-exit').click();
+  await page.getByRole('button', { name: 'New workspace' }).click();
   const modal = page.getByRole('form', { name: 'New lineage' });
   await expect(modal).toBeVisible();
   await page.getByPlaceholder('Search by title, id, campaign, channel...').fill('meta short-form');
@@ -210,7 +210,7 @@ test('creates a lineage workspace from a catalog asset through the modal', async
   await page.getByLabel('Name').fill('Catalog e2e lineage');
   await page.getByRole('button', { name: 'Create lineage' }).click();
 
-  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Catalog e2e lineage');
+  await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Catalog e2e lineage');
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
 });
 

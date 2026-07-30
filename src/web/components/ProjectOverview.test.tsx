@@ -34,7 +34,8 @@ describe('ProjectOverview', () => {
     render({ onAllProjects, onOpenCanvas });
     await act(settle);
 
-    expect(container.querySelector('h1')?.textContent).toBe('Summer Launch');
+    expect(container.querySelector('h1')?.textContent).toBe('Workspaces');
+    expect(container.querySelector('.organization-eyebrow')?.textContent).toBe('Summer Launch');
     act(() => button('All projects').click());
     expect(onAllProjects).toHaveBeenCalled();
 

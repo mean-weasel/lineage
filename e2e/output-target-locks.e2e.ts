@@ -34,7 +34,7 @@ test('canvas persists independent node targets, plans only from their digest, an
 
     await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
     const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-    await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-exit strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
 
     await canvasTools.getByRole('button', { name: 'Output target defaults' }).click();
     const defaults = page.getByRole('dialog', { name: 'Output target defaults' });
