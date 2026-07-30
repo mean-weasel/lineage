@@ -1,7 +1,7 @@
 import { lineageDb as db, nowIso, type DatabaseSync } from './assetLineageDb';
 import { selectedRows, selectionId } from './assetLineageSelection';
 import { cancelLineageIterateTasksForAssets } from './assetLineageTasks';
-import { getLineageSnapshot, LineageError } from './assetLineage';
+import { assertWorkspaceRootAcceptsWrites, getLineageSnapshot, LineageError } from './assetLineage';
 import { requireLineageWorkspaceClaimForWrite } from './lineageClaimGuards';
 import type { LineageRemoveNodeFields, LineageRemoveNodeResponse } from '../shared/types';
 
@@ -56,6 +56,7 @@ export function removeLineageNode(project: string, fields: LineageRemoveNodeFiel
   requireAsset(database, project, fields.assetId);
   const root = fields.rootAssetId || rootFor(database, project, fields.assetId);
   requireAsset(database, project, root);
+  assertWorkspaceRootAcceptsWrites(database, project, root);
   if (fields.assetId === root) {
     database.close();
     throw new LineageError('Cannot remove the root lineage node; archive the workspace or create a new root instead.');

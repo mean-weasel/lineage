@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ProjectWorkspaceSummary } from '../../shared/projectWorkspaceTypes';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import { Sidebar } from './Sidebar';
 
@@ -25,10 +26,12 @@ describe('Sidebar', () => {
     root = null;
   });
 
-  it('keeps project and asset filters in the contextual panel for asset views', () => {
+  it('keeps project identity and asset filters in the contextual panel for asset views', () => {
     renderSidebar('assets');
 
-    expect(select('Project').value).toBe('demo-project');
+    expect(text()).toContain('Demo Project');
+    expect(selectOrNull('Project')).toBeNull();
+    expect(buttonWithText('Back to workspaces')).not.toBeNull();
     expect(select('Source').value).toBe('local');
     expect(select('Status').value).toBe('all');
     expect(select('Channel').value).toBe('all');
@@ -51,7 +54,8 @@ describe('Sidebar', () => {
   it('keeps asset filters out of Canvas context', () => {
     renderSidebar('lineage');
 
-    expect(selectOrNull('Project')).not.toBeNull();
+    expect(selectOrNull('Project')).toBeNull();
+    expect(text()).toContain('Demo Project');
     expect(container!.querySelector('#canvas-context-tools')?.getAttribute('aria-label')).toBe('Canvas workspace tools');
     expect(selectOrNull('Source')).toBeNull();
     expect(selectOrNull('Status')).toBeNull();
@@ -65,16 +69,57 @@ describe('Sidebar', () => {
     expect(container!.querySelector('#canvas-context-tools')).toBeNull();
   });
 
-  it('renders every destination directly with Canvas selected', () => {
+  it('separates the Workspaces directory from the active Canvas destination', () => {
     renderSidebar('lineage');
 
-    const labels = ['Canvas', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
+    const labels = ['Workspaces', 'Canvas', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
     for (const label of labels) expect(buttonByLabel(label)).not.toBeNull();
+    expect(buttonByLabel('Projects')).toBeNull();
     expect(buttonByLabel('Canvas')?.getAttribute('aria-current')).toBe('page');
+    expect(buttonByLabel('Workspaces')?.getAttribute('aria-current')).toBeNull();
     expect(text()).not.toContain('More');
   });
 
-  it('opens About Lineage from the brand and restores focus when closed', () => {
+  it('returns to the remembered Canvas independently from opening the Workspaces directory', () => {
+    const onCanvas = vi.fn();
+    const onProjectOverview = vi.fn();
+    renderSidebar('assets', { onCanvas, onProjectOverview });
+
+    act(() => buttonByLabel('Canvas')?.click());
+    expect(onCanvas).toHaveBeenCalledOnce();
+    expect(onProjectOverview).not.toHaveBeenCalled();
+
+    act(() => buttonByLabel('Workspaces')?.click());
+    expect(onProjectOverview).toHaveBeenCalledOnce();
+  });
+
+  it('disables Canvas until a workspace has been opened in this tab', () => {
+    renderSidebar('assets', { canvasAvailable: false });
+
+    expect(buttonByLabel('Canvas')?.disabled).toBe(true);
+    expect(buttonByLabel('Canvas')?.title).toBe('Open a workspace to use Canvas');
+    expect(buttonByLabel('Workspaces')?.disabled).toBe(false);
+  });
+
+  it('does not treat the new-workspace flow as an active Canvas', () => {
+    const onCanvas = vi.fn();
+    renderSidebar('lineage', { canvasActive: false, onCanvas });
+
+    const canvas = buttonByLabel('Canvas')!;
+    expect(canvas.getAttribute('aria-current')).toBeNull();
+    act(() => canvas.click());
+    expect(onCanvas).toHaveBeenCalledOnce();
+  });
+
+  it('uses the L brand as global home', () => {
+    const onProjects = vi.fn();
+    renderSidebar('lineage', { onProjects });
+
+    act(() => buttonByLabel('Lineage home')?.click());
+    expect(onProjects).toHaveBeenCalledOnce();
+  });
+
+  it('opens About Lineage from the secondary info action and restores focus when closed', () => {
     renderSidebar('lineage', { runtime });
     const opener = buttonByLabel('About Lineage')!;
     opener.focus();
@@ -107,10 +152,22 @@ describe('Sidebar', () => {
 
     const mobileDestinations = container!.querySelector('.mobile-context-destinations');
     expect(mobileDestinations).not.toBeNull();
+    expect(mobileDestinations?.textContent).toContain('Workspaces');
     expect(mobileDestinations?.textContent).toContain('Canvas');
     expect(mobileDestinations?.textContent).toContain('Backup queue');
     expect(mobileDestinations?.textContent).toContain('Settings');
     expect(mobileDestinations?.textContent).toContain('Create or upload');
+  });
+
+  it('hides project-scoped destinations until a project is open', () => {
+    renderSidebar('lineage', { project: '', projects: [], surface: 'projects' });
+
+    expect(buttonByLabel('Lineage home')).not.toBeNull();
+    expect(buttonByLabel('Workspaces')).toBeNull();
+    expect(buttonByLabel('Canvas')).toBeNull();
+    expect(buttonByLabel('Assets')).toBeNull();
+    expect(buttonByLabel('Create or upload')).toBeNull();
+    expect(buttonByLabel('Settings')).toBeNull();
   });
 
   it('keeps the exact runtime and environment identity reachable in the mobile drawer only at the responsive breakpoint', () => {
@@ -140,16 +197,33 @@ describe('Sidebar', () => {
     expect(onContextOpenChange).not.toHaveBeenCalled();
   });
 
-  it('keeps the desktop contextual-panel expand control inside the navigation rail', () => {
+  it('uses the active destination to collapse and reopen the desktop contextual panel', () => {
     const onContextOpenChange = vi.fn();
     renderSidebar('lineage', { onContextOpenChange });
 
-    const expand = buttonByLabel('Expand contextual panel');
-    expect(expand?.closest('.navigation-rail')).not.toBeNull();
-    expect(expand?.closest('.context-panel')).toBeNull();
+    expect(buttonByLabel('Expand contextual panel')).toBeNull();
+    act(() => buttonByLabel('Canvas')?.click());
+    expect(onContextOpenChange).toHaveBeenCalledWith(false);
 
-    expand?.click();
+    onContextOpenChange.mockClear();
+    renderSidebar('lineage', { contextOpen: false, onContextOpenChange });
+    act(() => buttonByLabel('Canvas')?.click());
     expect(onContextOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it('preserves a collapsed desktop contextual panel while switching destinations', () => {
+    const onContextOpenChange = vi.fn();
+    const onStudio = vi.fn();
+    renderSidebar('lineage', {
+      contextOpen: false,
+      onContextOpenChange,
+      onStudio,
+    });
+
+    act(() => buttonByLabel('Assets')?.click());
+
+    expect(onStudio).toHaveBeenCalledWith('assets');
+    expect(onContextOpenChange).not.toHaveBeenCalled();
   });
 
   it('moves focus into the mobile drawer and returns it to the trigger when closed', () => {
@@ -173,8 +247,18 @@ function renderSidebar(
   overrides: {
     onContextOpenChange?: (open: boolean) => void;
     onMobileContextOpenChange?: (open: boolean) => void;
+    onCanvas?: () => void;
+    onProjects?: () => void;
+    onProjectOverview?: () => void;
+    onStudio?: (view: 'lineage' | 'assets' | 'content' | 'review' | 'backup' | 'agents' | 'ledger' | 'settings') => void;
+    canvasActive?: boolean;
+    canvasAvailable?: boolean;
+    contextOpen?: boolean;
     mobileContextOpen?: boolean;
+    project?: string;
+    projects?: ProjectWorkspaceSummary[];
     runtime?: LineageRuntimeInfo;
+    surface?: 'projects' | 'project' | 'studio';
   } = {}
 ) {
   act(() => {
@@ -182,23 +266,33 @@ function renderSidebar(
       <Sidebar
         channel="all"
         channels={['all', 'tiktok']}
-        contextOpen
+        contextOpen={overrides.contextOpen ?? true}
         mobileContextOpen={overrides.mobileContextOpen || false}
         onContextOpenChange={overrides.onContextOpenChange || vi.fn()}
         onMobileContextOpenChange={overrides.onMobileContextOpenChange || vi.fn()}
         placementStatus="all"
-        project="demo-project"
-        projects={[{
-          project: 'demo-project',
+        canvasActive={overrides.canvasActive ?? view === 'lineage'}
+        canvasAvailable={overrides.canvasAvailable ?? true}
+        project={overrides.project ?? 'demo-project'}
+        projects={overrides.projects ?? [{
+          id: 'demo-project',
+          display_name: 'Demo Project',
           product: 'demo-project',
-          catalogPath: 'catalog.json',
-          default_bucket: 'lineage-demo-assets',
-          default_region: 'us-east-1',
+          catalog_path: 'catalog.json',
+          catalog_state: 'ready',
+          sort_position: 0,
           asset_count: 29,
+          workspace_count: 2,
+          created_at: '2026-07-29T00:00:00.000Z',
+          updated_at: '2026-07-29T00:00:00.000Z',
         }]}
+        surface={overrides.surface || 'studio'}
+        onCanvas={overrides.onCanvas || vi.fn()}
+        onProjects={overrides.onProjects || vi.fn()}
+        onProjectOverview={overrides.onProjectOverview || vi.fn()}
+        onStudio={overrides.onStudio || vi.fn()}
         setChannel={vi.fn()}
         setPlacementStatus={vi.fn()}
-        setProject={vi.fn()}
         setSource={vi.fn()}
         setStatus={vi.fn()}
         setUploadOpen={vi.fn()}
@@ -231,6 +325,11 @@ function selectOrNull(label: string): HTMLSelectElement | null {
 function buttonByLabel(label: string): HTMLButtonElement | null {
   return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
     .find(item => item.getAttribute('aria-label') === label) || null;
+}
+
+function buttonWithText(label: string): HTMLButtonElement | null {
+  return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
+    .find(item => item.textContent === label) || null;
 }
 
 function text(): string {

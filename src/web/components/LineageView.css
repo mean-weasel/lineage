@@ -88,6 +88,80 @@
   border-radius: 0;
 }
 
+.lineage-workspace-identity {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 8;
+  display: inline-flex;
+  max-width: min(420px, calc(100% - 104px));
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(170, 193, 200, 0.62);
+  border-radius: 9px;
+  background: rgba(250, 253, 253, 0.9);
+  box-shadow: 0 3px 12px rgba(21, 55, 66, 0.08);
+  color: #1a4651;
+  padding: 4px 10px 4px 4px;
+  text-align: left;
+  backdrop-filter: blur(10px);
+  transition: top 180ms ease;
+}
+
+.lineage-workbench.settings-hint-visible .lineage-workspace-identity {
+  top: 92px;
+}
+
+.lineage-workspace-exit {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #41646d;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.lineage-workspace-exit:hover,
+.lineage-workspace-exit:focus-visible {
+  background: #e5f1f3;
+  color: #075f6b;
+}
+
+.lineage-workspace-divider {
+  width: 1px;
+  height: 22px;
+  flex: 0 0 auto;
+  background: rgba(140, 171, 179, 0.55);
+}
+
+.lineage-workspace-title {
+  display: grid;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.lineage-workspace-title small {
+  color: #5a737b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lineage-workspace-title strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lineage-canvas {
   --lineage-edge-width: 2px;
   position: relative;
@@ -2216,6 +2290,7 @@
   .lineage-canvas-settings-trigger,
   .lineage-canvas-settings-trigger > span,
   .lineage-canvas-settings-hint button,
+  .lineage-workspace-exit,
   .lineage-setting-choice-surface,
   .lineage-setting-choice-icon,
   .lineage-setting-choice-check,
@@ -2268,6 +2343,16 @@
   .lineage-workbench {
     grid-template-columns: 1fr;
     min-height: 720px;
+  }
+
+  .lineage-workspace-identity {
+    top: 74px;
+    left: 12px;
+    max-width: calc(100% - 84px);
+  }
+
+  .lineage-workbench.settings-hint-visible .lineage-workspace-identity {
+    top: 96px;
   }
 
   .lineage-canvas {

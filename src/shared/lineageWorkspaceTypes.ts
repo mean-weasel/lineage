@@ -12,6 +12,9 @@ export interface LineageWorkspace {
   active_at?: string;
   created_at: string;
   updated_at: string;
+  sort_position?: number;
+  collection_kind?: 'open' | 'archived';
+  revision?: number;
 }
 
 export interface LineageWorkspaceSnapshot {
@@ -28,6 +31,7 @@ export interface LineageWorkspaceFields {
   notes?: string;
   createdBy?: LineageWorkspaceActor;
   activate?: boolean;
+  restoreDeleted?: boolean;
   confirmWrite: boolean;
 }
 

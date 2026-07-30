@@ -8,6 +8,8 @@ test('canvas persists independent node targets, plans only from their digest, an
   });
   expect(seededResponse.ok()).toBe(true);
   const seeded = await seededResponse.json() as { root_asset_id: string; workspace?: { id: string } };
+  const workspaceId = seeded.workspace?.id;
+  if (!workspaceId) throw new Error('Demo seed did not return an exact workspace ID');
 
   try {
     const snapshotResponse = await request.get(`/api/lineage/${seeded.root_asset_id}?project=${project}`);
@@ -30,9 +32,9 @@ test('canvas persists independent node targets, plans only from their digest, an
     });
     expect(selectionResponse.ok()).toBe(true);
 
-    await page.goto(`/?project=${project}`);
+    await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
     const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-    await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+    await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
 
     await canvasTools.getByRole('button', { name: 'Output target defaults' }).click();
     const defaults = page.getByRole('dialog', { name: 'Output target defaults' });

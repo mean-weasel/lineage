@@ -1,16 +1,19 @@
 import { expect, test, type Locator, type Page } from 'playwright/test';
 
+const project = 'swissifier-demo';
+
 test('rotates lineage graph layout and handles without stale saved positions', async ({ page, request }) => {
   const seed = await request.post('/api/lineage-workspaces/demo/swissifier/seed', {
-    data: { project: 'demo-project', confirmWrite: true },
+    data: { project, confirmWrite: true },
   });
   expect(seed.ok()).toBe(true);
   const seeded = await seed.json() as { workspace?: { id: string } };
   const workspaceId = seeded.workspace?.id;
+  if (!workspaceId) throw new Error('Swissifier seed did not return an exact workspace ID');
 
   try {
-    await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
+    await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
+    await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const root = lineageNode(page, 'swissifier linkedin root v1');
     const child = lineageNode(page, 'swissifier vertical drill v1');
@@ -42,11 +45,10 @@ test('rotates lineage graph layout and handles without stale saved positions', a
     await expect(page.getByRole('radio', { name: 'Left to right' })).toBeChecked();
     await assertRootLeftOfChild(root, child);
   } finally {
-    if (workspaceId) {
-      await request.post(`/api/lineage-workspaces/${encodeURIComponent(workspaceId)}/archive`, {
-        data: { project: 'demo-project', confirmWrite: true },
-      });
-    }
+    const restored = await request.post('/api/lineage-workspaces/demo/swissifier/seed', {
+      data: { activate: false, confirmWrite: true, project },
+    });
+    expect(restored.ok(), await restored.text()).toBe(true);
   }
 });
 

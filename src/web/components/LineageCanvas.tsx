@@ -56,7 +56,7 @@ export function LineageCanvas({
   onEdgesChange,
   onEdgeEdit,
   onIndexNow,
-  onNewLineage,
+  onBrowseWorkspaces,
   onClearFocus,
   onNodeActionMenu,
   onNodeInspect,
@@ -88,7 +88,7 @@ export function LineageCanvas({
   onEdgesChange: (changes: EdgeChange[]) => void;
   onEdgeEdit: (edgeId: string, trigger: HTMLElement | SVGElement | null) => void;
   onIndexNow: () => void;
-  onNewLineage: () => void;
+  onBrowseWorkspaces: () => void;
   onClearFocus: () => void;
   onNodeActionMenu: (assetId: string, x: number, y: number) => void;
   onNodeInspect: (assetId: string | null) => void;
@@ -217,8 +217,7 @@ export function LineageCanvas({
         )}
         {emptyState.action === 'new' && (
           <div className="lineage-empty-actions">
-            <button className="primary-button" onClick={onNewLineage}>New lineage</button>
-            <button className="secondary-button" disabled={loading} onClick={onSeedDemo}>Load demo lineage</button>
+            <button className="primary-button" onClick={onBrowseWorkspaces}>Browse workspaces</button>
           </div>
         )}
         {emptyState.action === 'seed' && <button className="primary-button" disabled={loading} onClick={onSeedDemo}>Load demo lineage</button>}

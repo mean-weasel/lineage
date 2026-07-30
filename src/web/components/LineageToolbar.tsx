@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
 import type { LineageWorkspaceProgress } from './LineageCanvas';
 import type { DemoSeedMediaStatus } from './useLineageWorkspaces';
-import { LineageWorkspacePicker } from './LineageWorkspacePicker';
 import './LineageToolbar.css';
 
 type LineageToolbarProps = {
@@ -10,10 +9,8 @@ type LineageToolbarProps = {
   closeSignal: number;
   demoSeedStatus: DemoSeedMediaStatus | null;
   loading: boolean;
-  onArchiveWorkspace: () => void;
   onDownloadSwissifierMedia: () => void;
   onIndexLocal: () => void;
-  onNewLineage: () => void;
   onOpenGeneration?: () => void;
   onOpenOutputDefaults?: () => void;
   onRefreshLineage: () => void;
@@ -23,7 +20,6 @@ type LineageToolbarProps = {
   onRestoreSwissifierMedia: () => void;
   onSeedDemo: () => void;
   onSeedSwissifierDemo: () => void;
-  onSelectWorkspace: (workspaceId: string) => void;
   onToggleNextPanel: () => void;
   sideOpen: boolean;
   replayActive: boolean;
@@ -32,7 +28,6 @@ type LineageToolbarProps = {
   workspaceLoading: boolean;
   workspaceProgress: LineageWorkspaceProgress;
   workspaceRootAssetId: string;
-  workspaces: LineageWorkspace[];
 };
 
 export function LineageToolbar({
@@ -40,10 +35,8 @@ export function LineageToolbar({
   closeSignal,
   demoSeedStatus,
   loading,
-  onArchiveWorkspace,
   onDownloadSwissifierMedia,
   onIndexLocal,
-  onNewLineage,
   onOpenGeneration,
   onOpenOutputDefaults,
   onRefreshLineage,
@@ -53,7 +46,6 @@ export function LineageToolbar({
   onRestoreSwissifierMedia,
   onSeedDemo,
   onSeedSwissifierDemo,
-  onSelectWorkspace,
   onToggleNextPanel,
   sideOpen,
   replayActive,
@@ -62,7 +54,6 @@ export function LineageToolbar({
   workspaceLoading,
   workspaceProgress,
   workspaceRootAssetId,
-  workspaces,
 }: LineageToolbarProps) {
   const [demoToolsOpen, setDemoToolsOpen] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
@@ -97,14 +88,10 @@ export function LineageToolbar({
   return (
     <section className="lineage-context-tools">
       <div className="lineage-primary-controls">
-        <LineageWorkspacePicker
-          activeWorkspace={activeWorkspace}
-          closeSignal={closeSignal}
-          loading={workspaceBusy}
-          onArchive={onArchiveWorkspace}
-          onSelect={onSelectWorkspace}
-          workspaces={workspaces}
-        />
+        <div className="lineage-workspace-context">
+          <span>Workspace</span>
+          <strong>{activeWorkspace?.title || 'No workspace selected'}</strong>
+        </div>
         <p className="lineage-toolbar-context">{workspaceContext}</p>
         <button
           aria-pressed={replayActive}
@@ -115,7 +102,6 @@ export function LineageToolbar({
         >
           Replay growth
         </button>
-        <button className="primary-button" onClick={onNewLineage} type="button">New lineage</button>
         {onOpenGeneration && <button className="primary-button" disabled={!snapshot || snapshot.selected.length === 0} onClick={onOpenGeneration} type="button">Plan outputs</button>}
         {onOpenOutputDefaults && <button className="secondary-button" disabled={!snapshot} onClick={onOpenOutputDefaults} type="button">Output target defaults</button>}
         <button aria-controls="lineage-canvas-panel" aria-expanded={sideOpen} className="secondary-button" disabled={!snapshot} onClick={onToggleNextPanel} type="button">Manage selection</button>

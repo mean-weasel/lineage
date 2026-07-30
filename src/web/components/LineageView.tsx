@@ -1,11 +1,13 @@
 import { type CSSProperties, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { type Edge, type EdgeChange, type ReactFlowInstance, useEdgesState, useNodesState } from '@xyflow/react';
+import { ArrowLeft } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import './LineageView.css';
 import './LineageFocus.css';
 import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageEdgeSummaryMutationResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
 import type { GenerationJob, GenerationJobListResponse } from '../../shared/generationTypes';
+import type { LineageWorkspace } from '../../shared/lineageWorkspaceTypes';
 import { api, ApiError } from '../api';
 import {
   readHoverPreviewsEnabled,
@@ -71,8 +73,32 @@ const branchMotionDuration = {
   exiting: 210,
 } as const;
 
-export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, onToast }: {
-  asset?: GrowthAsset; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
+export function LineageView({
+  asset,
+  newWorkspaceRequest,
+  onAssetsChanged,
+  onCanvasPresentationChange,
+  onExitWorkspace,
+  onNewWorkspaceCancelled,
+  onSelectedAsset,
+  onToast,
+  onWorkspaceChange,
+  onWorkspaceUnavailable,
+  project,
+  workspaceId,
+}: {
+  asset?: GrowthAsset;
+  newWorkspaceRequest?: number;
+  onAssetsChanged?: () => Promise<void> | void;
+  onCanvasPresentationChange: (presentation: LineageCanvasPresentation) => void;
+  onExitWorkspace: () => void;
+  onNewWorkspaceCancelled: () => void;
+  onSelectedAsset: (assetId: string) => void;
+  onToast: (type: 'ok' | 'error', message: string) => void;
+  onWorkspaceChange: (workspace: LineageWorkspace | null) => void;
+  onWorkspaceUnavailable: (message: string) => void;
+  project: string;
+  workspaceId: string | null;
 }) {
   const [canvasPresentation, setCanvasPresentation] = useState<LineageCanvasPresentation>(() =>
     lineageCanvasPresentationFromSearch(
@@ -100,6 +126,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
+  const [externalNewWorkspaceOpen, setExternalNewWorkspaceOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<'settings' | 'selection' | 'asset' | null>(null);
   const [settingsHintVisible, setSettingsHintVisible] = useState(() => !readCanvasSettingsHintDismissed());
   const [canvasToolsHost, setCanvasToolsHost] = useState<HTMLElement | null>(null);
@@ -263,9 +290,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     });
   }, [snapshot]);
   const {
-    activateWorkspace,
     activeWorkspace,
-    archiveWorkspace,
     demoSeedStatus,
     downloadSwissifierDemoMedia,
     handleWorkspaceCreated,
@@ -276,10 +301,21 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     seedDemoWorkspace,
     seedSwissifierDemoWorkspace,
     swissifierDemoStatus,
-    visibleWorkspaces,
     workspaceLoading,
     workspaceRootAssetId,
-  } = useLineageWorkspaces({ asset, onResetLineage: resetLineage, onSelectedAsset, onToast, project });
+  } = useLineageWorkspaces({
+    asset,
+    onResetLineage: resetLineage,
+    onSelectedAsset,
+    onToast,
+    onWorkspaceChange,
+    onWorkspaceUnavailable,
+    project,
+    workspaceId,
+  });
+  useEffect(() => {
+    if (activeWorkspace?.id === workspaceId) onCanvasPresentationChange(canvasPresentation);
+  }, [activeWorkspace?.id, canvasPresentation, onCanvasPresentationChange, workspaceId]);
   workspaceRootRef.current = workspaceRootAssetId;
   useEffect(() => { void refreshDemoSeedStatus(); }, [refreshDemoSeedStatus]);
   const refresh = useCallback(async (options: { quiet?: boolean; rootAssetId?: string } = {}) => {
@@ -883,7 +919,13 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   useEffect(() => {
     resetLineage();
     setWorkspaceProgress(null);
-  }, [project, resetLineage]);
+  }, [project, resetLineage, workspaceId]);
+
+  useEffect(() => {
+    if (!newWorkspaceRequest) return;
+    setExternalNewWorkspaceOpen(true);
+    setNewLineageOpen(true);
+  }, [newWorkspaceRequest]);
 
   useEffect(() => {
     setCanvasToolsHost(document.getElementById('canvas-context-tools'));
@@ -897,9 +939,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           closeSignal={menuCloseSignal}
           loading={loading}
           demoSeedStatus={demoSeedStatus}
-          onArchiveWorkspace={() => { setWorkspaceProgress(null); void archiveWorkspace(); }}
           onIndexLocal={() => void indexAndRefresh()}
-          onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
           onOpenGeneration={() => setGenerationOpen(true)}
           onOpenOutputDefaults={() => setOutputDefaultsOpen(true)}
           onRefreshLineage={() => void refresh()}
@@ -910,7 +950,6 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           onDownloadSwissifierMedia={() => void downloadSwissifierAndTrack()}
           onSeedDemo={() => void seedDemoAndRefreshAssets()}
           onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
-          onSelectWorkspace={workspaceId => { setWorkspaceProgress(null); void activateWorkspace(workspaceId); }}
           onToggleNextPanel={() => togglePanel('selection')}
           replayActive={Boolean(replaySnapshot)}
           sideOpen={panelMode === 'selection'}
@@ -919,11 +958,31 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           workspaceLoading={workspaceLoading}
           workspaceProgress={workspaceProgress}
           workspaceRootAssetId={workspaceRootAssetId}
-          workspaces={visibleWorkspaces}
         />,
         canvasToolsHost,
       )}
-      <div className="lineage-workbench" data-testid="lineage-workbench">
+      <div
+        className={`lineage-workbench ${settingsHintVisible ? 'settings-hint-visible' : ''}`}
+        data-testid="lineage-workbench"
+      >
+        {activeWorkspace && (
+          <nav aria-label="Canvas location" className="lineage-workspace-identity">
+            <button
+              aria-label={`Back to workspaces from ${activeWorkspace.title}`}
+              className="lineage-workspace-exit"
+              onClick={onExitWorkspace}
+              type="button"
+            >
+              <ArrowLeft aria-hidden="true" size={16} />
+              <span>Workspaces</span>
+            </button>
+            <span aria-hidden="true" className="lineage-workspace-divider" />
+            <span className="lineage-workspace-title">
+              <small>Canvas</small>
+              <strong>{activeWorkspace.title}</strong>
+            </span>
+          </nav>
+        )}
         <div
           className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${branchMotion ? `lineage-branch-motion lineage-branch-motion-${branchMotion.phase}` : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
           data-lineage-canvas-presentation={canvasPresentation}
@@ -956,11 +1015,11 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
             hoverPreviewsEnabled={canvasHoverPreviewsEnabled}
             loading={loading}
             minimapVisible={minimapVisible}
+            onBrowseWorkspaces={onExitWorkspace}
             onEdgesChange={handleEdgesChange}
             onEdgeEdit={(edgeId, returnFocus) => setEdgeEditor({ edgeId, returnFocus })}
             onClearFocus={clearFocus}
             onIndexNow={() => void indexAndRefresh()}
-            onNewLineage={() => { setWorkspaceProgress(null); setNewLineageOpen(true); }}
             onSeedDemo={() => void seedDemoAndRefreshAssets()}
             onNodeActionMenu={(assetId, x, y) => setNodeMenu(assetId ? { assetId, x, y } : null)}
             onNodeInspect={assetId => { closeTransientMenus(); setActiveNodeId(assetId); }}
@@ -1137,7 +1196,23 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           returnFocus={edgeEditor.returnFocus}
         />
       )}
-      <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
+      <LineageNewWorkspaceModal
+        onClose={() => {
+          setNewLineageOpen(false);
+          if (externalNewWorkspaceOpen) {
+            setExternalNewWorkspaceOpen(false);
+            onNewWorkspaceCancelled();
+          }
+        }}
+        onCreated={workspace => {
+          setExternalNewWorkspaceOpen(false);
+          setNewLineageOpen(false);
+          handleWorkspaceCreated(workspace);
+        }}
+        onToast={onToast}
+        open={newLineageOpen}
+        project={project}
+      />
     </section>
   );
 }

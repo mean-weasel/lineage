@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { EdgeSummaryValidationError, normalizeEdgeSummary, requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
@@ -91,6 +92,55 @@ function upsertAsset(database: DatabaseSync, project: string, asset: GrowthAsset
     values (?, 'unreviewed', ?)
     on conflict(asset_id) do nothing
   `).run(asset.asset_id, timestamp);
+}
+
+export function projectScopedAssetAlias(project: string, assetId: string): string {
+  const suffix = createHash('sha256').update(`${project}\0${assetId}`).digest('hex').slice(0, 16);
+  return `${assetId}--${suffix}`;
+}
+
+export function ensureWorkspaceRootAsset(project: string, requestedAssetId: string): string {
+  const database = db();
+  try {
+    const alias = projectScopedAssetAlias(project, requestedAssetId);
+    const existingAlias = database.prepare('select id, project_id from assets where id = ?')
+      .get(alias) as { id: string; project_id: string } | undefined;
+    if (existingAlias && existingAlias.project_id !== project) {
+      throw new LineageError(`Project-scoped asset identity collision for ${requestedAssetId}`, 409);
+    }
+    if (existingAlias) return existingAlias.id;
+
+    const direct = database.prepare('select id from assets where project_id = ? and id = ?')
+      .get(project, requestedAssetId) as { id: string } | undefined;
+    if (direct) return direct.id;
+
+    const visible = [...collectAssets(project, 'catalog'), ...collectAssets(project, 'local')]
+      .find(asset => asset.asset_id === requestedAssetId);
+    if (!visible) return requestedAssetId;
+
+    const requestedOwner = database.prepare('select project_id from assets where id = ?')
+      .get(requestedAssetId) as { project_id: string } | undefined;
+    if (!requestedOwner) {
+      upsertProject(database, project);
+      upsertAsset(database, project, {
+        ...visible,
+        product: project,
+        project,
+      });
+      return requestedAssetId;
+    }
+
+    upsertProject(database, project);
+    upsertAsset(database, project, {
+      ...visible,
+      asset_id: alias,
+      product: project,
+      project,
+    });
+    return alias;
+  } finally {
+    database.close();
+  }
 }
 
 export function indexLineageAssets(project = defaultProject): LineageIndexSummary {
@@ -204,6 +254,15 @@ function lineageWriteClaimContext(database: DatabaseSync, project: string, asset
     channel: assetChannel(database, project, assetId),
     rootAssetId: nearestWorkspaceRoot(database, project, assetId),
   };
+}
+
+export function assertWorkspaceRootAcceptsWrites(database: DatabaseSync, project: string, rootAssetId: string): void {
+  const deleted = database.prepare(`
+    select 1 from deleted_lineage_workspaces where project_id = ? and root_asset_id = ?
+  `).get(project, rootAssetId);
+  if (deleted) {
+    throw new LineageError(`Lineage workspace ${rootAssetId} was permanently deleted; restore it before writing graph state`, 409);
+  }
 }
 
 export function getLineageWriteClaimContext(project: string, assetId: string): { channel?: string; rootAssetId: string } {
@@ -402,6 +461,7 @@ export function linkLineageAssets(project: string, fields: LineageLinkFields) {
   if (fields.parentAssetId === fields.childAssetId) throw new LineageError('Lineage link cannot point to itself');
   const claimContext = lineageWriteClaimContext(database, project, fields.parentAssetId);
   try {
+    assertWorkspaceRootAcceptsWrites(database, project, claimContext.rootAssetId);
     requireLineageWorkspaceClaimForWrite({
       channel: claimContext.channel,
       claimToken: fields.claimToken,
@@ -861,6 +921,7 @@ export function promoteLineageAttempt(project: string, fields: {
 }): LineageAttemptPromotionResponse {
   const database = db();
   try {
+    assertWorkspaceRootAcceptsWrites(database, project, fields.rootAssetId);
     assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
     const asset = database.prepare('select id asset_id, project_id project, local_path, checksum_sha256, created_at asset_created_at from assets where project_id = ? and id = ?').get(project, fields.nodeAssetId) as { asset_id: string; project: string; local_path?: string; checksum_sha256?: string; asset_created_at?: string };
     const rows = database.prepare(`
@@ -984,6 +1045,7 @@ export function recordLineageRerollAttemptInTransaction(
   },
   preparedAttempt?: LineageAttempt,
 ): LineageAttempt {
+  assertWorkspaceRootAcceptsWrites(database, project, fields.rootAssetId);
   assertNodeInRoot(database, project, fields.rootAssetId, fields.nodeAssetId);
   requireAsset(database, project, fields.assetId);
   assertAttemptAssetNotVisibleLineageNode(database, project, fields.rootAssetId, fields.assetId);

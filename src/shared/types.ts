@@ -126,6 +126,19 @@ export type {
   LineageSelectionPacketV3Asset,
   LineageSelectionPacketV3IdentityProjection,
 } from './lineageSelectionPacketTypes';
+export type {
+  CollectionPagination,
+  CollectionReorderFields,
+  CollectionSort,
+  DeletionBlocker,
+  DeletionImpactCount,
+  ProjectCollectionSnapshot,
+  ProjectDeletionPlan,
+  ProjectWorkspaceSummary,
+  WorkspaceCollectionKind,
+  WorkspaceCollectionSnapshot,
+  WorkspaceDeletionPlan,
+} from './projectWorkspaceTypes';
 
 export interface ReviewableAsset extends GrowthAsset {
   review?: {

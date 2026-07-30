@@ -102,18 +102,29 @@ initialization reports an existing but unhealthy profile, run the exact
 
 ### Using the navigation shell
 
-The left rail exposes every destination directly: Canvas, Assets, Content
-batches, Review, Backup queue, Agents, Ledger, and Settings. The adjacent
-context panel contains the current project plus controls that apply to the
-active destination. Collapse that panel when you want more room; its desktop
-state is remembered in this browser. On mobile, the rail becomes a menu button
-that opens the same navigation and context as a drawer.
+Lineage opens on Projects. Choose a project to reach its dedicated Workspaces
+page, where workspaces can be searched, reordered, archived, deleted, and
+opened in Canvas. Project-scoped destinations appear in the left rail only
+after entering a project: Workspaces, Canvas, Assets, Content batches, Review,
+Backup queue, Agents, Ledger, and Settings. **Workspaces** always opens the
+project directory. After you open a workspace, **Canvas** returns to that exact
+workspace in the current browser tab, including its card presentation. Use the
+**L** mark to return to Projects; About Lineage remains available from the
+information button at the bottom of the rail.
 
-Canvas uses the remaining viewport without a top toolbar. Its context panel
-contains the workspace picker, node/link count, Replay growth, New lineage,
-Plan outputs, output defaults, and selection management. Maintenance and
-Demo/QA are collapsed by default. Archive current lineage remains under
-**Workspace options** and uses destructive styling.
+The adjacent context panel contains the current project plus controls that
+apply to the active destination. Collapse it when you want more room, then
+select the active rail destination to reopen it; its desktop state is
+remembered in this browser. On mobile, the rail becomes a menu button that
+opens the same navigation and context as a drawer.
+
+Canvas uses the remaining viewport without a top toolbar. A compact location
+bar keeps the workspace title visible and provides a separate **Workspaces**
+back action. The context panel shows that workspace's identity, node/link
+count, Replay growth, Plan outputs, output defaults, and selection management.
+Maintenance and Demo/QA are collapsed by default. Workspace creation and
+lifecycle management live on the Workspaces page rather than in a Canvas
+switcher.
 
 Use the gear at the upper right of Canvas for presentation and graph controls:
 compact or portrait cards, direction, edge weight, edge labels, hover

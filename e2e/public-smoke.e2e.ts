@@ -1,27 +1,19 @@
-import { expect, test, type Locator, type Page } from 'playwright/test';
+import { expect, test, type APIRequestContext } from 'playwright/test';
 
 type WorkspaceListResponse = {
   workspaces?: Array<{ id: string; status?: string }>;
 };
 
-async function loadDemoLineage(page: Page, button: Locator) {
-  await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).getByText('Checking media')).toHaveCount(0);
-  await expect(button).toBeEnabled();
-  let completedSeedRequests = 0;
-  const finalLineageResponse = page.waitForResponse(response => {
-    const request = response.request();
-    const path = new URL(response.url()).pathname;
-    if (request.method() === 'POST' && path === '/api/lineage-workspaces/demo/seed') {
-      if (response.ok()) completedSeedRequests += 1;
-      return false;
-    }
-    return completedSeedRequests === 1
-      && request.method() === 'GET'
-      && /^\/api\/lineage\/[^/]+$/.test(path);
+async function seedDemo(request: APIRequestContext) {
+  const response = await request.post('/api/lineage-workspaces/demo/seed', {
+    data: { confirmWrite: true, project: 'demo-project' },
   });
-  await button.click();
-  expect((await finalLineageResponse).ok()).toBe(true);
-  expect(completedSeedRequests).toBe(1);
+  expect(response.ok()).toBe(true);
+  return (await response.json()).workspace.id as string;
+}
+
+function demoCanvasPath(workspaceId: string) {
+  return `/projects/demo-project/workspaces/${encodeURIComponent(workspaceId)}`;
 }
 
 test.beforeEach(async ({ request }) => {
@@ -41,19 +33,22 @@ test('loads the public demo project and app shell', async ({ page, request }) =>
   const projectsResponse = await request.get('/api/projects');
   expect(projectsResponse.ok()).toBe(true);
 
-  const body = await projectsResponse.json() as { projects: Array<{ project: string; asset_count: number }> };
+  const body = await projectsResponse.json() as { projects: Array<{ id: string; asset_count: number }> };
   expect(body.projects).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ project: 'demo-project', asset_count: expect.any(Number) }),
+      expect.objectContaining({ id: 'demo-project', asset_count: expect.any(Number) }),
     ])
   );
 
   await page.goto('/');
-  await expect(page.getByText('Lineage').first()).toBeVisible();
+  await expect(page).toHaveURL('/projects');
+  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'About Lineage', exact: true })).toBeVisible();
 });
 
-test('exposes contextual Canvas tooling without legacy More or Actions menus', async ({ page }) => {
-  await page.goto('/');
+test('exposes contextual Canvas tooling without legacy More or Actions menus', async ({ page, request }) => {
+  const workspaceId = await seedDemo(request);
+  await page.goto(demoCanvasPath(workspaceId));
   const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
 
   await expect(canvasTools).toBeVisible();
@@ -63,8 +58,9 @@ test('exposes contextual Canvas tooling without legacy More or Actions menus', a
   await expect(page.getByText('Actions', { exact: true })).toHaveCount(0);
 });
 
-test('shows runtime channel and SQLite identity in settings', async ({ page }) => {
-  await page.goto('/');
+test('shows runtime channel and SQLite identity in settings', async ({ page, request }) => {
+  const workspaceId = await seedDemo(request);
+  await page.goto(demoCanvasPath(workspaceId));
 
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
 
@@ -79,12 +75,11 @@ test('shows runtime channel and SQLite identity in settings', async ({ page }) =
   await expect(release.getByText(/projects \/ .*workspaces/)).toBeVisible();
 });
 
-test('lets users disable lineage hover previews without disabling details', async ({ page }) => {
-  await page.goto('/');
+test('lets users disable lineage hover previews without disabling details', async ({ page, request }) => {
+  const workspaceId = await seedDemo(request);
+  await page.goto(demoCanvasPath(workspaceId));
   const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  await canvasTools.getByText('Demo/QA', { exact: true }).click();
-  await loadDemoLineage(page, canvasTools.getByRole('button', { name: 'Load demo lineage' }).first());
-  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree');
 
   await openCanvasSettings(page);
   const hoverPreviews = page.getByRole('switch', { name: 'Canvas hover previews' });
@@ -105,16 +100,12 @@ test('lets users disable lineage hover previews without disabling details', asyn
   await expect(page.getByRole('dialog', { name: 'Initial Demo Concept' })).toBeVisible();
 });
 
-test('loads the demo lineage from first-run lineage controls', async ({ page }) => {
-  await page.goto('/');
+test('loads the demo lineage at its canonical project and workspace route', async ({ page, request }) => {
+  const workspaceId = await seedDemo(request);
+  await page.goto(demoCanvasPath(workspaceId));
 
   const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  await expect(canvasTools.getByText('No workspace selected')).toBeVisible();
-  await canvasTools.getByText('Demo/QA', { exact: true }).click();
-  const loadDemo = canvasTools.getByRole('button', { name: 'Load demo lineage' }).first();
-  await loadDemoLineage(page, loadDemo);
-
-  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
   await expect(page.getByText('No workspace selected')).not.toBeVisible();
   await expect(page.locator('.lineage-scope-bar')).toHaveCount(0);
   await expect(page.locator('.lineage-selection-strip')).toHaveCount(0);
@@ -206,11 +197,12 @@ test('loads the demo lineage from first-run lineage controls', async ({ page }) 
   await expect(page.locator('#lineage-canvas-panel')).toBeVisible();
 });
 
-test('creates a lineage workspace from a catalog asset through the modal', async ({ page }) => {
-  await page.goto('/');
+test('creates a lineage workspace from its Workspaces page', async ({ page, request }) => {
+  const workspaceId = await seedDemo(request);
+  await page.goto(demoCanvasPath(workspaceId));
 
-  const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
-  await canvasTools.getByRole('button', { name: 'New lineage', exact: true }).click();
+  await page.locator('.lineage-workspace-exit').click();
+  await page.getByRole('button', { name: 'New workspace' }).click();
   const modal = page.getByRole('form', { name: 'New lineage' });
   await expect(modal).toBeVisible();
   await page.getByPlaceholder('Search by title, id, campaign, channel...').fill('meta short-form');
@@ -218,7 +210,7 @@ test('creates a lineage workspace from a catalog asset through the modal', async
   await page.getByLabel('Name').fill('Catalog e2e lineage');
   await page.getByRole('button', { name: 'Create lineage' }).click();
 
-  await expect(canvasTools.locator('.lineage-workspace-trigger strong')).toHaveText('Catalog e2e lineage');
+  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Catalog e2e lineage');
   await expect(page.getByText('Unknown indexed asset')).not.toBeVisible();
 });
 

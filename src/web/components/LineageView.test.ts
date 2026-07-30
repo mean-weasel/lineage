@@ -58,7 +58,7 @@ describe('Canvas contextual tool composition', () => {
 
     expect(source).toContain("document.getElementById('canvas-context-tools')");
     expect(source).toContain('createPortal(');
-    expect(source.indexOf('createPortal(')).toBeLessThan(source.indexOf('<div className="lineage-workbench"'));
+    expect(source.indexOf('createPortal(')).toBeLessThan(source.indexOf('data-testid="lineage-workbench"'));
     expect(viewRule).toContain('grid-template-rows: minmax(0, 1fr);');
     expect(viewRule).not.toContain('grid-template-rows: auto');
   });
