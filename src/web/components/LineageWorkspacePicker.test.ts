@@ -1,5 +1,11 @@
+// @vitest-environment jsdom
+
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
+import { vi } from 'vitest';
 import type { AgentClaimSummary, LineageWorkspace } from '../../shared/types';
+import { LineageWorkspacePicker } from './LineageWorkspacePicker';
 import { agentClaimOccupancyLabel, lineageWorkspaceClaims, lineageWorkspaceOptionLabel, lineageWorkspaceRootAssetId } from './lineageWorkspacePickerModel';
 
 const workspace: LineageWorkspace = {
@@ -61,5 +67,45 @@ describe('LineageWorkspacePicker helpers', () => {
     expect(matched.map(claim => claim.id)).toEqual(['claim_workspace']);
     expect(agentClaimOccupancyLabel(matched)).toBe('Stale claim by Ada');
     expect(JSON.stringify(matched)).not.toContain('claim_workspace.secret');
+  });
+
+  it('shows the complete project-scoped workspace list without Recent grouping or activation writes', async () => {
+    const second = { ...workspace, id: 'demo-project:lineage-workspace:second', root_asset_id: 'second', title: 'Second workspace' };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onSelect = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, claims: [], fetchedAt: '2026-07-29T00:00:00.000Z' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(createElement(LineageWorkspacePicker, {
+        activeWorkspace: workspace,
+        loading: false,
+        onArchive: vi.fn(),
+        onSelect,
+        workspaces: [workspace, second],
+      }));
+      await Promise.resolve();
+    });
+    act(() => container.querySelector<HTMLButtonElement>('.lineage-workspace-trigger')!.click());
+
+    const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+    expect(options.map(option => option.textContent)).toEqual([
+      expect.stringContaining('TikTok hook lineage'),
+      expect.stringContaining('Second workspace'),
+    ]);
+    expect(container.textContent).not.toContain('Recent');
+
+    act(() => options[1].click());
+    expect(onSelect).toHaveBeenCalledWith(second.id);
+    expect(fetchMock.mock.calls.every(([path]) => !String(path).includes('/activate'))).toBe(true);
+
+    act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
   });
 });

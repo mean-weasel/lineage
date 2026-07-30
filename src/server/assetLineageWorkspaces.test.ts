@@ -14,7 +14,9 @@ import {
   archiveDemoLineageWorkspace,
   demoSeedMediaStatus,
   downloadSwissifierRichDemoMedia,
+  ensureSwissifierRichDemoWorkspace,
   restoreDemoSeedMedia,
+  restoreSwissifierRichDemoProject,
   restoreSwissifierRichDemoMedia,
   seedDemoLineageWorkspace,
   seedSwissifierRichDemoWorkspace,
@@ -22,16 +24,27 @@ import {
 } from './assetLineageDemo';
 import {
   activateLineageWorkspace,
+  activeLineageWorkspaceRoot,
   archiveLineageWorkspace,
   createLineageWorkspace,
   inspectLineageWorkspace,
   lineageWorkspaceId,
   listLineageWorkspaces,
+  migrateLegacyLineageWorkspaces,
   updateLineageWorkspace,
 } from './assetLineageWorkspaces';
 import { registerLineageWorkspaceRoutes } from './lineageWorkspaceRoutes';
 import { fileSha256 } from './localReview';
 import { lineageDb } from './assetLineageDb';
+import {
+  deleteProject,
+  deleteWorkspace,
+  demoBootstrapSuppressed,
+  listProjectCollection,
+  planProjectDeletion,
+  planWorkspaceDeletion,
+  swissifierDemoProject,
+} from './projectWorkspaces';
 
 const scratchDir = join(repoRoot, '.asset-scratch', 'vitest-lineage-workspaces');
 const dbFile = join(scratchDir, 'asset-lineage-workspaces.sqlite');
@@ -177,7 +190,8 @@ describe('lineage workspaces', () => {
   });
 
   it('indexes catalog assets before creating a workspace through the HTTP route', async () => {
-    const catalogAsset = listAssets(defaultProject, { source: 'catalog', page: 1, pageSize: 1 }).assets[0];
+    const catalogAssets = listAssets(defaultProject, { source: 'catalog', page: 1, pageSize: 2 }).assets;
+    const [catalogAsset, siblingAsset] = catalogAssets;
     const baseUrl = appWithLineageWorkspaceRoutes();
 
     const created = await postJson<{ workspace?: { root_asset_id: string; title: string } }>(baseUrl, '/api/lineage-workspaces', {
@@ -196,11 +210,120 @@ describe('lineage workspaces', () => {
       asset_id: catalogAsset.asset_id,
       source: 'catalog',
     });
+    expect(linkLineageAssets(defaultProject, {
+      childAssetId: siblingAsset.asset_id,
+      confirmWrite: false,
+      parentAssetId: catalogAsset.asset_id,
+    })).toMatchObject({
+      dryRun: true,
+      edge: {
+        child_asset_id: siblingAsset.asset_id,
+        parent_asset_id: catalogAsset.asset_id,
+      },
+    });
+  });
+
+  it('aliases a visible local root already owned by another project without stealing the original asset', async () => {
+    const files = seedFiles();
+    seedDemoProjectCatalog();
+    indexLineageAssets(defaultProject);
+    const originalHash = fileSha256(files.rootA);
+    const baseUrl = appWithLineageWorkspaceRoutes();
+
+    const created = await postJson<{ workspace?: { root_asset_id: string; title: string } }>(baseUrl, '/api/lineage-workspaces', {
+      confirmWrite: true,
+      project: demoProject,
+      rootAssetId: files.rootAId,
+      title: 'Project-scoped local root',
+    });
+    const aliasedRoot = created.body.workspace?.root_asset_id;
+
+    expect(created.status).toBe(200);
+    expect(aliasedRoot).toBeTruthy();
+    if (!aliasedRoot) throw new Error('Expected a project-scoped root asset identity');
+    expect(aliasedRoot).not.toBe(files.rootAId);
+    expect(created.body.workspace?.title).toBe('Project-scoped local root');
+    expect(getLineageSnapshot(demoProject, aliasedRoot).nodes[0]).toMatchObject({
+      asset_id: aliasedRoot,
+      source: 'local',
+    });
+
+    const database = lineageDb();
+    expect(database.prepare('select project_id from assets where id = ?').get(files.rootAId)).toEqual({
+      project_id: defaultProject,
+    });
+    expect(database.prepare('select project_id, local_path from assets where id = ?').get(aliasedRoot)).toEqual({
+      project_id: demoProject,
+      local_path: expect.stringContaining('demo-tiktok-hook-root-a.png'),
+    });
+    database.close();
+    expect(fileSha256(files.rootA)).toBe(originalHash);
+
+    const repeated = await postJson<{ workspace?: { root_asset_id: string } }>(baseUrl, '/api/lineage-workspaces', {
+      confirmWrite: true,
+      project: demoProject,
+      rootAssetId: files.rootAId,
+      title: 'Project-scoped local root',
+    });
+    expect(repeated.status).toBe(200);
+    expect(repeated.body.workspace?.root_asset_id).toBe(aliasedRoot);
+
+    const releasedOriginal = lineageDb();
+    releasedOriginal.prepare('delete from asset_reviews where asset_id = ?').run(files.rootAId);
+    releasedOriginal.prepare('delete from assets where id = ?').run(files.rootAId);
+    releasedOriginal.close();
+    const afterOwnerDeletion = await postJson<{ workspace?: { root_asset_id: string } }>(baseUrl, '/api/lineage-workspaces', {
+      confirmWrite: true,
+      project: demoProject,
+      rootAssetId: files.rootAId,
+      title: 'Project-scoped local root',
+    });
+    expect(afterOwnerDeletion.status).toBe(200);
+    expect(afterOwnerDeletion.body.workspace?.root_asset_id).toBe(aliasedRoot);
+  });
+
+  it('creates a workspace from an existing indexed root in a catalogless SQLite project', async () => {
+    const project = 'vitest-catalogless-project';
+    const rootAssetId = 'catalogless-indexed-root';
+    const timestamp = '2026-07-29T12:00:00.000Z';
+    const database = lineageDb();
+    database.prepare(`
+      insert into projects (
+        id, product, display_name, catalog_path, catalog_state, sort_position, created_at, updated_at
+      ) values (?, ?, ?, null, 'ready', 0, ?, ?)
+    `).run(project, project, 'Catalogless project', timestamp, timestamp);
+    database.prepare(`
+      insert into assets (
+        id, project_id, source, local_path, s3_key, checksum_sha256, media_type, title, status,
+        channel, campaign, audience, size_bytes, content_type, created_at, updated_at, last_seen_at
+      ) values (?, ?, 'local', 'catalogless/root.png', null, null, 'image', 'Catalogless root',
+        'working', null, null, null, 10, 'image/png', ?, ?, ?)
+    `).run(rootAssetId, project, timestamp, timestamp, timestamp);
+    database.close();
+    const baseUrl = appWithLineageWorkspaceRoutes();
+
+    const created = await postJson<{ workspace?: { root_asset_id: string; title: string } }>(baseUrl, '/api/lineage-workspaces', {
+      confirmWrite: true,
+      project,
+      rootAssetId,
+      title: 'Catalogless workspace',
+    });
+
+    expect(created.status).toBe(200);
+    expect(created.body.workspace).toMatchObject({
+      root_asset_id: rootAssetId,
+      title: 'Catalogless workspace',
+    });
+    expect(getLineageSnapshot(project, rootAssetId).nodes[0]).toMatchObject({
+      asset_id: rootAssetId,
+      project,
+    });
   });
 
   it('seeds workspace rows from existing root-scoped selections without rewriting them', () => {
     const files = seedTwoLineages();
 
+    migrateLegacyLineageWorkspaces(defaultProject);
     const snapshot = listLineageWorkspaces(defaultProject);
 
     expect(snapshot.workspaces.map(workspace => workspace.root_asset_id).sort()).toEqual([files.rootAId, files.rootBId].sort());
@@ -228,10 +351,25 @@ describe('lineage workspaces', () => {
         created_by: 'system',
         root_asset_id: files.rootAId,
       });
+      expect(activeLineageWorkspaceRoot(defaultProject)).toBeTruthy();
 
       const verification = new DatabaseSync(dbFile, { readOnly: true });
       expect(verification.prepare('select count(*) count from lineage_workspaces').get()).toEqual({ count: 0 });
       verification.close();
+    } finally {
+      delete process.env.LINEAGE_DB_ACCESS;
+    }
+  });
+
+  it('projects legacy workspaces read-only before tombstone tables have been migrated', () => {
+    const files = seedTwoLineages();
+    const database = lineageDb();
+    database.exec('delete from lineage_workspaces; drop table deleted_lineage_workspaces');
+    database.close();
+    process.env.LINEAGE_DB_ACCESS = 'read-only';
+    try {
+      expect(listLineageWorkspaces(defaultProject).workspaces.map(workspace => workspace.root_asset_id).sort())
+        .toEqual([files.rootAId, files.rootBId].sort());
     } finally {
       delete process.env.LINEAGE_DB_ACCESS;
     }
@@ -343,6 +481,51 @@ describe('lineage workspaces', () => {
       selected: [],
       selection: null,
     });
+  });
+
+  it('keeps archived manual order and revisions stable when archive is retried', () => {
+    const files = seedTwoLineages();
+    const first = createLineageWorkspace(defaultProject, {
+      confirmWrite: true,
+      rootAssetId: files.rootAId,
+      title: 'First archived workspace',
+    }).workspace!;
+    const second = createLineageWorkspace(defaultProject, {
+      confirmWrite: true,
+      rootAssetId: files.rootBId,
+      title: 'Second archived workspace',
+    }).workspace!;
+    archiveLineageWorkspace(defaultProject, first.id, true);
+    archiveLineageWorkspace(defaultProject, second.id, true);
+
+    const beforeDatabase = lineageDb();
+    const beforeRows = beforeDatabase.prepare(`
+      select id, sort_position, revision from lineage_workspaces
+      where project_id = ? and collection_kind = 'archived'
+      order by sort_position, id
+    `).all(defaultProject);
+    const beforeRevision = beforeDatabase.prepare(`
+      select revision from workspace_collection_state
+      where project_id = ? and collection_kind = 'archived'
+    `).get(defaultProject);
+    beforeDatabase.close();
+
+    expect(archiveLineageWorkspace(defaultProject, first.id, true)).toMatchObject({
+      message: expect.stringContaining('already archived'),
+      workspace: { id: first.id, status: 'archived' },
+    });
+
+    const afterDatabase = lineageDb();
+    expect(afterDatabase.prepare(`
+      select id, sort_position, revision from lineage_workspaces
+      where project_id = ? and collection_kind = 'archived'
+      order by sort_position, id
+    `).all(defaultProject)).toEqual(beforeRows);
+    expect(afterDatabase.prepare(`
+      select revision from workspace_collection_state
+      where project_id = ? and collection_kind = 'archived'
+    `).get(defaultProject)).toEqual(beforeRevision);
+    afterDatabase.close();
   });
 
   it('seeds and archives a repeatable demo workspace', () => {
@@ -516,6 +699,152 @@ describe('lineage workspaces', () => {
       summary_updated_by: 'system',
       summary_updated_at: expect.any(String),
     });
+  });
+
+  it('bootstraps Swissifier as its own project and respects delete until explicit restore', () => {
+    const bootstrapped = ensureSwissifierRichDemoWorkspace();
+    expect(bootstrapped).toMatchObject({
+      project: { id: swissifierDemoProject, display_name: 'Swissifier Demo' },
+      workspace: {
+        project: swissifierDemoProject,
+        root_asset_id: 'local-5748fb8ba6df',
+        title: 'Swissifier rich demo',
+      },
+    });
+    expect(listProjectCollection({ pageSize: 100 }).projects).toContainEqual(
+      expect.objectContaining({ id: swissifierDemoProject, workspace_count: 1 })
+    );
+    expect(listLineageWorkspaces(defaultProject).workspaces).not.toContainEqual(
+      expect.objectContaining({ title: 'Swissifier rich demo' })
+    );
+
+    const plan = planProjectDeletion(swissifierDemoProject);
+    expect(deleteProject(swissifierDemoProject, {
+      expectedDigest: plan.digest,
+      confirmation: 'Swissifier Demo',
+      confirmWrite: true,
+    })).toMatchObject({ ok: true });
+    expect(demoBootstrapSuppressed()).toBe(true);
+    expect(ensureSwissifierRichDemoWorkspace()).toBeNull();
+    expect(listLineageWorkspaces(swissifierDemoProject).workspaces).toEqual([]);
+    expect(listProjectCollection({ pageSize: 100 }).projects).not.toContainEqual(
+      expect.objectContaining({ id: swissifierDemoProject })
+    );
+
+    const restored = restoreSwissifierRichDemoProject(true);
+    expect(restored).toMatchObject({
+      project: { id: swissifierDemoProject },
+      workspace: { project: swissifierDemoProject, title: 'Swissifier rich demo' },
+    });
+    expect(demoBootstrapSuppressed()).toBe(false);
+    expect(ensureSwissifierRichDemoWorkspace()).toMatchObject({ seeded: false });
+  });
+
+  it('copies Swissifier into its own project without deleting or rewriting a legacy workspace', () => {
+    const legacy = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+    expect(listLineageWorkspaces(defaultProject).workspaces).toContainEqual(
+      expect.objectContaining({ root_asset_id: legacy.root_asset_id })
+    );
+    const before = lineageDb();
+    const legacyEdges = before.prepare('select count(*) count from asset_edges where project_id = ?')
+      .get(defaultProject) as { count: number };
+    const legacyAssets = before.prepare('select count(*) count from assets where project_id = ?')
+      .get(defaultProject) as { count: number };
+    before.close();
+
+    const copied = ensureSwissifierRichDemoWorkspace();
+    expect(copied).toMatchObject({
+      workspace: { project: swissifierDemoProject },
+    });
+    expect(copied!.workspace!.root_asset_id).not.toBe(legacy.root_asset_id);
+    expect(listLineageWorkspaces(defaultProject).workspaces).toContainEqual(
+      expect.objectContaining({ root_asset_id: legacy.root_asset_id })
+    );
+    expect(listLineageWorkspaces(swissifierDemoProject).workspaces).toContainEqual(
+      expect.objectContaining({ root_asset_id: copied!.workspace!.root_asset_id })
+    );
+    const database = lineageDb();
+    expect(database.prepare('select count(*) count from asset_edges where project_id = ?').get(defaultProject))
+      .toEqual(legacyEdges);
+    expect(database.prepare('select count(*) count from assets where project_id = ?').get(defaultProject))
+      .toEqual(legacyAssets);
+    expect(database.prepare('pragma foreign_key_check').all()).toEqual([]);
+    database.close();
+
+    const deletionPlan = planProjectDeletion(defaultProject);
+    deleteProject(defaultProject, {
+      expectedDigest: deletionPlan.digest,
+      confirmation: deletionPlan.display_name,
+      confirmWrite: true,
+    });
+    expect(ensureSwissifierRichDemoWorkspace()).toMatchObject({
+      seeded: false,
+      workspace: { root_asset_id: copied!.workspace!.root_asset_id },
+    });
+  });
+
+  it('preserves archived and permanently deleted Swissifier workspace lifecycle state during bootstrap', () => {
+    const bootstrapped = ensureSwissifierRichDemoWorkspace();
+    const workspaceId = bootstrapped!.workspace!.id;
+    archiveLineageWorkspace(swissifierDemoProject, workspaceId, true);
+
+    expect(ensureSwissifierRichDemoWorkspace()).toMatchObject({
+      seeded: false,
+      workspace: { id: workspaceId, status: 'archived' },
+    });
+
+    const plan = planWorkspaceDeletion(swissifierDemoProject, workspaceId);
+    deleteWorkspace(swissifierDemoProject, workspaceId, {
+      expectedDigest: plan.digest,
+      confirmWrite: true,
+    });
+    expect(ensureSwissifierRichDemoWorkspace()).toMatchObject({
+      seeded: false,
+      workspace: null,
+      workspace_deleted: true,
+    });
+  });
+
+  it('keeps active legacy claims intact while creating an independent Swissifier project', () => {
+    const legacy = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+    const database = lineageDb();
+    const timestamp = '2026-07-29T12:00:00.000Z';
+    database.prepare(`
+      insert into agent_claims (
+        id, token_hash, project_id, scope_type, target_id, agent_name, agent_kind,
+        status, created_at, heartbeat_at, expires_at
+      ) values (?, ?, ?, 'lineage_workspace', ?, 'migration-test', 'codex',
+        'active', ?, ?, '2099-01-01T00:00:00.000Z')
+    `).run('migration-claim', 'migration-token', defaultProject, legacy.workspace!.id, timestamp, timestamp);
+    database.close();
+
+    expect(ensureSwissifierRichDemoWorkspace()).toMatchObject({
+      project: { id: swissifierDemoProject },
+      workspace: { project: swissifierDemoProject },
+    });
+    expect(listLineageWorkspaces(defaultProject).workspaces).toContainEqual(
+      expect.objectContaining({ id: legacy.workspace!.id })
+    );
+    const verification = lineageDb();
+    expect(verification.prepare("select status from agent_claims where id = 'migration-claim'").get())
+      .toEqual({ status: 'active' });
+    verification.close();
+  });
+
+  it('preserves project metadata while reconciling legacy workspaces', () => {
+    seedDemoLineageWorkspace(defaultProject, { confirmWrite: true });
+    const database = lineageDb();
+    const sentinel = '2020-01-02T03:04:05.000Z';
+    database.prepare('update projects set product = ?, updated_at = ? where id = ?')
+      .run('Catalog product label', sentinel, defaultProject);
+    database.close();
+
+    listLineageWorkspaces(defaultProject);
+
+    const verification = lineageDb();
+    expect(verification.prepare('select product, updated_at from projects where id = ?').get(defaultProject))
+      .toEqual({ product: 'Catalog product label', updated_at: sentinel });
+    verification.close();
   });
 
   it('reports Swissifier media status and requires an optional source to restore it', () => {

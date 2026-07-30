@@ -179,6 +179,14 @@
   min-width: 0;
 }
 
+.context-project-name {
+  overflow: hidden;
+  color: #24424b;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .asset-filter-section > div {
   display: grid;
   gap: 11px;

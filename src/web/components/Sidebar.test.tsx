@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ProjectWorkspaceSummary } from '../../shared/projectWorkspaceTypes';
 import type { LineageRuntimeInfo } from '../../shared/runtimeInfoTypes';
 import { Sidebar } from './Sidebar';
 
@@ -25,10 +26,12 @@ describe('Sidebar', () => {
     root = null;
   });
 
-  it('keeps project and asset filters in the contextual panel for asset views', () => {
+  it('keeps project identity and asset filters in the contextual panel for asset views', () => {
     renderSidebar('assets');
 
-    expect(select('Project').value).toBe('demo-project');
+    expect(text()).toContain('Demo Project');
+    expect(selectOrNull('Project')).toBeNull();
+    expect(buttonWithText('View project overview')).not.toBeNull();
     expect(select('Source').value).toBe('local');
     expect(select('Status').value).toBe('all');
     expect(select('Channel').value).toBe('all');
@@ -51,7 +54,8 @@ describe('Sidebar', () => {
   it('keeps asset filters out of Canvas context', () => {
     renderSidebar('lineage');
 
-    expect(selectOrNull('Project')).not.toBeNull();
+    expect(selectOrNull('Project')).toBeNull();
+    expect(text()).toContain('Demo Project');
     expect(container!.querySelector('#canvas-context-tools')?.getAttribute('aria-label')).toBe('Canvas workspace tools');
     expect(selectOrNull('Source')).toBeNull();
     expect(selectOrNull('Status')).toBeNull();
@@ -68,7 +72,7 @@ describe('Sidebar', () => {
   it('renders every destination directly with Canvas selected', () => {
     renderSidebar('lineage');
 
-    const labels = ['Canvas', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
+    const labels = ['Projects', 'Canvas', 'Assets', 'Content batches', 'Review', 'Backup queue', 'Agents', 'Ledger', 'Settings'];
     for (const label of labels) expect(buttonByLabel(label)).not.toBeNull();
     expect(buttonByLabel('Canvas')?.getAttribute('aria-current')).toBe('page');
     expect(text()).not.toContain('More');
@@ -111,6 +115,16 @@ describe('Sidebar', () => {
     expect(mobileDestinations?.textContent).toContain('Backup queue');
     expect(mobileDestinations?.textContent).toContain('Settings');
     expect(mobileDestinations?.textContent).toContain('Create or upload');
+  });
+
+  it('disables project-scoped destinations when no project exists', () => {
+    renderSidebar('lineage', { project: '', projects: [], surface: 'projects' });
+
+    expect(buttonByLabel('Projects')?.disabled).toBe(false);
+    expect(buttonByLabel('Canvas')?.disabled).toBe(true);
+    expect(buttonByLabel('Assets')?.disabled).toBe(true);
+    expect(buttonByLabel('Create or upload')?.disabled).toBe(true);
+    expect(buttonByLabel('Settings')?.disabled).toBe(true);
   });
 
   it('keeps the exact runtime and environment identity reachable in the mobile drawer only at the responsive breakpoint', () => {
@@ -174,7 +188,10 @@ function renderSidebar(
     onContextOpenChange?: (open: boolean) => void;
     onMobileContextOpenChange?: (open: boolean) => void;
     mobileContextOpen?: boolean;
+    project?: string;
+    projects?: ProjectWorkspaceSummary[];
     runtime?: LineageRuntimeInfo;
+    surface?: 'projects' | 'project' | 'studio';
   } = {}
 ) {
   act(() => {
@@ -187,15 +204,23 @@ function renderSidebar(
         onContextOpenChange={overrides.onContextOpenChange || vi.fn()}
         onMobileContextOpenChange={overrides.onMobileContextOpenChange || vi.fn()}
         placementStatus="all"
-        project="demo-project"
-        projects={[{
-          project: 'demo-project',
+        project={overrides.project ?? 'demo-project'}
+        projects={overrides.projects ?? [{
+          id: 'demo-project',
+          display_name: 'Demo Project',
           product: 'demo-project',
-          catalogPath: 'catalog.json',
-          default_bucket: 'lineage-demo-assets',
-          default_region: 'us-east-1',
+          catalog_path: 'catalog.json',
+          catalog_state: 'ready',
+          sort_position: 0,
           asset_count: 29,
+          workspace_count: 2,
+          created_at: '2026-07-29T00:00:00.000Z',
+          updated_at: '2026-07-29T00:00:00.000Z',
         }]}
+        surface={overrides.surface || 'studio'}
+        onProjects={vi.fn()}
+        onProjectOverview={vi.fn()}
+        onStudio={vi.fn()}
         setChannel={vi.fn()}
         setPlacementStatus={vi.fn()}
         setProject={vi.fn()}
@@ -231,6 +256,11 @@ function selectOrNull(label: string): HTMLSelectElement | null {
 function buttonByLabel(label: string): HTMLButtonElement | null {
   return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
     .find(item => item.getAttribute('aria-label') === label) || null;
+}
+
+function buttonWithText(label: string): HTMLButtonElement | null {
+  return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
+    .find(item => item.textContent === label) || null;
 }
 
 function text(): string {

@@ -6,6 +6,7 @@ import './LineageView.css';
 import './LineageFocus.css';
 import type { AgentClaimsResponse, AgentClaimSummary, AssetReviewState, GrowthAsset, LineageAttempt, LineageAttemptPromotionResponse, LineageAttemptsResponse, LineageBriefResponse, LineageEdgeSummaryMutationResponse, LineageIndexSummary, LineageNode, LineageSnapshot } from '../../shared/types';
 import type { GenerationJob, GenerationJobListResponse } from '../../shared/generationTypes';
+import type { LineageWorkspace } from '../../shared/lineageWorkspaceTypes';
 import { api, ApiError } from '../api';
 import {
   readHoverPreviewsEnabled,
@@ -71,8 +72,28 @@ const branchMotionDuration = {
   exiting: 210,
 } as const;
 
-export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, onToast }: {
-  asset?: GrowthAsset; onAssetsChanged?: () => Promise<void> | void; project: string; onSelectedAsset: (assetId: string) => void; onToast: (type: 'ok' | 'error', message: string) => void;
+export function LineageView({
+  asset,
+  newWorkspaceRequest,
+  onAssetsChanged,
+  onNewWorkspaceCancelled,
+  onSelectedAsset,
+  onToast,
+  onWorkspaceChange,
+  onWorkspaceUnavailable,
+  project,
+  workspaceId,
+}: {
+  asset?: GrowthAsset;
+  newWorkspaceRequest?: number;
+  onAssetsChanged?: () => Promise<void> | void;
+  onNewWorkspaceCancelled: () => void;
+  onSelectedAsset: (assetId: string) => void;
+  onToast: (type: 'ok' | 'error', message: string) => void;
+  onWorkspaceChange: (workspace: LineageWorkspace | null) => void;
+  onWorkspaceUnavailable: (message: string) => void;
+  project: string;
+  workspaceId: string | null;
 }) {
   const [canvasPresentation, setCanvasPresentation] = useState<LineageCanvasPresentation>(() =>
     lineageCanvasPresentationFromSearch(
@@ -100,6 +121,7 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   const [selectionNote, setSelectionNote] = useState('');
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
+  const [externalNewWorkspaceOpen, setExternalNewWorkspaceOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<'settings' | 'selection' | 'asset' | null>(null);
   const [settingsHintVisible, setSettingsHintVisible] = useState(() => !readCanvasSettingsHintDismissed());
   const [canvasToolsHost, setCanvasToolsHost] = useState<HTMLElement | null>(null);
@@ -279,7 +301,16 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
     visibleWorkspaces,
     workspaceLoading,
     workspaceRootAssetId,
-  } = useLineageWorkspaces({ asset, onResetLineage: resetLineage, onSelectedAsset, onToast, project });
+  } = useLineageWorkspaces({
+    asset,
+    onResetLineage: resetLineage,
+    onSelectedAsset,
+    onToast,
+    onWorkspaceChange,
+    onWorkspaceUnavailable,
+    project,
+    workspaceId,
+  });
   workspaceRootRef.current = workspaceRootAssetId;
   useEffect(() => { void refreshDemoSeedStatus(); }, [refreshDemoSeedStatus]);
   const refresh = useCallback(async (options: { quiet?: boolean; rootAssetId?: string } = {}) => {
@@ -883,7 +914,13 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
   useEffect(() => {
     resetLineage();
     setWorkspaceProgress(null);
-  }, [project, resetLineage]);
+  }, [project, resetLineage, workspaceId]);
+
+  useEffect(() => {
+    if (!newWorkspaceRequest) return;
+    setExternalNewWorkspaceOpen(true);
+    setNewLineageOpen(true);
+  }, [newWorkspaceRequest]);
 
   useEffect(() => {
     setCanvasToolsHost(document.getElementById('canvas-context-tools'));
@@ -1137,7 +1174,23 @@ export function LineageView({ asset, onAssetsChanged, project, onSelectedAsset, 
           returnFocus={edgeEditor.returnFocus}
         />
       )}
-      <LineageNewWorkspaceModal onClose={() => setNewLineageOpen(false)} onCreated={handleWorkspaceCreated} onToast={onToast} open={newLineageOpen} project={project} />
+      <LineageNewWorkspaceModal
+        onClose={() => {
+          setNewLineageOpen(false);
+          if (externalNewWorkspaceOpen) {
+            setExternalNewWorkspaceOpen(false);
+            onNewWorkspaceCancelled();
+          }
+        }}
+        onCreated={workspace => {
+          setExternalNewWorkspaceOpen(false);
+          setNewLineageOpen(false);
+          handleWorkspaceCreated(workspace);
+        }}
+        onToast={onToast}
+        open={newLineageOpen}
+        project={project}
+      />
     </section>
   );
 }

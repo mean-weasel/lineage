@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test, type Locator, type Page } from 'playwright/test';
 
-const project = 'demo-project';
+const project = 'swissifier-demo';
 const rootId = 'local-5748fb8ba6df';
 const posterId = 'local-befe299c503d';
 const drillId = 'local-2e102785131f';
@@ -31,10 +31,12 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
   });
   expect(seed.ok()).toBe(true);
   const seeded = await seed.json() as { workspace?: { id: string } };
+  const workspaceId = seeded.workspace?.id;
+  if (!workspaceId) throw new Error('Swissifier seed did not return an exact workspace ID');
   seedIsolatedEdgeSummaries();
 
   try {
-    await page.goto('/');
+    await page.goto(`/projects/${project}/workspaces/${encodeURIComponent(workspaceId)}`);
     await expect(page.getByRole('region', { name: 'Canvas workspace tools' }).locator('.lineage-workspace-trigger strong')).toHaveText('Swissifier rich demo', { timeout: 20_000 });
 
     const posterEdge = page.locator('.react-flow__edge').filter({ has: page.locator('.react-flow__edge-text', { hasText: 'Poster focus' }) });
@@ -156,11 +158,10 @@ test('shows and safely edits accessible edge summaries in every direction', asyn
     await expect(page.locator('.lineage-canvas')).toHaveClass(/focus-active/);
     await expect(page.getByTestId('lineage-canvas-status')).toHaveCount(0);
   } finally {
-    if (seeded.workspace?.id) {
-      await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}/archive`, {
-        data: { project, confirmWrite: true },
-      });
-    }
+    const restored = await request.post('/api/lineage-workspaces/demo/swissifier/seed', {
+      data: { activate: false, confirmWrite: true, project },
+    });
+    expect(restored.ok(), await restored.text()).toBe(true);
   }
 });
 
@@ -217,6 +218,9 @@ async function submitEdgeSummary(page: Page, buttonName: 'Save label' | 'Clear l
   ));
   await page.getByRole('button', { name: buttonName }).click();
   expect((await response).status()).toBe(status);
+  if (status === 200) {
+    await expect(page.getByRole('dialog', { name: 'Edit edge label' })).toBeHidden();
+  }
 }
 
 function readEdgeSummary(edgeId: string): { summary: string | null; summary_created_by: string | null; summary_updated_by: string | null; summary_updated_at: string | null } {

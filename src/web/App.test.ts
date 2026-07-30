@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { shouldRevealCopiedText } from './copyFallback';
+import { availableProjectSelection, projectFor, projectRouteIsUnavailable } from './projectWorkspaceNavigation';
 
 describe('shouldRevealCopiedText', () => {
   it('reveals agent handoff commands as a visible fallback', () => {
@@ -35,6 +36,19 @@ describe('shouldRevealCopiedText', () => {
     expect(source).not.toContain("method: 'POST'");
   });
 
+  it('opens agent work only through a canonical destination', () => {
+    const source = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
+    const start = source.indexOf('async function openAgentWork');
+    const end = source.indexOf('function toggleLocalBackup', start);
+    const handoff = source.slice(start, end);
+
+    expect(handoff).toContain("if (!target.workspaceId)");
+    expect(handoff).toContain('is not linked to an exact Canvas workspace');
+    expect(handoff).toContain("navigate({ kind: 'canvas', projectId: target.claim.project, workspaceId: target.workspaceId })");
+    expect(handoff).toContain("navigate({ kind: 'studio', projectId: target.claim.project, view: target.view })");
+    expect(handoff).not.toContain('setView(target.view)');
+  });
+
   it('composes the rail and contextual utilities outside the workspace', () => {
     const source = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
     const sidebarStart = source.indexOf('<Sidebar');
@@ -48,5 +62,31 @@ describe('shouldRevealCopiedText', () => {
     expect(source).toContain('mobile-context-open');
     expect(source).not.toContain('CurrentWorkTarget');
     expect(source).not.toContain('Agent context');
+  });
+
+  it('does not preload a catalog while the lineage canvas owns the workspace surface', () => {
+    const source = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
+
+    expect(source).toContain("return surface === 'studio' && view !== 'lineage'");
+    expect(source).toContain('if (shouldRefreshAssetLibrary(surface, view)) void refresh()');
+  });
+
+  it('starts Projects without a phantom default and replaces deleted selections deterministically', () => {
+    const projects = [
+      { id: 'survivor' },
+      { id: 'second' },
+    ] as Parameters<typeof availableProjectSelection>[1];
+
+    expect(projectFor({ kind: 'projects' })).toBe('');
+    expect(availableProjectSelection('deleted-project', projects)).toBe('survivor');
+    expect(availableProjectSelection('second', projects)).toBe('second');
+    expect(availableProjectSelection('deleted-project', [])).toBe('');
+    expect(projectRouteIsUnavailable({ kind: 'project', projectId: 'deleted-project' }, projects)).toBe(true);
+    expect(projectRouteIsUnavailable({ kind: 'project', projectId: 'survivor' }, projects)).toBe(false);
+    const source = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
+    expect(source).toContain("`/api/projects/${encodeURIComponent(unavailableProject)}`");
+    expect(source).toContain('availableProjects = [...result.projects, detail.project]');
+    expect(source).toContain('setProjects(current => rememberProjectSummary(current, demoProject))');
+    expect(source).toContain('setProjects(current => rememberProjectSummary(current, nextProject))');
   });
 });

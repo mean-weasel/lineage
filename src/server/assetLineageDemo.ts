@@ -7,7 +7,12 @@ import { requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, packageRoot, repoRoot } from './assetCore';
 import { linkLineageAssets, updateLineageLayout, updateSelectedAsset } from './assetLineage';
 import { lineageDb, nowIso } from './assetLineageDb';
-import { archiveLineageWorkspace, createLineageWorkspace, isLineageWorkspaceError, lineageWorkspaceId } from './assetLineageWorkspaces';
+import { archiveLineageWorkspace, createLineageWorkspace, isLineageWorkspaceError, lineageWorkspaceId, listLineageWorkspaces } from './assetLineageWorkspaces';
+import {
+  ensureSwissifierDemoProject,
+  restoreSwissifierDemoProjectDefinition,
+  swissifierDemoProject,
+} from './projectWorkspaces';
 import { fileSha256 } from './localReview';
 
 const demoWorkspaceTitle = 'Demo: Content iteration tree';
@@ -28,6 +33,7 @@ interface SwissifierManifestAsset {
 }
 
 interface SwissifierManifestRerollAttempt {
+  asset_id?: string;
   node_asset_id: string;
   file: string;
   title: string;
@@ -111,6 +117,123 @@ function demoFilePath(project: string, asset: typeof demoAssets[number]): string
 
 function swissifierManifest(): SwissifierManifest {
   return JSON.parse(readFileSync(swissifierManifestPath, 'utf8')) as SwissifierManifest;
+}
+
+function projectScopedDemoAssetId(project: string, assetId: string): string {
+  const database = lineageDb();
+  try {
+    const owner = database.prepare('select project_id from assets where id = ?')
+      .get(assetId) as { project_id: string } | undefined;
+    const suffix = createHash('sha256').update(`${project}\0${assetId}`).digest('hex').slice(0, 16);
+    const alias = `${assetId}--${suffix}`;
+    const aliasOwner = database.prepare('select project_id from assets where id = ?')
+      .get(alias) as { project_id: string } | undefined;
+    if (owner?.project_id === project) return assetId;
+    if (aliasOwner?.project_id === project) return alias;
+    if (aliasOwner && aliasOwner.project_id !== project) {
+      throw new Error(`Project-scoped Swissifier asset identity collision for ${assetId}`);
+    }
+    return owner ? alias : assetId;
+  } finally {
+    database.close();
+  }
+}
+
+function projectScopedSwissifierManifest(project: string, source = swissifierManifest()): SwissifierManifest {
+  if (project !== swissifierDemoProject) return source;
+  const assetIds = new Map(source.assets.map(asset => [
+    asset.asset_id,
+    projectScopedDemoAssetId(project, asset.asset_id),
+  ]));
+  const mapped = (assetId: string) => assetIds.get(assetId) || projectScopedDemoAssetId(project, assetId);
+  return {
+    ...source,
+    root_asset_id: mapped(source.root_asset_id),
+    selected_asset_ids: source.selected_asset_ids.map(mapped),
+    assets: source.assets.map(asset => ({ ...asset, asset_id: mapped(asset.asset_id) })),
+    edges: source.edges.map(edge => ({
+      ...edge,
+      parent: mapped(edge.parent),
+      child: mapped(edge.child),
+    })),
+    reroll_attempts: source.reroll_attempts?.map(attempt => ({
+      ...attempt,
+      asset_id: projectScopedDemoAssetId(project, `local-${attempt.checksum_sha256.slice(0, 12)}`),
+      node_asset_id: mapped(attempt.node_asset_id),
+    })),
+  };
+}
+
+export function swissifierRichDemoRootAssetId(project?: string): string {
+  const manifest = swissifierManifest();
+  return project ? projectScopedSwissifierManifest(project, manifest).root_asset_id : manifest.root_asset_id;
+}
+
+export function ensureSwissifierRichDemoWorkspace() {
+  const project = ensureSwissifierDemoProject();
+  if (!project) return null;
+  const manifest = projectScopedSwissifierManifest(swissifierDemoProject);
+  const existing = listLineageWorkspaces(swissifierDemoProject).workspaces
+    .find(workspace => workspace.root_asset_id === manifest.root_asset_id);
+  if (existing) {
+    return {
+      ok: true as const,
+      message: `Using ${manifest.title}`,
+      demo_id: manifest.id,
+      root_asset_id: manifest.root_asset_id,
+      workspace: existing,
+      project,
+      seeded: false,
+    };
+  }
+  const database = lineageDb();
+  try {
+    const deleted = database.prepare(`
+      select 1 from deleted_lineage_workspaces where project_id = ? and root_asset_id = ?
+    `).get(swissifierDemoProject, manifest.root_asset_id);
+    if (deleted) {
+      return {
+        ok: true as const,
+        message: 'Swissifier rich demo workspace remains permanently deleted',
+        demo_id: manifest.id,
+        root_asset_id: manifest.root_asset_id,
+        workspace: null,
+        project,
+        seeded: false,
+        workspace_deleted: true as const,
+      };
+    }
+  } finally {
+    database.close();
+  }
+  const seeded = seedSwissifierRichDemoWorkspace(swissifierDemoProject, {
+    activate: false,
+    confirmWrite: true,
+  });
+  return { ...seeded, project, seeded: true };
+}
+
+export function restoreSwissifierRichDemoProject(confirmWrite: boolean) {
+  if (!confirmWrite) {
+    return {
+      ok: true as const,
+      dryRun: true as const,
+      project: swissifierDemoProject,
+      root_asset_id: swissifierRichDemoRootAssetId(swissifierDemoProject),
+    };
+  }
+  restoreSwissifierDemoProjectDefinition(true);
+  const restored = ensureSwissifierRichDemoWorkspace();
+  if (!restored?.workspace) {
+    const reason = restored && 'migration_deferred' in restored && restored.migration_deferred
+      ? restored.message
+      : 'Swissifier Demo restore did not produce a workspace';
+    throw new Error(reason);
+  }
+  return {
+    ...restored,
+    message: 'Restored Swissifier Demo project',
+  };
 }
 
 function swissifierRelativePath(manifest: SwissifierManifest, asset: SwissifierManifestAsset): string {
@@ -459,8 +582,9 @@ function swissifierRerollAsset(attempt: SwissifierManifestRerollAttempt) {
   if (body.length !== attempt.size_bytes) throw new Error(`Unexpected Swissifier re-roll fixture size for ${attempt.file}`);
   const checksumSha256 = sha256Hex(body);
   if (checksumSha256 !== attempt.checksum_sha256) throw new Error(`Checksum mismatch for Swissifier re-roll fixture: ${attempt.file}`);
+  const sourceAssetId = `local-${checksumSha256.slice(0, 12)}`;
   return {
-    assetId: `local-${checksumSha256.slice(0, 12)}`,
+    assetId: attempt.asset_id || sourceAssetId,
     checksumSha256,
     sizeBytes: body.length,
   };
@@ -728,7 +852,7 @@ export function seedDemoLineageWorkspace(project: string, fields: { activate?: b
 }
 
 export function seedSwissifierRichDemoWorkspace(project: string, fields: { activate?: boolean; confirmWrite: boolean }) {
-  const manifest = swissifierManifest();
+  const manifest = projectScopedSwissifierManifest(project);
   if (!fields.confirmWrite) {
     return {
       ok: true as const,
