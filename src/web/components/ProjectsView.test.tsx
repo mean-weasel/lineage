@@ -3,7 +3,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LineageWorkspace } from '../../shared/lineageWorkspaceTypes';
 import type { ProjectWorkspaceSummary } from '../../shared/projectWorkspaceTypes';
 import { ProjectsView } from './ProjectsView';
 
@@ -18,9 +17,6 @@ describe('ProjectsView', () => {
     root = createRoot(container);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === '/api/projects/reorder') return response({ ok: true });
-      if (String(input) === '/api/projects/demo/swissifier/entry') {
-        return response({ ok: true, project: snapshot.projects[0], workspace: demoWorkspace });
-      }
       return response(snapshot);
     }));
   });
@@ -37,11 +33,12 @@ describe('ProjectsView', () => {
 
     expect(headings()).toEqual(['Swissifier Demo', 'Summer Launch']);
     expect(container.textContent).toContain('Page 1 of 2');
-    expect(button('Open demo')).toBeTruthy();
-
-    act(() => ariaButton('Show projects as a list').click());
-    expect(headings()).toEqual(['Swissifier Demo', 'Summer Launch']);
+    expect(button('Open project')).toBeTruthy();
     expect(container.querySelector('[data-presentation="list"]')).not.toBeNull();
+
+    act(() => ariaButton('Show projects as cards').click());
+    expect(headings()).toEqual(['Swissifier Demo', 'Summer Launch']);
+    expect(container.querySelector('[data-presentation="cards"]')).not.toBeNull();
   });
 
   it('opens the selected project without forcing Canvas', async () => {
@@ -49,62 +46,32 @@ describe('ProjectsView', () => {
     render({ onOpenProject });
     await act(settle);
 
-    act(() => button('Open project').click());
+    const summer = Array.from(container.querySelectorAll<HTMLElement>('.organization-item'))
+      .find(item => item.textContent?.includes('Summer Launch'))!;
+    act(() => Array.from(summer.querySelectorAll<HTMLButtonElement>('button'))
+      .find(item => item.textContent?.includes('Open project'))!.click());
     expect(onOpenProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'summer-launch' }));
   });
 
-  it('opens Swissifier directly into its populated workspace', async () => {
-    const onOpenDemo = vi.fn();
-    render({ onOpenDemo });
-    await act(settle);
-
-    await act(async () => {
-      button('Open demo').click();
-      await settle();
-    });
-    expect(onOpenDemo).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'swissifier-demo' }),
-      expect.objectContaining({ id: demoWorkspace.id, root_asset_id: demoWorkspace.root_asset_id })
-    );
-  });
-
-  it('opens Swissifier project overview when its only workspace is archived', async () => {
+  it('opens Swissifier at its workspace list rather than bypassing the project overview', async () => {
     const onOpenProject = vi.fn();
-    const onToast = vi.fn();
-    vi.mocked(fetch).mockImplementation(async input => {
-      if (String(input) === '/api/projects/demo/swissifier/entry') {
-        return { ok: false, status: 404, json: async () => ({ message: 'No open demo workspace' }) } as Response;
-      }
-      return response(snapshot);
-    });
-    act(() => root.render(
-      <ProjectsView
-        onOpenDemo={vi.fn()}
-        onOpenProject={onOpenProject}
-        onProjectDeleted={vi.fn()}
-        onToast={onToast}
-      />
-    ));
+    render({ onOpenProject });
     await act(settle);
 
-    await act(async () => {
-      button('Open demo').click();
-      await settle();
-    });
-
+    const swissifier = Array.from(container.querySelectorAll<HTMLElement>('.ordered-collection-item'))
+      .find(item => item.textContent?.includes('Swissifier Demo'))!;
+    act(() => swissifier.querySelector('h2')!.click());
     expect(onOpenProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'swissifier-demo' }));
-    expect(onToast).toHaveBeenCalledWith('ok', expect.stringContaining('restore an archived workspace'));
   });
 
   it('requires an explicit restore after Swissifier was deleted', async () => {
-    const onOpenDemo = vi.fn();
+    const onOpenProject = vi.fn();
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       if (String(input) === '/api/projects/demo/swissifier/restore' && init?.method === 'POST') {
         return response({
           ok: true,
           message: 'Restored Swissifier Demo project',
           project: snapshot.projects[0],
-          workspace: demoWorkspace,
         });
       }
       return response({
@@ -113,7 +80,7 @@ describe('ProjectsView', () => {
         demo_restore_available: true,
       });
     });
-    render({ onOpenDemo });
+    render({ onOpenProject });
     await act(settle);
 
     expect(container.textContent).toContain('Swissifier Demo is hidden');
@@ -126,7 +93,7 @@ describe('ProjectsView', () => {
       method: 'POST',
       body: JSON.stringify({ confirmWrite: true }),
     }));
-    expect(onOpenDemo).toHaveBeenCalledWith(expect.objectContaining({ id: 'swissifier-demo' }), demoWorkspace);
+    expect(onOpenProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'swissifier-demo' }));
   });
 
   it('writes deterministic absolute position with the observed manual revision', async () => {
@@ -288,13 +255,11 @@ describe('ProjectsView', () => {
 });
 
 function render(overrides: {
-  onOpenDemo?: (project: ProjectWorkspaceSummary, workspace: LineageWorkspace) => void;
   onOpenProject?: (project: ProjectWorkspaceSummary) => void;
   onProjectDeleted?: (projectId: string) => void;
 } = {}) {
   act(() => root.render(
     <ProjectsView
-      onOpenDemo={overrides.onOpenDemo || vi.fn()}
       onOpenProject={overrides.onOpenProject || vi.fn()}
       onProjectDeleted={overrides.onProjectDeleted || vi.fn()}
       onToast={vi.fn()}
@@ -359,15 +324,4 @@ const snapshot = {
   reorder_enabled: true,
   sort: 'manual',
   fetched_at: '2026-07-29T00:00:00.000Z',
-};
-
-const demoWorkspace: LineageWorkspace = {
-  id: 'swissifier-demo:lineage-workspace:root',
-  project: 'swissifier-demo',
-  root_asset_id: 'local-5748fb8ba6df',
-  title: 'Swissifier rich demo',
-  status: 'active',
-  created_by: 'system',
-  created_at: '2026-07-29T00:00:00.000Z',
-  updated_at: '2026-07-29T00:00:00.000Z',
 };

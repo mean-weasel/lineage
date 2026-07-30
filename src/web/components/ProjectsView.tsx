@@ -10,13 +10,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LineageWorkspace } from '../../shared/lineageWorkspaceTypes';
 import type {
   CollectionSort,
   ProjectCollectionSnapshot,
   ProjectWorkspaceSummary,
 } from '../../shared/projectWorkspaceTypes';
-import { api, ApiError } from '../api';
+import { api } from '../api';
 import {
   PROJECTS_PRESENTATION_KEY,
   readCollectionPresentation,
@@ -33,7 +32,6 @@ import {
 import './ProjectsView.css';
 
 export function ProjectsView(props: {
-  onOpenDemo: (project: ProjectWorkspaceSummary, workspace: LineageWorkspace) => void;
   onOpenProject: (project: ProjectWorkspaceSummary) => void;
   onProjectDeleted: (projectId: string) => void;
   onToast: (type: 'ok' | 'error', message: string) => void;
@@ -123,28 +121,10 @@ export function ProjectsView(props: {
     }
   }
 
-  async function openDemo(project: ProjectWorkspaceSummary) {
-    setDemoBusy(true);
-    try {
-      const result = await api<{ project: ProjectWorkspaceSummary; workspace: LineageWorkspace }>('/api/projects/demo/swissifier/entry');
-      props.onOpenDemo(result.project, result.workspace);
-    } catch (nextError) {
-      if (nextError instanceof ApiError && nextError.status === 404) {
-        props.onToast('ok', 'No open demo workspace. Opened the project so you can restore an archived workspace.');
-        props.onOpenProject(project);
-        return;
-      }
-      props.onToast('error', nextError instanceof Error ? nextError.message : String(nextError));
-      await load();
-    } finally {
-      setDemoBusy(false);
-    }
-  }
-
   async function restoreDemo() {
     setDemoBusy(true);
     try {
-      const result = await api<{ project: ProjectWorkspaceSummary; workspace: LineageWorkspace; message: string }>(
+      const result = await api<{ project: ProjectWorkspaceSummary; message: string }>(
         '/api/projects/demo/swissifier/restore',
         {
           method: 'POST',
@@ -153,7 +133,7 @@ export function ProjectsView(props: {
         }
       );
       props.onToast('ok', result.message);
-      props.onOpenDemo(result.project, result.workspace);
+      props.onOpenProject(result.project);
     } catch (nextError) {
       props.onToast('error', nextError instanceof Error ? nextError.message : String(nextError));
       await load();
@@ -256,17 +236,17 @@ export function ProjectsView(props: {
           itemLabel={item => item.display_name}
           items={snapshot?.projects || []}
           onMove={moveProject}
+          onOpen={props.onOpenProject}
           page={snapshot?.pagination.page || page}
           pageSize={snapshot?.pagination.pageSize || pageSize}
           presentation={presentation}
           renderItem={item => (
             <ProjectItem
-              busy={demoBusy && item.id === 'swissifier-demo'}
               onDelete={event => {
                 deleteButtonRef.current = event.currentTarget;
                 setDeleteProject(item);
               }}
-              onOpen={() => item.id === 'swissifier-demo' ? void openDemo(item) : props.onOpenProject(item)}
+              onOpen={() => props.onOpenProject(item)}
               project={item}
             />
           )}
@@ -319,7 +299,6 @@ export function ProjectsView(props: {
 }
 
 function ProjectItem(props: {
-  busy: boolean;
   onDelete: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onOpen: () => void;
   project: ProjectWorkspaceSummary;
@@ -346,9 +325,7 @@ function ProjectItem(props: {
       </div>
       <footer className="organization-item-actions">
         <button className="secondary-button organization-delete-action" onClick={props.onDelete} type="button"><Trash2 size={15} />Delete</button>
-        <button className="primary-button" disabled={props.busy} onClick={props.onOpen} type="button">
-          {props.busy ? 'Opening…' : demo ? 'Open demo' : 'Open project'}
-        </button>
+        <button className="primary-button" onClick={props.onOpen} type="button">Open project</button>
       </footer>
     </div>
   );

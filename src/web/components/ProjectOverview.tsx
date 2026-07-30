@@ -266,6 +266,9 @@ export function ProjectOverview(props: {
           itemLabel={item => item.title}
           items={snapshot?.workspaces || []}
           onMove={moveWorkspace}
+          onOpen={collection === 'open'
+            ? workspace => props.onOpenCanvas(props.projectId, workspace)
+            : undefined}
           page={snapshot?.pagination.page || page}
           pageSize={snapshot?.pagination.pageSize || pageSize}
           presentation={presentation}

@@ -30,11 +30,12 @@ export function readCollectionPresentation(
   key: typeof PROJECTS_PRESENTATION_KEY | typeof WORKSPACES_PRESENTATION_KEY,
   storage: Pick<Storage, 'getItem'> | null = browserStorage()
 ): CollectionPresentationPreference {
-  if (!storage) return 'cards';
+  if (!storage) return 'list';
   try {
-    return storage.getItem(key) === 'list' ? 'list' : 'cards';
+    const stored = storage.getItem(key);
+    return stored === 'cards' ? 'cards' : 'list';
   } catch {
-    return 'cards';
+    return 'list';
   }
 }
 

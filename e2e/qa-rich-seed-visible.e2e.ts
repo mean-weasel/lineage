@@ -17,7 +17,9 @@ test('QA seed shows truthful progress and rich PNG previews in the first lineage
   await page.setViewportSize({ height: 640, width: 1024 });
   await page.goto('/projects');
   const swissifier = page.locator('.organization-item').filter({ hasText: 'swissifier-demo' });
-  await swissifier.getByRole('button', { name: 'Open demo' }).click();
+  await swissifier.getByRole('heading', { name: 'Swissifier Demo' }).click();
+  const richWorkspace = page.locator('.organization-item').filter({ hasText: richWorkspaceTitle });
+  await richWorkspace.getByRole('heading', { name: richWorkspaceTitle }).click();
   const canvasTools = page.getByRole('region', { name: 'Canvas workspace tools' });
   const demoTools = canvasTools.locator('.lineage-tool-section').filter({ has: page.locator('summary', { hasText: 'Demo/QA' }) });
   await demoTools.locator('summary').click();

@@ -86,7 +86,7 @@ describe('shouldRevealCopiedText', () => {
     const source = readFileSync(join(process.cwd(), 'src/web/App.tsx'), 'utf8');
     expect(source).toContain("`/api/projects/${encodeURIComponent(unavailableProject)}`");
     expect(source).toContain('availableProjects = [...result.projects, detail.project]');
-    expect(source).toContain('setProjects(current => rememberProjectSummary(current, demoProject))');
+    expect(source).not.toContain('onOpenDemo=');
     expect(source).toContain('setProjects(current => rememberProjectSummary(current, nextProject))');
   });
 });

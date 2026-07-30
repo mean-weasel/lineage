@@ -99,15 +99,15 @@ test('routes project-level destinations and create/upload onto an explicit studi
   await expect(page.locator('.lineage-workbench')).toBeVisible();
 });
 
-test('shows Swissifier as its own project and opens its populated Canvas directly', async ({ page }) => {
+test('shows Swissifier as its own project and enters through its workspace list', async ({ page }) => {
   await page.goto('/projects');
   const swissifier = page.locator('.organization-item').filter({ hasText: 'swissifier-demo' });
   await expect(swissifier.getByRole('heading', { name: 'Swissifier Demo' })).toBeVisible();
-  await swissifier.getByRole('button', { name: 'Open demo' }).click();
+  await swissifier.getByRole('heading', { name: 'Swissifier Demo' }).click();
 
-  await expect(page).toHaveURL(/\/projects\/swissifier-demo\/workspaces\//);
-  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo');
-  await expect(page.locator('.lineage-node')).toHaveCount(14);
+  await expect(page).toHaveURL('/projects/swissifier-demo/workspaces');
+  await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible();
+  await expect(page.locator('.organization-item').filter({ hasText: 'Swissifier rich demo' })).toBeVisible();
 });
 
 test('keeps explicit Swissifier deletion suppressed until Restore demo', async ({ page, request }) => {
@@ -131,9 +131,9 @@ test('keeps explicit Swissifier deletion suppressed until Restore demo', async (
   await expect(page.locator('.organization-item').filter({ hasText: 'swissifier-demo' })).toHaveCount(0);
   await restore.click();
 
-  await expect(page).toHaveURL(/\/projects\/swissifier-demo\/workspaces\//);
-  await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Swissifier rich demo');
-  await expect(page.locator('.lineage-node')).toHaveCount(14);
+  await expect(page).toHaveURL('/projects/swissifier-demo/workspaces');
+  await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible();
+  await expect(page.locator('.organization-item').filter({ hasText: 'Swissifier rich demo' })).toBeVisible();
 });
 
 test('keeps exact workspace identity independent in two tabs and switches through Workspaces', async ({ context, request }) => {

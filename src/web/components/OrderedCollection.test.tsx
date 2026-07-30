@@ -92,6 +92,70 @@ describe('OrderedCollection', () => {
     expect(container.textContent).toContain('Beta was not moved. Collection changed; refresh and try again.');
   });
 
+  it('keeps the optimistic order in place until the reorder request finishes', async () => {
+    let resolveMove!: () => void;
+    const onMove = vi.fn(() => new Promise<void>(resolve => {
+      resolveMove = resolve;
+    }));
+    render('list', onMove);
+    const handle = button('Reorder Beta');
+
+    act(() => handle.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true })));
+    act(() => button('Reorder Beta').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })));
+    expect(labels()).toEqual(['Beta', 'Alpha', 'Gamma']);
+
+    await act(async () => {
+      button('Reorder Beta').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(labels()).toEqual(['Beta', 'Alpha', 'Gamma']);
+
+    await act(async () => {
+      resolveMove();
+      await Promise.resolve();
+    });
+  });
+
+  it('opens from the item surface without hijacking its accessible controls', () => {
+    const onOpen = vi.fn();
+    render('list', vi.fn(), { onOpen });
+    const alpha = container.querySelector<HTMLElement>('[data-ordered-id="a"]')!;
+
+    act(() => alpha.querySelector<HTMLElement>('[data-label]')!.click());
+    expect(onOpen).toHaveBeenCalledWith(items[0]);
+
+    act(() => button('Reorder Alpha').click());
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(alpha.tabIndex).toBe(-1);
+    expect(alpha.getAttribute('role')).toBe('listitem');
+  });
+
+  it('resyncs to a different collection while an earlier reorder is pending', async () => {
+    let resolveMove!: () => void;
+    const onMove = vi.fn(() => new Promise<void>(resolve => {
+      resolveMove = resolve;
+    }));
+    render('list', onMove);
+    const handle = button('Reorder Beta');
+    act(() => handle.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true })));
+    act(() => button('Reorder Beta').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })));
+    act(() => button('Reorder Beta').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+
+    render('list', onMove, {
+      items: [
+        { id: 'x', label: 'Xray' },
+        { id: 'y', label: 'Yankee' },
+      ],
+      total: 2,
+    });
+    expect(labels()).toEqual(['Xray', 'Yankee']);
+
+    await act(async () => {
+      resolveMove();
+      await Promise.resolve();
+    });
+  });
+
   it('describes the complete keyboard reorder contract from every enabled handle', () => {
     render('cards');
     const handle = button('Reorder Alpha');

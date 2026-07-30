@@ -37,6 +37,15 @@
   transform: translateY(-2px);
 }
 
+.ordered-collection-item.is-openable {
+  cursor: pointer;
+}
+
+.ordered-collection-item.is-openable button,
+.ordered-collection-item.is-openable a {
+  cursor: pointer;
+}
+
 .ordered-collection-item.is-grabbed {
   z-index: 2;
   border-color: #55a9b2;

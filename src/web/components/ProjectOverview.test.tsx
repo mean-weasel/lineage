@@ -36,10 +36,13 @@ describe('ProjectOverview', () => {
 
     expect(container.querySelector('h1')?.textContent).toBe('Workspaces');
     expect(container.querySelector('.organization-eyebrow')?.textContent).toBe('Summer Launch');
+    expect(container.querySelector('[data-presentation="list"]')).not.toBeNull();
     act(() => button('All projects').click());
     expect(onAllProjects).toHaveBeenCalled();
 
-    act(() => button('Open Canvas').click());
+    const firstWorkspace = Array.from(container.querySelectorAll<HTMLElement>('.ordered-collection-item'))
+      .find(item => item.textContent?.includes('Portrait concepts'))!;
+    act(() => firstWorkspace.querySelector('h2')!.click());
     expect(onOpenCanvas).toHaveBeenCalledWith('summer-launch', expect.objectContaining({ id: 'workspace-a' }));
   });
 

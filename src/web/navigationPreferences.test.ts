@@ -33,7 +33,7 @@ describe('navigation preferences', () => {
 
     expect(readContextPanelOpen(unavailable)).toBe(true);
     expect(() => writeContextPanelOpen(false, unavailable)).not.toThrow();
-    expect(readCollectionPresentation(PROJECTS_PRESENTATION_KEY, unavailable)).toBe('cards');
+    expect(readCollectionPresentation(PROJECTS_PRESENTATION_KEY, unavailable)).toBe('list');
     expect(() => writeCollectionPresentation(WORKSPACES_PRESENTATION_KEY, 'list', unavailable)).not.toThrow();
   });
 
@@ -43,5 +43,10 @@ describe('navigation preferences', () => {
 
     expect(readCollectionPresentation(PROJECTS_PRESENTATION_KEY)).toBe('list');
     expect(readCollectionPresentation(WORKSPACES_PRESENTATION_KEY)).toBe('cards');
+  });
+
+  it('defaults both organization levels to list presentation', () => {
+    expect(readCollectionPresentation(PROJECTS_PRESENTATION_KEY)).toBe('list');
+    expect(readCollectionPresentation(WORKSPACES_PRESENTATION_KEY)).toBe('list');
   });
 });

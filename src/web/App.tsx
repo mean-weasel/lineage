@@ -525,11 +525,6 @@ export function App() {
         {copiedText && <CopiedTextFallback copiedText={copiedText} onDismiss={() => setCopiedText(null)} />}
         {surface === 'projects' ? (
           <ProjectsView
-            onOpenDemo={(demoProject, workspace) => {
-              setProjects(current => rememberProjectSummary(current, demoProject));
-              setView('lineage');
-              navigate({ kind: 'canvas', projectId: demoProject.id, workspaceId: workspace.id });
-            }}
             onOpenProject={nextProject => {
               setProjects(current => rememberProjectSummary(current, nextProject));
               navigate({ kind: 'project', projectId: nextProject.id });

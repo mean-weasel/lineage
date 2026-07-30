@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import {
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
   type ReactNode,
   useEffect,
@@ -25,6 +26,7 @@ export interface OrderedCollectionProps<T> {
   itemLabel: (item: T) => string;
   items: T[];
   onMove: (itemId: string, targetIndex: number) => Promise<void> | void;
+  onOpen?: (item: T) => void;
   page: number;
   pageSize: number;
   presentation: CollectionPresentation;
@@ -49,11 +51,15 @@ export function OrderedCollection<T>(props: OrderedCollectionProps<T>) {
   const [announcement, setAnnouncement] = useState('');
   const pointerActive = useRef(false);
   const collectionRef = useRef<HTMLDivElement | null>(null);
+  const pendingOriginIds = useRef<string[] | null>(null);
   const previousPositions = useRef<Map<string, DOMRect>>(new Map());
   const pageOffset = Math.max(0, (props.page - 1) * props.pageSize);
 
   useEffect(() => {
-    if (!grabbed) setDraftIds(sourceIds);
+    if (grabbed) return;
+    if (pendingOriginIds.current && sameIds(sourceIds, pendingOriginIds.current)) return;
+    pendingOriginIds.current = null;
+    setDraftIds(sourceIds);
   }, [grabbed, sourceIds]);
 
   useLayoutEffect(() => {
@@ -129,6 +135,7 @@ export function OrderedCollection<T>(props: OrderedCollectionProps<T>) {
       await props.onMove(id, targetIndex);
       setAnnouncement(`${props.itemLabel(item)} dropped at position ${targetIndex + 1} of ${props.total}.`);
     } catch (error) {
+      pendingOriginIds.current = null;
       setDraftIds(sourceIds);
       setAnnouncement(`${props.itemLabel(item)} was not moved. ${error instanceof Error ? error.message : 'Refresh and try again.'}`);
       throw error;
@@ -140,6 +147,7 @@ export function OrderedCollection<T>(props: OrderedCollectionProps<T>) {
   async function drop(item: T) {
     if (!grabbed || grabbed.id !== props.itemId(item)) return;
     const targetIndex = grabbed.targetIndex;
+    pendingOriginIds.current = grabbed.originIds;
     setGrabbed(null);
     try {
       await commitMove(item, targetIndex);
@@ -204,6 +212,11 @@ export function OrderedCollection<T>(props: OrderedCollectionProps<T>) {
     void drop(item);
   }
 
+  function onItemClick(event: MouseEvent<HTMLElement>, item: T) {
+    if (!props.onOpen || isInteractiveTarget(event.target)) return;
+    props.onOpen(item);
+  }
+
   if (!props.items.length) {
     return <div className="ordered-collection-empty">{props.empty}</div>;
   }
@@ -232,9 +245,10 @@ export function OrderedCollection<T>(props: OrderedCollectionProps<T>) {
             <article
               aria-posinset={position}
               aria-setsize={props.total}
-              className={`ordered-collection-item ${isGrabbed ? 'is-grabbed' : ''}`}
+              className={`ordered-collection-item ${props.onOpen ? 'is-openable' : ''} ${isGrabbed ? 'is-grabbed' : ''}`}
               data-ordered-id={id}
               key={id}
+              onClick={event => onItemClick(event, item)}
               role="listitem"
             >
               <div className="ordered-collection-handle-cell">
@@ -286,4 +300,13 @@ export function OrderedCollection<T>(props: OrderedCollectionProps<T>) {
       <div aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
     </>
   );
+}
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof Element
+    && Boolean(target.closest('button, a, input, select, textarea, [role="button"], [role="link"]'));
+}
+
+function sameIds(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
 }
