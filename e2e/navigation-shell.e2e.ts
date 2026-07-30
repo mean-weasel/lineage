@@ -85,10 +85,22 @@ test('uses the active destination to collapse and reopen the contextual panel', 
   await page.goto(canvasPath());
 
   const canvas = page.getByRole('button', { name: 'Canvas', exact: true });
+  const assets = page.getByRole('button', { name: 'Assets', exact: true });
   await expect(canvas).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('button', { name: 'Expand contextual panel' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Collapse contextual panel' }).click();
   await expect(canvas).toHaveAttribute('aria-expanded', 'false');
+
+  await assets.click();
+  await expect(page).toHaveURL('/projects/demo-project/studio/assets');
+  await expect(assets).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: 'Collapse contextual panel' })).toHaveCount(0);
+
+  await canvas.click();
+  await expect(page).toHaveURL(canvasPath('?lineageCanvas=compact'));
+  await expect(canvas).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: 'Collapse contextual panel' })).toHaveCount(0);
+
   await canvas.click();
   await expect(page.getByRole('button', { name: 'Collapse contextual panel' })).toBeVisible();
 });

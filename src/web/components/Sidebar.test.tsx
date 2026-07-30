@@ -211,6 +211,21 @@ describe('Sidebar', () => {
     expect(onContextOpenChange).toHaveBeenCalledWith(true);
   });
 
+  it('preserves a collapsed desktop contextual panel while switching destinations', () => {
+    const onContextOpenChange = vi.fn();
+    const onStudio = vi.fn();
+    renderSidebar('lineage', {
+      contextOpen: false,
+      onContextOpenChange,
+      onStudio,
+    });
+
+    act(() => buttonByLabel('Assets')?.click());
+
+    expect(onStudio).toHaveBeenCalledWith('assets');
+    expect(onContextOpenChange).not.toHaveBeenCalled();
+  });
+
   it('moves focus into the mobile drawer and returns it to the trigger when closed', () => {
     renderSidebar('lineage', { mobileContextOpen: false });
     const trigger = buttonByLabel('Open navigation panel')!;

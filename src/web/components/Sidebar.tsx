@@ -112,7 +112,6 @@ export function Sidebar(props: {
     props.onStudio(view);
     if (view === 'backup') props.showBackupQueue();
     else props.setView(view);
-    props.onContextOpenChange(true);
     props.onMobileContextOpenChange(false);
   }
 
