@@ -7,6 +7,7 @@ import {
   readLineageEdgeWeight,
   readLineageGraphDirection,
   readLineageMinimapVisible,
+  readVariationPromptAutoEdit,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
   writeCanvasSettingsHintDismissed,
@@ -15,6 +16,7 @@ import {
   writeLineageEdgeWeight,
   writeLineageGraphDirection,
   writeLineageMinimapVisible,
+  writeVariationPromptAutoEdit,
 } from './lineagePreferences';
 
 describe('lineage hover preview preference', () => {
@@ -28,6 +30,18 @@ describe('lineage hover preview preference', () => {
     expect(writeHoverPreviewsEnabled(false, { setItem })).toBe(true);
     expect(setItem).toHaveBeenCalledWith('lineage.preferences.hover-previews', 'false');
     expect(writeHoverPreviewsEnabled(true, { setItem: () => { throw new Error('denied'); } })).toBe(false);
+  });
+});
+
+describe('variation queue prompt editing preference', () => {
+  it('defaults on, persists an explicit choice, and fails safely', () => {
+    expect(readVariationPromptAutoEdit({ getItem: () => null })).toBe(true);
+    expect(readVariationPromptAutoEdit({ getItem: () => 'false' })).toBe(false);
+    expect(readVariationPromptAutoEdit({ getItem: () => { throw new Error('denied'); } })).toBe(true);
+    const setItem = vi.fn();
+    expect(writeVariationPromptAutoEdit(false, { setItem })).toBe(true);
+    expect(setItem).toHaveBeenCalledWith('lineage.preferences.variation-prompt-auto-edit', 'false');
+    expect(writeVariationPromptAutoEdit(true, { setItem: () => { throw new Error('denied'); } })).toBe(false);
   });
 });
 
@@ -110,6 +124,7 @@ describe('lineage canvas appearance preferences', () => {
       ['lineage.preferences.edge-labels', 'true'],
       ['lineage.preferences.hover-previews', 'true'],
       ['lineage.preferences.minimap-visible', 'true'],
+      ['lineage.preferences.variation-prompt-auto-edit', 'true'],
     ]);
   });
 });

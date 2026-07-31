@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LineageNode } from '../../shared/types';
-import { LineageVariationPromptDialog } from './LineageVariationPromptDialog';
+import { LineageVariationPromptDialog, variationPromptPosition } from './LineageVariationPromptDialog';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -14,13 +14,14 @@ afterEach(() => {
 });
 
 describe('LineageVariationPromptDialog', () => {
-  it('requires and submits the exact branch prompt as a Codex-ready queue action', async () => {
+  it('requires and submits the exact branch prompt with agent-neutral copy', async () => {
     const onSubmit = vi.fn(async () => undefined);
     render('branch', onSubmit);
     const textarea = container.querySelector('textarea')!;
     const queue = button('Queue branch');
 
-    expect(container.textContent).toContain('Saved to Canvas · ready for Codex');
+    expect(container.textContent).not.toContain('Codex');
+    expect(container.textContent).toContain('What should your agent change?');
     expect(queue.disabled).toBe(true);
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Restyle with a strict Swiss grid.');
@@ -38,6 +39,13 @@ describe('LineageVariationPromptDialog', () => {
     expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Keep composition; repair the headline.');
     expect(container.textContent).toContain('New attempt');
     expect(button('Queue re-roll').disabled).toBe(false);
+  });
+});
+
+describe('variationPromptPosition', () => {
+  it('prefers the node right edge and flips left when space is tight', () => {
+    expect(variationPromptPosition({ bottom: 200, left: 100, right: 300, top: 100 }, 1200, 800).left).toBe(314);
+    expect(variationPromptPosition({ bottom: 200, left: 900, right: 1100, top: 100 }, 1200, 800).left).toBe(456);
   });
 });
 

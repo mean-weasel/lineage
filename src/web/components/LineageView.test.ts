@@ -68,7 +68,10 @@ describe('Canvas contextual tool composition', () => {
     const controls = readFileSync(join(process.cwd(), 'src/web/components/LineageCanvasAppearanceControls.tsx'), 'utf8');
     const css = readFileSync(join(process.cwd(), 'src/web/components/LineageView.css'), 'utf8');
 
-    expect(source).toContain('panelReturnFocusRef.current?.focus()');
+    expect(source).toContain('window.requestAnimationFrame(() => returnFocus?.focus())');
+    expect(source).toContain('!variationPrompt && !panelMode');
+    expect(source).toContain("'.lineage-node[data-asset-id], .lineage-variation-queue, .lineage-variation-queue-launch'");
+    expect(source).toContain('if (unrelatedInteractiveTarget && !intentionalQueueTarget) return;');
     expect(source).toContain('aria-label="Close Canvas panel"');
     expect(source).toContain('<button autoFocus aria-label="Close Canvas settings"');
     expect(source).toContain('onClick={closePanel}');

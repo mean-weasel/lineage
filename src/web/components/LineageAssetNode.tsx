@@ -20,6 +20,7 @@ type AssetNodeData = LineageNode & {
   collapseInteractive?: boolean;
   focusRole: LineageFocusRole;
   hoverPreviewsEnabled?: boolean;
+  variationQueueState?: 'ancestor' | 'primary' | 'queued';
   onOpenDetail?: (assetId: string) => void;
   onOpenHistory?: (assetId: string) => void;
   onPreviewChange?: (source: LineagePreviewSource, assetId: string, position: HoverPreviewPosition | null) => void;
@@ -85,7 +86,9 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
       <div
         aria-label={`${data.title} ${((data.attempt_count || 1) > 1) ? 'attempt history' : 'details'}`}
         aria-hidden={replayState === 'future' ? true : undefined}
-        className={`lineage-node lineage-node-${portrait ? 'portrait' : 'compact'} lineage-zoom-${semanticZoomTier} lineage-review-${data.review_state} ${hasWork ? 'lineage-has-work' : ''} ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
+        aria-keyshortcuts="B R S D"
+        className={`lineage-node lineage-node-${portrait ? 'portrait' : 'compact'} lineage-zoom-${semanticZoomTier} lineage-review-${data.review_state} ${hasWork ? 'lineage-has-work' : ''} ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} ${data.variationQueueState ? `variation-${data.variationQueueState}` : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
+        data-asset-id={data.asset_id}
         data-focus-role={data.focusRole}
         data-has-work={hasWork ? 'true' : undefined}
         data-lineage-root={data.root ? 'true' : undefined}

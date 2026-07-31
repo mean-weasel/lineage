@@ -147,6 +147,7 @@ export function LineageCanvasAppearanceControls({
   hoverPreviewsEnabled,
   loading,
   minimapVisible,
+  variationPromptAutoEdit,
   onCanvasPresentation,
   onEdgeSummariesVisible,
   onEdgeWeight,
@@ -154,6 +155,7 @@ export function LineageCanvasAppearanceControls({
   onGraphDirection,
   onHoverPreviewsEnabled,
   onMinimapVisible,
+  onVariationPromptAutoEdit,
   onResetAppearance,
   onTidyGraph,
   snapshotAvailable,
@@ -165,6 +167,7 @@ export function LineageCanvasAppearanceControls({
   hoverPreviewsEnabled: boolean;
   loading: boolean;
   minimapVisible: boolean;
+  variationPromptAutoEdit: boolean;
   onCanvasPresentation: (presentation: LineageCanvasPresentation) => void;
   onEdgeSummariesVisible: (visible: boolean) => void;
   onEdgeWeight: (weight: LineageEdgeWeight) => void;
@@ -172,6 +175,7 @@ export function LineageCanvasAppearanceControls({
   onGraphDirection: (direction: LineageGraphDirection) => void;
   onHoverPreviewsEnabled: (enabled: boolean) => void;
   onMinimapVisible: (visible: boolean) => void;
+  onVariationPromptAutoEdit: (enabled: boolean) => void;
   onResetAppearance: () => void;
   onTidyGraph: () => void;
   snapshotAvailable: boolean;
@@ -307,6 +311,14 @@ export function LineageCanvasAppearanceControls({
           disabled={!snapshotAvailable}
           label="Hover previews"
           onChange={onHoverPreviewsEnabled}
+        />
+        <SettingSwitch
+          ariaLabel="Edit prompt when selecting a variation"
+          checked={variationPromptAutoEdit}
+          description="Open the inline prompt editor when you choose a queued variation"
+          disabled={!snapshotAvailable}
+          label="Edit prompt when selecting a variation"
+          onChange={onVariationPromptAutoEdit}
         />
         </section>
       </div>

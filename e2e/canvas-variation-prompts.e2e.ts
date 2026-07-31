@@ -2,7 +2,7 @@ import { expect, test } from 'playwright/test';
 
 const project = 'demo-project';
 
-test('persists exact branch and re-roll prompts on nodes and in the Codex task handoff', async ({ page, request }) => {
+test('persists exact branch and re-roll prompts on nodes and in the agent task handoff', async ({ page, request }) => {
   const seededResponse = await request.post('/api/lineage-workspaces/demo/seed', {
     data: { project, confirmWrite: true },
   });
@@ -25,12 +25,15 @@ test('persists exact branch and re-roll prompts on nodes and in the Codex task h
     await expect(page.locator('.lineage-workspace-title strong')).toHaveText('Demo: Content iteration tree', { timeout: 20_000 });
 
     const branchPrompt = 'Restyle this as a bold Swiss editorial poster with a tighter red grid.';
+    const editedBranchPrompt = 'Restyle this as a strict Swiss editorial poster with a tighter red grid and more whitespace.';
     const rootNode = page.locator('.lineage-node.root-node');
     await rootNode.hover();
     await page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Branch/ }).click();
     const branchDialog = page.getByRole('dialog', { name: 'Describe the next branch' });
-    await expect(branchDialog).toContainText('Saved to Canvas · ready for Codex');
-    await branchDialog.getByLabel('What should Codex change?').fill(branchPrompt);
+    await expect(page.getByTestId('lineage-hover-preview')).toHaveCount(0);
+    await expect(branchDialog).not.toContainText('Codex');
+    await expect(branchDialog).toHaveClass(/anchored/);
+    await branchDialog.getByLabel('What should your agent change?').fill(branchPrompt);
     await branchDialog.getByRole('button', { name: 'Queue branch' }).click();
     await expect(branchDialog).toBeHidden();
     await expect(rootNode.locator('.lineage-node-prompts span').filter({ hasText: 'Branch' })).toHaveAttribute('title', `Branch prompt: ${branchPrompt}`);
@@ -39,34 +42,89 @@ test('persists exact branch and re-roll prompts on nodes and in the Codex task h
     const rerollNode = page.locator('.lineage-node:not(.root-node)').first();
     const rerollAssetId = await rerollNode.locator('small').first().textContent();
     expect(rerollAssetId).toBeTruthy();
-    await rerollNode.hover();
-    await page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Re-roll/ }).click();
+    await page.mouse.move(0, 0);
+    await rerollNode.focus();
+    await rerollNode.press('r');
     const rerollDialog = page.getByRole('dialog', { name: 'Describe the re-roll' });
-    await rerollDialog.getByLabel('What should Codex change?').fill(rerollPrompt);
+    await expect(page.getByTestId('lineage-hover-preview')).toHaveCount(0);
+    await rerollDialog.getByLabel('What should your agent change?').fill(rerollPrompt);
     await rerollDialog.getByRole('button', { name: 'Queue re-roll' }).click();
     await expect(rerollDialog).toBeHidden();
     await expect(rerollNode.locator('.lineage-node-prompts span.reroll')).toHaveAttribute('title', `Re-roll prompt: ${rerollPrompt}`);
 
+    const unrelatedControl = page.getByRole('button', { name: 'Back to workspaces', exact: true });
+    await unrelatedControl.focus();
+    await page.keyboard.press('v');
+    await expect(page.getByRole('complementary', { name: 'Variation queue' })).toHaveCount(0);
+    await expect(unrelatedControl).toBeFocused();
+
+    await rootNode.focus();
+    await page.keyboard.press('v');
+    const queue = page.getByRole('complementary', { name: 'Variation queue' });
+    await expect(queue).toBeVisible();
+    await expect(page.getByTestId('lineage-hover-preview')).toHaveCount(0);
+    await expect(queue).toContainText('Ready for your agent');
+    await expect(queue.locator('.lineage-variation-card')).toHaveCount(2);
+    await expect(rootNode).toHaveClass(/variation-queued/);
+    await expect(rerollNode).toHaveClass(/variation-queued/);
+    await page.keyboard.press('v');
+    await expect(queue).toBeHidden();
+    await expect(rootNode).toBeFocused();
+    await page.keyboard.press('v');
+    await expect(queue).toBeVisible();
+
+    const rerollCard = queue.locator(`[data-mode="reroll"][data-node-id="${rerollAssetId}"]`);
+    await rerollCard.locator('.lineage-variation-select').click();
+    await expect(rerollNode).toHaveClass(/variation-primary/);
+    await expect(rerollCard.locator('textarea')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(rerollCard.locator('textarea')).toHaveCount(0);
+    await expect(queue).toBeVisible();
+    await rerollCard.getByRole('button', { name: /Show .* on canvas/ }).click();
+    await expect(rerollNode).toHaveClass(/variation-primary/);
+
+    await queue.getByRole('button', { name: 'Close Variation queue' }).click();
+    await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+    const autoEdit = page.getByRole('switch', { name: 'Edit prompt when selecting a variation' });
+    await expect(autoEdit).toHaveAttribute('aria-checked', 'true');
+    await autoEdit.focus();
+    await page.keyboard.press('v');
+    await expect(page.getByRole('complementary', { name: 'Canvas settings' })).toBeVisible();
+    await expect(queue).toBeHidden();
+    await expect(autoEdit).toBeFocused();
+    await autoEdit.click();
+    await expect(autoEdit).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('region', { name: 'Canvas workspace tools' }).getByRole('button', { name: /Variation queue/ }).click();
+    await expect(page.getByRole('complementary', { name: 'Canvas settings' })).toBeHidden();
+    await expect(queue).toBeVisible();
+    const branchCard = queue.locator(`[data-mode="branch"][data-node-id="${seeded.root_asset_id}"]`);
+    await branchCard.locator('.lineage-variation-select').click();
+    await expect(branchCard.locator('textarea')).toHaveCount(0);
+    await branchCard.getByRole('button', { name: /Edit branch prompt/ }).click();
+    await branchCard.locator('textarea').fill(editedBranchPrompt);
+    await branchCard.locator('textarea').press('Control+Enter');
+    await expect(branchCard.locator('textarea')).toHaveCount(0);
+
     await page.reload();
-    await expect(page.locator('.lineage-node.root-node .lineage-node-prompts span').filter({ hasText: 'Branch' })).toHaveAttribute('title', `Branch prompt: ${branchPrompt}`);
+    await expect(page.locator('.lineage-node.root-node .lineage-node-prompts span').filter({ hasText: 'Branch' })).toHaveAttribute('title', `Branch prompt: ${editedBranchPrompt}`);
     await expect(page.locator('.lineage-node').filter({ hasText: rerollAssetId! }).locator('.lineage-node-prompts span.reroll')).toHaveAttribute('title', `Re-roll prompt: ${rerollPrompt}`);
 
     const snapshot = await (await request.get(`/api/lineage/${seeded.root_asset_id}?project=${project}`)).json() as {
       nodes: Array<{ asset_id: string; branch_prompt?: string; reroll_request?: { prompt?: string } }>;
       tasks: Array<{ instructions?: string; target_asset_id: string; task_type: string }>;
     };
-    expect(snapshot.nodes.find(node => node.asset_id === seeded.root_asset_id)?.branch_prompt).toBe(branchPrompt);
+    expect(snapshot.nodes.find(node => node.asset_id === seeded.root_asset_id)?.branch_prompt).toBe(editedBranchPrompt);
     expect(snapshot.nodes.find(node => node.asset_id === rerollAssetId)?.reroll_request?.prompt).toBe(rerollPrompt);
     expect(snapshot.tasks).toEqual(expect.arrayContaining([
-      expect.objectContaining({ target_asset_id: seeded.root_asset_id, task_type: 'iterate', instructions: branchPrompt }),
+      expect.objectContaining({ target_asset_id: seeded.root_asset_id, task_type: 'iterate', instructions: editedBranchPrompt }),
       expect.objectContaining({ target_asset_id: rerollAssetId, task_type: 'reroll', instructions: rerollPrompt }),
     ]));
 
     const brief = await (await request.get(`/api/lineage/${seeded.root_asset_id}/brief?project=${project}`)).json() as {
       brief: { prompt: string; variation_prompts?: Array<{ asset_id: string; prompt: string }> };
     };
-    expect(brief.brief.variation_prompts).toContainEqual({ asset_id: seeded.root_asset_id, prompt: branchPrompt });
-    expect(brief.brief.prompt).toContain(branchPrompt);
+    expect(brief.brief.variation_prompts).toContainEqual({ asset_id: seeded.root_asset_id, prompt: editedBranchPrompt });
+    expect(brief.brief.prompt).toContain(editedBranchPrompt);
   } finally {
     await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}/archive`, {
       data: { project, confirmWrite: true },

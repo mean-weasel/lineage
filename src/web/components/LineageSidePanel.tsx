@@ -209,7 +209,7 @@ export function LineageSidePanel(props: LineageSidePanelProps) {
           <label className="lineage-note-field">
             Exact branch prompt
             <textarea value={selectionNote} onChange={event => setSelectionNote(event.target.value)} placeholder="What exactly should Codex change in the next branch?" />
-            <span className={`lineage-note-status ${noteDirty ? 'dirty' : ''}`}>{activeNode.user_selected ? (noteDirty ? 'Unsaved prompt' : 'Prompt saved on this node and ready for Codex') : 'The prompt saves when this node is queued for a branch'}</span>
+            <span className={`lineage-note-status ${noteDirty ? 'dirty' : ''}`}>{activeNode.user_selected ? (noteDirty ? 'Unsaved prompt' : 'Prompt saved on this node') : 'The prompt saves when this node is queued for a branch'}</span>
           </label>
           <div className="lineage-side-actions">
             <button aria-label={activeNode.user_selected ? `Remove ${activeNode.title} from next variation` : `Use ${activeNode.title} for next variation`} className="primary-lite" disabled={!activeNode.user_selected && selectionFull} onClick={() => activeNode.user_selected ? void clearNextVariation(activeNode.asset_id) : editPrompt(activeNode, 'branch', 'add')}>{activeNode.user_selected ? 'Remove from next variation' : selectionFull ? 'Selection full' : 'Queue branch'}</button>

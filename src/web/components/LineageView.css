@@ -255,6 +255,12 @@
   box-shadow: 0 12px 32px rgba(18, 83, 91, 0.24);
 }
 
+.lineage-workbench:has(.lineage-variation-queue) .lineage-canvas-settings-trigger,
+.lineage-workbench:has(.lineage-variation-queue) .lineage-canvas-settings-hint {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .lineage-canvas-settings-trigger:hover {
   transform: translateY(-1px);
 }

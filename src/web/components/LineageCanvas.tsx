@@ -252,14 +252,6 @@ export function LineageCanvas({
           onKeyDown={event => {
             const key = event.key.toLowerCase();
             if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-            if (key === 'b' && !actionState.branchDisabled) {
-              event.preventDefault();
-              void runQuickAction('branch', previewNode);
-            }
-            if (key === 'r' && !actionState.rerollDisabled) {
-              event.preventDefault();
-              void runQuickAction('reroll', previewNode);
-            }
             if (key === 's' && !actionState.socialDisabled) {
               event.preventDefault();
               void runQuickAction('social', previewNode);
@@ -292,23 +284,21 @@ export function LineageCanvas({
           </div>
           <div className="lineage-hover-preview-actions">
             <button
-              aria-keyshortcuts="B"
               aria-pressed={previewNode.user_selected}
               className={previewNode.user_selected ? 'selected' : ''}
               disabled={actionState.branchDisabled || Boolean(pendingAction)}
               onClick={() => void runQuickAction('branch', previewNode)}
-              title={actionState.branchTitle}
+              title={previewNode.user_selected ? 'Edit branch prompt' : actionState.branchTitle}
               type="button"
             >
               <kbd>B</kbd><span>{previewNode.user_selected ? 'Branch queued' : 'Branch'}</span>
             </button>
             <button
-              aria-keyshortcuts="R"
               aria-pressed={actionState.rerollSelected}
               className={`reroll ${actionState.rerollSelected ? 'selected' : ''}`}
               disabled={actionState.rerollDisabled || Boolean(pendingAction)}
               onClick={() => void runQuickAction('reroll', previewNode)}
-              title={actionState.rerollTitle}
+              title={actionState.rerollSelected ? 'Edit re-roll prompt' : actionState.rerollTitle}
               type="button"
             >
               <kbd>R</kbd><span>{actionState.rerollSelected ? 'Re-roll queued' : 'Re-roll'}</span>

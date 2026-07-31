@@ -1,18 +1,34 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { GitBranch, RefreshCcw, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { GitBranch, RefreshCcw } from 'lucide-react';
 import type { LineageNode } from '../../shared/types';
 import './LineageVariationPromptDialog.css';
 
 export type VariationPromptMode = 'branch' | 'reroll';
+export type VariationPromptAnchor = Pick<DOMRect, 'bottom' | 'left' | 'right' | 'top'>;
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure positioning contract shared with regression tests
+export function variationPromptPosition(anchor: VariationPromptAnchor, viewportWidth: number, viewportHeight: number) {
+  const gap = 14;
+  const margin = 16;
+  const width = Math.min(430, viewportWidth - margin * 2);
+  const estimatedHeight = 390;
+  const left = anchor.right + gap + width <= viewportWidth - margin
+    ? anchor.right + gap
+    : Math.max(margin, anchor.left - width - gap);
+  const top = Math.min(Math.max(margin, anchor.top), Math.max(margin, viewportHeight - estimatedHeight - margin));
+  return { left, top };
+}
 
 export function LineageVariationPromptDialog({
   initialPrompt = '',
+  anchor,
   mode,
   node,
   onClose,
   onSubmit,
 }: {
   initialPrompt?: string;
+  anchor?: VariationPromptAnchor;
   mode: VariationPromptMode;
   node: LineageNode;
   onClose: () => void;
@@ -25,6 +41,9 @@ export function LineageVariationPromptDialog({
   const title = isBranch ? 'Describe the next branch' : 'Describe the re-roll';
   const action = isBranch ? 'Queue branch' : 'Queue re-roll';
   const trimmed = prompt.trim();
+  const position = anchor && typeof window !== 'undefined'
+    ? variationPromptPosition(anchor, window.innerWidth, window.innerHeight)
+    : undefined;
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -35,8 +54,8 @@ export function LineageVariationPromptDialog({
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [busy, onClose]);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit(event?: FormEvent) {
+    event?.preventDefault();
     if (!trimmed || busy) return;
     setBusy(true);
     try {
@@ -48,10 +67,10 @@ export function LineageVariationPromptDialog({
 
   const Icon = isBranch ? GitBranch : RefreshCcw;
   return (
-    <div className="lineage-prompt-backdrop" onMouseDown={event => {
+    <div className={`lineage-prompt-backdrop ${anchor ? 'anchored' : ''}`} onMouseDown={event => {
       if (event.target === event.currentTarget && !busy) onClose();
     }}>
-      <form aria-labelledby="lineage-prompt-title" aria-modal="true" className="lineage-prompt-dialog" onSubmit={submit} role="dialog">
+      <form aria-labelledby="lineage-prompt-title" aria-modal="true" className={`lineage-prompt-dialog ${anchor ? 'anchored' : ''}`} onSubmit={submit} role="dialog" style={position as CSSProperties | undefined}>
         <header>
           <span aria-hidden="true" className={`lineage-prompt-icon ${mode}`}><Icon size={22} /></span>
           <div>
@@ -62,10 +81,16 @@ export function LineageVariationPromptDialog({
           <button aria-label="Close prompt" className="lineage-prompt-close" disabled={busy} onClick={onClose} type="button">×</button>
         </header>
         <label className="lineage-prompt-field">
-          <span>What should Codex change?</span>
+          <span>What should your agent change?</span>
           <textarea
             maxLength={1600}
             onChange={event => setPrompt(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
             placeholder={isBranch
               ? 'e.g. Restyle this as a crisp Swiss editorial poster with a tighter grid and warmer red.'
               : 'e.g. Keep the composition exactly, but fix the distorted headline and soften the shadows.'}
@@ -75,13 +100,6 @@ export function LineageVariationPromptDialog({
           />
           <small><span>{prompt.length}/1600</span> Be exact—this prompt travels with the node.</small>
         </label>
-        <div className="lineage-prompt-destination">
-          <Sparkles aria-hidden="true" size={18} />
-          <div>
-            <strong>Saved to Canvas · ready for Codex</strong>
-            <span>The prompt remains visible here and is included in the durable agent task and generation handoff.</span>
-          </div>
-        </div>
         <footer>
           <button disabled={busy} onClick={onClose} type="button">Cancel</button>
           <button className="primary-button" disabled={!trimmed || busy} type="submit">{busy ? 'Saving…' : action}</button>

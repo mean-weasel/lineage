@@ -17,6 +17,7 @@ import {
   readLineageEdgeWeight,
   readLineageGraphDirection,
   readLineageMinimapVisible,
+  readVariationPromptAutoEdit,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
   writeCanvasSettingsHintDismissed,
@@ -25,6 +26,7 @@ import {
   writeLineageEdgeWeight,
   writeLineageGraphDirection,
   writeLineageMinimapVisible,
+  writeVariationPromptAutoEdit,
   type LineageEdgeWeight,
 } from '../lineagePreferences';
 import type { AssetFlowNode, LineageCanvasPresentation } from './LineageAssetNode';
@@ -41,6 +43,7 @@ import { LineageSidePanel } from './LineageSidePanel';
 import { LineageToolbar } from './LineageToolbar';
 import { LineageGenerationSheet } from './LineageGenerationSheet';
 import { LineageVariationPromptDialog, type VariationPromptMode } from './LineageVariationPromptDialog';
+import { LineageVariationQueuePanel, type VariationQueueSelection, variationTaskLocked } from './LineageVariationQueuePanel';
 import { decorateSnapshotWithGenerationTargets } from './LineageGenerationTargets';
 import { NodeNextOutputTargetsEditor } from './NodeNextOutputTargets';
 import { loadNodeNextOutputTargets, type NodeNextOutputTargetsResponse } from './NodeNextOutputTargetsModel';
@@ -116,6 +119,7 @@ export function LineageView({
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyAttempts, setHistoryAttempts] = useState<LineageAttempt[]>([]);
   const [hoverPreviewsEnabled, setHoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
+  const [variationPromptAutoEdit, setVariationPromptAutoEdit] = useState(readVariationPromptAutoEdit);
   const [minimapVisible, setMinimapVisible] = useState(readLineageMinimapVisible);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
@@ -126,14 +130,17 @@ export function LineageView({
   const [portraitGraphDirection, setPortraitGraphDirection] = useState<LineageGraphDirection>(() => readLineageGraphDirection('portrait'));
   const [selectionNote, setSelectionNote] = useState('');
   const [variationPrompt, setVariationPrompt] = useState<{
+    anchor?: { bottom: number; left: number; right: number; top: number };
     branchAction?: 'add' | 'edit' | 'replace';
     mode: VariationPromptMode;
     nodeId: string;
+    returnFocus?: HTMLElement;
   } | null>(null);
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
   const [externalNewWorkspaceOpen, setExternalNewWorkspaceOpen] = useState(false);
-  const [panelMode, setPanelMode] = useState<'settings' | 'selection' | 'asset' | null>(null);
+  const [panelMode, setPanelMode] = useState<'settings' | 'queue' | 'asset' | null>(null);
+  const [variationQueuePrimary, setVariationQueuePrimary] = useState<VariationQueueSelection | null>(null);
   const [settingsHintVisible, setSettingsHintVisible] = useState(() => !readCanvasSettingsHintDismissed());
   const [canvasToolsHost, setCanvasToolsHost] = useState<HTMLElement | null>(null);
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<AssetFlowNode>([]);
@@ -176,11 +183,20 @@ export function LineageView({
     [snapshot],
   );
   const selectedNode = selectedNodes[0];
+  const rerollNodes = useMemo(
+    () => snapshot?.nodes.filter(node => node.reroll_request?.status === 'pending') || [],
+    [snapshot],
+  );
+  const variationQueueCount = selectedNodes.length + rerollNodes.length;
+  const variationQueueNodeIds = useMemo(
+    () => new Set([...selectedNodes, ...rerollNodes].map(node => node.asset_id)),
+    [rerollNodes, selectedNodes],
+  );
   const nextVariationLimit = 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;
   const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId), targetNode = snapshot?.nodes.find(node => node.asset_id === targetNodeId) || null;
   const variationPromptNode = snapshot?.nodes.find(node => node.asset_id === variationPrompt?.nodeId) || null;
-  const canvasHoverPreviewsEnabled = hoverPreviewsEnabled && !detailNode && !historyNode && !editingEdge && (!replaySnapshot || replayAtEnd);
+  const canvasHoverPreviewsEnabled = hoverPreviewsEnabled && !detailNode && !historyNode && !editingEdge && !variationPrompt && !panelMode && (!replaySnapshot || replayAtEnd);
   const noteDirty = Boolean(activeNode && selectionNote !== (activeNode.selection_note || ''));
   const graphDirection = canvasPresentation === 'portrait' ? portraitGraphDirection : compactGraphDirection;
   const authoritativeEdges = useRef<Edge[]>([]);
@@ -506,28 +522,29 @@ export function LineageView({
   async function clearNextVariation(assetId?: string) {
     if (!snapshot) return;
     if (assetId) {
-      await mutateLineage('/api/selection', { assetId, rootAssetId: snapshot.root_asset_id, mode: 'remove', confirmWrite: true }, `Removed ${assetId} from next variation`);
-      return;
+      return mutateLineage('/api/selection', { assetId, rootAssetId: snapshot.root_asset_id, mode: 'remove', confirmWrite: true }, `Removed ${assetId} from next variation`);
     }
-    if (selectedNodes.length > 0) await mutateLineage('/api/selection', { rootAssetId: snapshot.root_asset_id, clear: true, confirmWrite: true }, 'Removed all assets from next variation');
+    if (selectedNodes.length > 0) return mutateLineage('/api/selection', { rootAssetId: snapshot.root_asset_id, clear: true, confirmWrite: true }, 'Removed all assets from next variation');
   }
   const closePanel = useCallback(() => {
+    const returnFocus = panelReturnFocusRef.current;
     setPanelMode(null);
-    panelReturnFocusRef.current?.focus();
     panelReturnFocusRef.current = null;
+    window.requestAnimationFrame(() => returnFocus?.focus());
   }, []);
   function dismissSettingsHint() {
     setSettingsHintVisible(false);
     writeCanvasSettingsHintDismissed();
   }
-  function togglePanel(mode: 'settings' | 'selection' | 'asset') {
+  function togglePanel(mode: 'settings' | 'queue' | 'asset') {
     if (mode === 'settings') dismissSettingsHint();
     const invokingControl = document.activeElement;
     if (invokingControl instanceof HTMLElement) panelReturnFocusRef.current = invokingControl;
     setPanelMode(current => {
       if (current !== mode) return mode;
-      panelReturnFocusRef.current?.focus();
+      const returnFocus = panelReturnFocusRef.current;
       panelReturnFocusRef.current = null;
+      window.requestAnimationFrame(() => returnFocus?.focus());
       return null;
     });
   }
@@ -555,12 +572,53 @@ export function LineageView({
   }
   async function clearReroll(node: LineageNode) {
     if (!snapshot) return;
-    await mutateLineage(`/api/lineage/${snapshot.root_asset_id}/rerolls/${node.asset_id}/cancel`, {
+    return mutateLineage(`/api/lineage/${snapshot.root_asset_id}/rerolls/${node.asset_id}/cancel`, {
       confirmWrite: true,
     }, `Cleared re-roll request for ${node.asset_id}`);
   }
   function openVariationPrompt(node: LineageNode, mode: VariationPromptMode, branchAction?: 'add' | 'edit' | 'replace') {
-    setVariationPrompt({ mode, nodeId: node.asset_id, branchAction });
+    const anchorElement = [...document.querySelectorAll<HTMLElement>('.lineage-node')]
+      .find(element => element.dataset.assetId === node.asset_id);
+    const rect = anchorElement?.getBoundingClientRect();
+    setVariationPrompt({
+      anchor: rect ? { bottom: rect.bottom, left: rect.left, right: rect.right, top: rect.top } : undefined,
+      mode,
+      nodeId: node.asset_id,
+      branchAction,
+      returnFocus: anchorElement || (document.activeElement instanceof HTMLElement ? document.activeElement : undefined),
+    });
+  }
+  function closeVariationPrompt() {
+    const returnFocus = variationPrompt?.returnFocus;
+    setVariationPrompt(null);
+    window.requestAnimationFrame(() => returnFocus?.focus());
+  }
+  async function saveQueuedVariation(node: LineageNode, mode: VariationPromptMode, prompt: string) {
+    if (variationTaskLocked(node, mode)) return false;
+    if (mode === 'reroll') return Boolean(await markReroll(node, prompt));
+    return Boolean(await mutateLineage('/api/selection', {
+      assetId: node.asset_id,
+      rootAssetId: snapshot?.root_asset_id,
+      mode: 'add',
+      notes: prompt,
+      confirmWrite: true,
+    }, `Updated branch prompt for ${node.asset_id}`));
+  }
+  async function removeQueuedVariation(node: LineageNode, mode: VariationPromptMode) {
+    if (variationTaskLocked(node, mode)) return;
+    if (mode === 'reroll') await clearReroll(node);
+    else await clearNextVariation(node.asset_id);
+    setVariationQueuePrimary(current => current?.mode === mode && current.nodeId === node.asset_id ? null : current);
+  }
+  function selectQueuedVariation(selection: VariationQueueSelection) {
+    setVariationQueuePrimary(selection);
+    setActiveNodeId(selection.nodeId);
+    onSelectedAsset(selection.nodeId);
+  }
+  function showQueuedVariation(node: LineageNode, mode: VariationPromptMode) {
+    selectQueuedVariation({ mode, nodeId: node.asset_id });
+    const target = flowApi?.getNode(node.asset_id);
+    if (flowApi && target) void flowApi.fitView({ duration: 260, maxZoom: 1, nodes: [target], padding: 0.75 });
   }
   async function submitVariationPrompt(prompt: string) {
     if (!variationPrompt || !variationPromptNode) return;
@@ -580,7 +638,7 @@ export function LineageView({
     } else {
       saved = Boolean(await selectNextBase(variationPromptNode, prompt));
     }
-    if (saved) setVariationPrompt(null);
+    if (saved) closeVariationPrompt();
   }
   async function toggleSocial(node: LineageNode) {
     if (!snapshot) return;
@@ -771,6 +829,12 @@ export function LineageView({
       onToast('error', 'Hover previews changed for this session, but browser storage is unavailable so the preference could not be saved');
     }
   }
+  function selectVariationPromptAutoEdit(enabled: boolean) {
+    setVariationPromptAutoEdit(enabled);
+    if (!writeVariationPromptAutoEdit(enabled)) {
+      onToast('error', 'Variation prompt behavior changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
+  }
   function selectEdgeSummariesVisible(visible: boolean) {
     setEdgeSummariesVisible(visible);
     if (!writeLineageEdgeLabelsVisible(visible)) {
@@ -791,6 +855,7 @@ export function LineageView({
     setEdgeSummariesVisible(true);
     setHoverPreviewsEnabled(true);
     setMinimapVisible(true);
+    setVariationPromptAutoEdit(true);
     setFlowApi(null);
     if (!resetLineageAppearancePreferences()) {
       onToast('error', 'Appearance reset for this session, but browser storage is unavailable so the defaults could not be saved');
@@ -890,18 +955,47 @@ export function LineageView({
   }, [reduceReplayMotion, replayLastStage, replayPhase, replayPlaying, replaySnapshot, replaySpeed, replayStageIndex, replayTimeline.stages]);
 
   const baseGraph = useMemo(
-    () => toGraph(graphSnapshot, activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation, effectiveCollapsedNodeIds),
-    [activeNodeId, canvasPresentation, edgeSummariesVisible, effectiveCollapsedNodeIds, graphDirection, graphSnapshot],
+    () => toGraph(graphSnapshot, panelMode === 'queue' ? null : activeNodeId, graphDirection, edgeSummariesVisible, canvasPresentation, effectiveCollapsedNodeIds),
+    [activeNodeId, canvasPresentation, edgeSummariesVisible, effectiveCollapsedNodeIds, graphDirection, graphSnapshot, panelMode],
   );
   const graph = useMemo(() => replaySnapshot && !replayAtEnd
     ? projectLineageReplay(baseGraph.nodes, baseGraph.edges, replayTimeline, replayStageIndex, replayPhase)
     : baseGraph,
   [baseGraph, replayAtEnd, replayPhase, replaySnapshot, replayStageIndex, replayTimeline]);
+  const queueDecoratedGraph = useMemo(() => {
+    if (panelMode !== 'queue' || !graphSnapshot) return graph;
+    const related = new Set(variationQueueNodeIds);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const edge of graphSnapshot.edges) {
+        if (related.has(edge.child_asset_id) && !related.has(edge.parent_asset_id)) {
+          related.add(edge.parent_asset_id);
+          changed = true;
+        }
+      }
+    }
+    return {
+      nodes: graph.nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          variationQueueState: (variationQueueNodeIds.has(node.id)
+            ? (variationQueuePrimary?.nodeId === node.id ? 'primary' : 'queued')
+            : (related.has(node.id) ? 'ancestor' : undefined)) as AssetFlowNode['data']['variationQueueState'],
+        },
+      })),
+      edges: graph.edges.map(edge => related.has(edge.source) && related.has(edge.target) ? {
+        ...edge,
+        className: [edge.className, 'lineage-edge-variation-related'].filter(Boolean).join(' '),
+      } : edge),
+    };
+  }, [graph, graphSnapshot, panelMode, variationQueueNodeIds, variationQueuePrimary?.nodeId]);
   const renderedGraph = useMemo(() => {
-    if (!branchMotion) return graph;
+    if (!branchMotion) return queueDecoratedGraph;
     const motionClass = `lineage-edge-branch-${branchMotion.phase}`;
     return {
-      nodes: graph.nodes.map(node => {
+      nodes: queueDecoratedGraph.nodes.map(node => {
         const offset = branchMotion.nodeOffsets.get(node.id);
         if (!offset) return node;
         return {
@@ -913,12 +1007,12 @@ export function LineageView({
           },
         };
       }),
-      edges: graph.edges.map(edge => branchMotion.edgeIds.has(edge.id) ? {
+      edges: queueDecoratedGraph.edges.map(edge => branchMotion.edgeIds.has(edge.id) ? {
         ...edge,
         className: [edge.className, motionClass].filter(Boolean).join(' '),
       } : edge),
     };
-  }, [branchMotion, graph]);
+  }, [branchMotion, queueDecoratedGraph]);
   const graphKey = useMemo(
     () => lineageGraphKey(graphSnapshot, graphDirection, canvasPresentation),
     [canvasPresentation, graphDirection, graphSnapshot],
@@ -928,11 +1022,43 @@ export function LineageView({
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     setFlowEdges(current => reconcileAuthoritativeEdgeChanges(changes, current, authoritativeEdges.current));
   }, [setFlowEdges]);
-  const closeOnEscape = useCallback((event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return;
-    closeTransientMenus();
-    if (panelMode) closePanel();
+  const handleCanvasKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      if (event.target instanceof HTMLElement && event.target.closest('.lineage-variation-editor')) return;
+      closeTransientMenus();
+      if (panelMode) closePanel();
+    }
   }, [closePanel, closeTransientMenus, panelMode]);
+
+  useEffect(() => {
+    function toggleVariationQueue(event: globalThis.KeyboardEvent) {
+      if (event.key.toLowerCase() !== 'v' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="dialog"]')) return;
+      const intentionalQueueTarget = target?.closest(
+        '.lineage-node[data-asset-id], .lineage-variation-queue, .lineage-variation-queue-launch',
+      );
+      const unrelatedInteractiveTarget = target?.closest(
+        'button, a[href], summary, [role="button"], [role="link"], [role="switch"], [role^="menuitem"], [tabindex]:not([tabindex="-1"])',
+      );
+      if (unrelatedInteractiveTarget && !intentionalQueueTarget) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const invokingControl = document.activeElement;
+      setPanelMode(current => {
+        if (current !== 'queue') {
+          if (invokingControl instanceof HTMLElement) panelReturnFocusRef.current = invokingControl;
+          return 'queue';
+        }
+        const returnFocus = panelReturnFocusRef.current;
+        panelReturnFocusRef.current = null;
+        window.requestAnimationFrame(() => returnFocus?.focus());
+        return null;
+      });
+    }
+    document.addEventListener('keydown', toggleVariationQueue, true);
+    return () => document.removeEventListener('keydown', toggleVariationQueue, true);
+  }, []);
 
   useEffect(() => {
     setSelectionNote(activeNode?.selection_note || '');
@@ -973,7 +1099,7 @@ export function LineageView({
   }, []);
 
   return (
-    <section className="lineage-view" onKeyDownCapture={closeOnEscape}>
+    <section className="lineage-view" onKeyDownCapture={handleCanvasKeyDown}>
       {canvasToolsHost && createPortal(
         <LineageToolbar
           activeWorkspace={activeWorkspace}
@@ -991,14 +1117,15 @@ export function LineageView({
           onDownloadSwissifierMedia={() => void downloadSwissifierAndTrack()}
           onSeedDemo={() => void seedDemoAndRefreshAssets()}
           onSeedSwissifierDemo={() => void seedSwissifierAndRefreshAssets()}
-          onToggleNextPanel={() => togglePanel('selection')}
+          onToggleNextPanel={() => togglePanel('queue')}
           replayActive={Boolean(replaySnapshot)}
-          sideOpen={panelMode === 'selection'}
+          sideOpen={panelMode === 'queue'}
           snapshot={snapshot}
           swissifierDemoStatus={swissifierDemoStatus}
           workspaceLoading={workspaceLoading}
           workspaceProgress={workspaceProgress}
           workspaceRootAssetId={workspaceRootAssetId}
+          variationQueueCount={variationQueueCount}
         />,
         canvasToolsHost,
       )}
@@ -1025,7 +1152,7 @@ export function LineageView({
           </nav>
         )}
         <div
-          className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId ? 'focus-active' : ''} ${branchMotion ? `lineage-branch-motion lineage-branch-motion-${branchMotion.phase}` : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
+          className={`lineage-canvas lineage-canvas-${canvasPresentation} lineage-edges-${edgeWeight} ${activeNodeId && panelMode !== 'queue' ? 'focus-active' : ''} ${panelMode === 'queue' ? 'variation-queue-active' : ''} ${branchMotion ? `lineage-branch-motion lineage-branch-motion-${branchMotion.phase}` : ''} ${replaySnapshot ? 'lineage-replay-active' : ''} ${replayAtEnd ? 'lineage-replay-interactive' : ''} ${replaySnapshot && !replayPlaying ? 'lineage-replay-paused' : ''}`}
           data-lineage-canvas-presentation={canvasPresentation}
           data-lineage-edge-weight={edgeWeight}
           style={replaySnapshot ? {
@@ -1073,8 +1200,8 @@ export function LineageView({
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
             onSelectedAsset={onSelectedAsset}
-            onToggleBranch={node => node.user_selected ? clearNextVariation(node.asset_id) : openVariationPrompt(node, 'branch', 'add')}
-            onToggleReroll={node => node.reroll_request?.status === 'pending' ? clearReroll(node) : openVariationPrompt(node, 'reroll')}
+            onToggleBranch={node => openVariationPrompt(node, 'branch', node.user_selected ? 'edit' : 'add')}
+            onToggleReroll={node => openVariationPrompt(node, 'reroll')}
             onToggleSocial={toggleSocial}
             onViewportInteraction={markViewportInteraction}
             replayInteractive={!replaySnapshot || replayAtEnd}
@@ -1131,6 +1258,7 @@ export function LineageView({
               hoverPreviewsEnabled={hoverPreviewsEnabled}
               loading={loading}
               minimapVisible={minimapVisible}
+              variationPromptAutoEdit={variationPromptAutoEdit}
               onCanvasPresentation={selectCanvasPresentation}
               onEdgeSummariesVisible={selectEdgeSummariesVisible}
               onEdgeWeight={selectEdgeWeight}
@@ -1138,18 +1266,32 @@ export function LineageView({
               onGraphDirection={direction => void orientGraph(direction)}
               onHoverPreviewsEnabled={selectHoverPreviews}
               onMinimapVisible={selectMinimapVisible}
+              onVariationPromptAutoEdit={selectVariationPromptAutoEdit}
               onResetAppearance={resetAppearance}
               onTidyGraph={() => void tidyGraph()}
               snapshotAvailable={Boolean(snapshot)}
             />
           </aside>
         )}
-        {(panelMode === 'selection' || panelMode === 'asset') && snapshot && (
+        {panelMode === 'queue' && snapshot && (
+          <LineageVariationQueuePanel
+            autoEdit={variationPromptAutoEdit}
+            branchNodes={selectedNodes}
+            closePanel={closePanel}
+            onRemove={removeQueuedVariation}
+            onSave={saveQueuedVariation}
+            onSelect={selectQueuedVariation}
+            onShow={showQueuedVariation}
+            primary={variationQueuePrimary}
+            rerollNodes={rerollNodes}
+          />
+        )}
+        {panelMode === 'asset' && snapshot && (
           <LineageSidePanel
             activeNode={activeNode}
             brief={brief}
             childAssetId={childAssetId}
-            clearNextVariation={clearNextVariation}
+            clearNextVariation={async assetId => { await clearNextVariation(assetId); }}
             closePanel={closePanel}
             latestNodes={latestNodes}
             linkChild={linkChild}
@@ -1174,7 +1316,7 @@ export function LineageView({
               setDetailNodeId(assetId);
             }}
             setSelectionNote={setSelectionNote}
-            mode={panelMode}
+            mode="asset"
             sideOpen
             snapshot={snapshot}
           />
@@ -1237,12 +1379,13 @@ export function LineageView({
       )}
       {variationPrompt && variationPromptNode && (
         <LineageVariationPromptDialog
+          anchor={variationPrompt.anchor}
           initialPrompt={variationPrompt.mode === 'branch'
             ? variationPromptNode.branch_prompt || variationPromptNode.selection_note || ''
             : variationPromptNode.reroll_request?.prompt || variationPromptNode.reroll_request?.notes || ''}
           mode={variationPrompt.mode}
           node={variationPromptNode}
-          onClose={() => setVariationPrompt(null)}
+          onClose={closeVariationPrompt}
           onSubmit={submitVariationPrompt}
         />
       )}

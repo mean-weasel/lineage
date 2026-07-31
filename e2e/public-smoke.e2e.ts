@@ -131,27 +131,41 @@ test('loads the demo lineage at its canonical project and workspace route', asyn
   await expect(hoverPreview).toBeVisible();
   await branchAction.click();
   const branchPrompt = page.getByRole('dialog', { name: 'Describe the next branch' });
-  await branchPrompt.getByLabel('What should Codex change?').fill('Create a smoke-test branch with a tighter editorial grid.');
+  await branchPrompt.getByLabel('What should your agent change?').fill('Create a smoke-test branch with a tighter editorial grid.');
   await branchPrompt.getByRole('button', { name: 'Queue branch' }).click();
   await rootNode.hover();
   const queuedBranchAction = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Branch/ });
   await expect(queuedBranchAction).toHaveAttribute('aria-pressed', 'true');
   await queuedBranchAction.focus();
   await page.keyboard.press('b');
+  await expect(page.getByRole('dialog', { name: 'Describe the next branch' })).toHaveCount(0);
   await rootNode.hover();
-  await expect(page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Branch/ })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Branch/ })).toHaveAttribute('aria-pressed', 'true');
+  await rootNode.focus();
+  await rootNode.press('b');
+  const branchEditPrompt = page.getByRole('dialog', { name: 'Describe the next branch' });
+  await expect(branchEditPrompt).toBeVisible();
+  await expect(hoverPreview).toHaveCount(0);
+  await branchEditPrompt.getByRole('button', { name: 'Cancel' }).click();
+  await rootNode.hover();
   const freshRerollAction = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Re-roll/ });
   await freshRerollAction.click();
   const rerollPrompt = page.getByRole('dialog', { name: 'Describe the re-roll' });
-  await rerollPrompt.getByLabel('What should Codex change?').fill('Keep the composition and repair the smoke-test headline.');
+  await rerollPrompt.getByLabel('What should your agent change?').fill('Keep the composition and repair the smoke-test headline.');
   await rerollPrompt.getByRole('button', { name: 'Queue re-roll' }).click();
   await rootNode.hover();
   const queuedRerollAction = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Re-roll/ });
   await expect(queuedRerollAction).toHaveAttribute('aria-pressed', 'true');
   await queuedRerollAction.focus();
   await page.keyboard.press('r');
+  await expect(page.getByRole('dialog', { name: 'Describe the re-roll' })).toHaveCount(0);
   await rootNode.hover();
-  await expect(page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Re-roll/ })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Re-roll/ })).toHaveAttribute('aria-pressed', 'true');
+  await rootNode.focus();
+  await rootNode.press('r');
+  const rerollEditPrompt = page.getByRole('dialog', { name: 'Describe the re-roll' });
+  await expect(rerollEditPrompt).toBeVisible();
+  await rerollEditPrompt.getByRole('button', { name: 'Cancel' }).click();
 
   const firstCandidate = page.locator('.lineage-node:not(.root-node)').first();
   const anotherNodeTitle = await firstCandidate.locator('strong').textContent();
@@ -206,7 +220,7 @@ test('loads the demo lineage at its canonical project and workspace route', asyn
   await page.getByRole('radio', { name: 'Top to bottom' }).check();
   await expect(hoverPreview).toHaveCount(0);
 
-  await canvasTools.getByRole('button', { name: 'Manage selection' }).click();
+  await canvasTools.getByRole('button', { name: /Variation queue/ }).click();
   await expect(page.locator('#lineage-canvas-panel')).toBeVisible();
 });
 
