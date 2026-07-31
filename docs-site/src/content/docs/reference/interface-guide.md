@@ -45,10 +45,37 @@ sheet on mobile:
 - **Minimap** shows or hides the overview used to navigate larger trees.
 - **Hover previews** enables or disables the full-image node preview without
   disabling the node's detail view.
+- **Maximum queued branches** controls how many branch bases the workspace can
+  hold at once. A disabled Branch action explains when this limit has been
+  reached and points back to this setting.
+- **Edit prompt when selecting a variation** opens the inline editor when you
+  select a Variation Queue item. It is on by default and can be switched off
+  when selection should only focus the associated node.
 
 Canvas appearance choices are remembered in the current browser. Use **Fit
 graph** to frame the current tree, **Tidy tree** to restore automatic spacing,
 or **Reset appearance** to return all Canvas settings to their defaults.
+
+## Variation queue and prompts
+
+Choose **Branch** or **Re-roll** on a node, or focus that node and press **B**
+or **R**, to open its prompt editor. Describe the exact visual change your
+agent should make, then queue the work. A prompt may be left blank; Lineage
+marks it as needing a prompt and tells the agent to ask before generating
+instead of inventing an instruction.
+
+Open **Variation queue** from the Canvas contextual panel, or press **V**, to
+review every queued branch and re-roll in one scroll. Opening it closes any
+other Canvas side panel and highlights all participating nodes. Selecting a
+queue item focuses its node on the unobstructed Canvas; with the default
+setting enabled, it also opens that item's inline prompt editor. Each item can
+be edited, shown on the Canvas, or removed. Removing an item quietly removes
+its saved prompt as well.
+
+Branch and re-roll prompts remain distinct even when both actions target the
+same node. Once an agent has claimed or started the corresponding task, its
+prompt is locked in the Canvas so the visible instruction cannot diverge from
+the work in progress.
 
 ## Collapsing branches
 

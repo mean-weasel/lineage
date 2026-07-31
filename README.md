@@ -128,7 +128,8 @@ switcher.
 
 Use the gear at the upper right of Canvas for presentation and graph controls:
 compact or portrait cards, direction, edge weight, edge labels, hover
-previews, minimap visibility, Fit graph, Tidy tree, and Reset appearance.
+previews, minimap visibility, the maximum queued branches, prompt-editing
+behavior, Fit graph, Tidy tree, and Reset appearance.
 Visual choices use direct option cards, while minimap, edge labels, and hover
 previews use on/off switches. These appearance choices are stored in the
 browser. Canvas settings, selection, and Canvas asset details share one
@@ -136,6 +137,14 @@ right-side panel, so opening one replaces the other; on mobile that panel
 becomes a bottom sheet. Panel and control transitions respect the system's
 reduced-motion preference. Agent handoff now flows through the direct agent/UX
 bridge and the Agents view rather than a separate bottom Agent Context drawer.
+
+Choose **Branch** or **Re-roll** on a node—or focus it and press **B** or
+**R**—to queue that action with an exact prompt. The prompt remains visible on
+the node and is included in agent-readable task and generation handoffs. Open
+**Variation queue** from the context panel or press **V** to see all queued
+actions in one scroll, highlight their nodes, focus an item on the unobstructed
+Canvas, edit its prompt, or remove it. Blank prompts remain explicitly missing
+so the agent asks what should change instead of guessing.
 
 Nodes with descendants show a small count control beside their outgoing
 connection. Select it to collapse or expand that branch. Collapse state is

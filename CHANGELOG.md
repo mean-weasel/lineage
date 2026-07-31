@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.34
+
+- Add prompt-first Canvas actions for branches and re-rolls, preserving each exact instruction on its node and in agent-readable task, packet, brief, and generation handoffs.
+- Add a unified Variation Queue that highlights every queued node, focuses the selected node beside the panel, and supports inline prompt editing, quiet removal, keyboard shortcuts, and responsive desktop and mobile layouts.
+- Keep promptless work explicit so agents ask what should change, protect claimed instructions from conflicting edits, and expose workspace branch limits plus prompt-editing behavior in Canvas settings.
+
 ## 0.1.33
 
 - Make Projects the global home and give every project a dedicated Workspaces directory with paginated card and list views, search, sorting, durable animated manual ordering, and responsive keyboard- and touch-friendly controls.
