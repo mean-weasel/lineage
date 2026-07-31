@@ -938,10 +938,12 @@ describe('asset lineage index', () => {
     expect(snapshot.selection).toMatchObject({
       asset_id: files.childId,
       notes: 'Best expression for the next branch.',
+      prompt: 'Best expression for the next branch.',
     });
     expect(child).toMatchObject({
       position: { x: 320, y: 180 },
       preview_url: expect.stringContaining('/api/assets/local-preview?'),
+      branch_prompt: 'Best expression for the next branch.',
       selection_note: 'Best expression for the next branch.',
     });
   });

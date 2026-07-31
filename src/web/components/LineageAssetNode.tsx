@@ -57,6 +57,10 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const collapseInteractive = data.collapseInteractive !== false;
   const semanticZoomTier = data.semanticZoomTier || 'near';
   const hasWork = taskBadges.length > 0 || (data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll);
+  const branchPrompt = data.user_selected ? data.branch_prompt || data.selection_note : undefined;
+  const rerollPrompt = data.reroll_request?.status === 'pending'
+    ? data.reroll_request.prompt || data.reroll_request.notes
+    : undefined;
   const openFromNode = () => {
     data.onPreviewDismiss?.();
     if ((data.attempt_count || 1) > 1) data.onOpenHistory?.(data.asset_id);
@@ -163,6 +167,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
               {data.social_mark?.active && <span className="social">social</span>}
             </div>
             <small>{data.review_state.replaceAll('_', ' ')}</small>
+            {(branchPrompt || rerollPrompt) && (
+              <div className="lineage-node-prompts">
+                {branchPrompt && <span title={`Branch prompt: ${branchPrompt}`}><b>Branch</b>{branchPrompt}</span>}
+                {rerollPrompt && <span className="reroll" title={`Re-roll prompt: ${rerollPrompt}`}><b>Re-roll</b>{rerollPrompt}</span>}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -205,6 +215,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
                 </span>
               )}
             </div>
+            {(branchPrompt || rerollPrompt) && (
+              <div className="lineage-node-prompts">
+                {branchPrompt && <span title={`Branch prompt: ${branchPrompt}`}><b>Branch</b>{branchPrompt}</span>}
+                {rerollPrompt && <span className="reroll" title={`Re-roll prompt: ${rerollPrompt}`}><b>Re-roll</b>{rerollPrompt}</span>}
+              </div>
+            )}
             <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
           </>
         )}

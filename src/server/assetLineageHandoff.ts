@@ -23,7 +23,10 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
   const assets = next.next_assets;
   const asset = next.next_asset;
   const referenceAssetIds = assets.map(item => item.asset_id);
-  const rationale = next.selections.map(selection => selection.notes).find(Boolean) || asset?.selection_note || next.selection?.notes;
+  const variationPrompts = next.selections
+    .map(selection => ({ asset_id: selection.asset_id, prompt: selection.prompt || selection.notes || '' }))
+    .filter(item => Boolean(item.prompt));
+  const rationale = variationPrompts[0]?.prompt || asset?.branch_prompt || asset?.selection_note || next.selection?.prompt || next.selection?.notes;
   const channels = [...new Set(assets.map(item => item.channel || 'unknown'))];
   const campaigns = [...new Set(assets.map(item => item.campaign || 'unknown'))];
   const prompt = assets.length > 0
@@ -31,7 +34,9 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
       assets.length === 1
         ? `Create 3-4 variations from asset ${assets[0].asset_id} (${assets[0].title}).`
         : `Create 3-4 variations using these ${assets.length} selected references: ${referenceAssetIds.join(', ')}.`,
-      rationale ? `Preserve this selection rationale: ${rationale}` : 'Preserve the strongest visible ideas while exploring distinct alternatives.',
+      variationPrompts.length > 0
+        ? `Follow the exact saved variation prompt${variationPrompts.length === 1 ? '' : 's'}: ${variationPrompts.map(item => `${item.asset_id}: ${item.prompt}`).join(' | ')}`
+        : 'Preserve the strongest visible ideas while exploring distinct alternatives.',
       `Keep project=${project}, root=${next.root_asset_id}, channels=${channels.join(',')}, campaigns=${campaigns.join(',')}.`,
       'After generation, index outputs and link chosen children with lineage link-child.',
     ].join(' ')
@@ -56,6 +61,7 @@ export function getLineageBrief(project: string, rootAssetId?: string): LineageB
       reference_asset_id: asset?.asset_id,
       reference_asset_ids: referenceAssetIds,
       rationale,
+      variation_prompts: variationPrompts.length > 0 ? variationPrompts : undefined,
     },
     handoff: {
       next_command: lineageCommand('next', project, next.root_asset_id),

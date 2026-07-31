@@ -343,6 +343,7 @@ function validatedHumanEdgeSummary(value: unknown): string {
 }
 
 function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
+  const prompt = rowString(row.notes);
   return {
     id: String(row.id),
     project_id: String(row.project_id),
@@ -350,7 +351,8 @@ function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
     node_asset_id: String(row.node_asset_id),
     status: row.status as LineageRerollRequest['status'],
     requested_by: row.requested_by as LineageRerollRequest['requested_by'],
-    notes: rowString(row.notes),
+    prompt,
+    notes: prompt,
     created_at: String(row.created_at),
     resolved_at: rowString(row.resolved_at),
   };
@@ -379,6 +381,7 @@ function taskBackedRerollRequest(project: string, rootAssetId: string, task: Lin
     node_asset_id: task.target_asset_id,
     status: 'pending',
     requested_by: task.created_by,
+    prompt: task.instructions,
     notes: task.instructions,
     created_at: task.created_at,
     task_id: task.id,
@@ -654,7 +657,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     from assets a left join asset_reviews r on r.asset_id = a.id
       left join asset_layouts l on l.project_id = a.project_id and l.root_asset_id = ? and l.asset_id = a.id
     where a.project_id = ? and a.id in (${placeholders})
-  `).all(root, project, ...ids) as unknown as Array<Omit<LineageNode, 'attempt_count' | 'current_attempt' | 'is_latest' | 'lineage_tasks' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
+  `).all(root, project, ...ids) as unknown as Array<Omit<LineageNode, 'attempt_count' | 'branch_prompt' | 'current_attempt' | 'is_latest' | 'lineage_tasks' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
   const attemptRows = ids.length > 0
     ? database.prepare(`select * from asset_attempts where project_id = ? and node_asset_id in (${placeholders}) order by node_asset_id, attempt_index desc`).all(project, ...ids) as Array<Record<string, unknown>>
     : [];
@@ -688,7 +691,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   const childIds = new Set(edges.map(edge => edge.parent_asset_id));
   const selectedIds = new Set(selected.map(row => row.asset_id));
   const selections = selected.map(row => ({
-    asset_id: row.asset_id, notes: row.notes || undefined,
+    asset_id: row.asset_id, notes: row.notes || undefined, prompt: row.notes || undefined,
     position: Number(row.position || 0), selected_at: row.selected_at,
   }));
   const selection = selections[0] || null;
@@ -710,6 +713,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
       position,
       preview_url: canPreviewLocally(row.media_type, previewPath) ? localPreviewUrl(project, previewPath) : undefined,
       reroll_request: rerollsByNode.get(row.asset_id),
+      branch_prompt: nodeSelection?.prompt,
       selection_note: nodeSelection?.notes,
       social_mark: socialMarksByNode.get(row.asset_id),
       user_selected: selectedIds.has(row.asset_id),

@@ -289,6 +289,8 @@ export interface LineageNode {
   review_notes?: string;
   is_latest: boolean;
   user_selected: boolean;
+  /** Exact prompt saved for the next child branch. `selection_note` remains as a compatibility alias. */
+  branch_prompt?: string;
   selection_note?: string;
   preview_url?: string;
   position?: LineagePosition;
@@ -305,7 +307,7 @@ export interface LineagePosition {
 }
 
 interface LineageSelection {
-  asset_id: string; notes?: string; position: number; selected_at: string;
+  asset_id: string; notes?: string; prompt?: string; position: number; selected_at: string;
 }
 
 type LineageAttemptSource = 'generated_child' | 'initial' | 'reroll';
@@ -335,6 +337,8 @@ export interface LineageRerollRequest {
   node_asset_id: string;
   status: LineageRerollRequestStatus;
   requested_by: LineageRerollActor;
+  /** Exact prompt saved for the next attempt. `notes` remains as a compatibility alias. */
+  prompt?: string;
   notes?: string;
   created_at: string;
   resolved_at?: string;
@@ -488,6 +492,7 @@ export interface LineageBriefResponse {
     reference_asset_id?: string;
     reference_asset_ids: string[];
     rationale?: string;
+    variation_prompts?: Array<{ asset_id: string; prompt: string }>;
   };
   handoff: {
     next_command: string;
