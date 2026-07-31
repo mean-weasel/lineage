@@ -147,6 +147,7 @@ export function LineageCanvasAppearanceControls({
   hoverPreviewsEnabled,
   loading,
   minimapVisible,
+  nextVariationLimit,
   variationPromptAutoEdit,
   onCanvasPresentation,
   onEdgeSummariesVisible,
@@ -155,6 +156,7 @@ export function LineageCanvasAppearanceControls({
   onGraphDirection,
   onHoverPreviewsEnabled,
   onMinimapVisible,
+  onNextVariationLimit,
   onVariationPromptAutoEdit,
   onResetAppearance,
   onTidyGraph,
@@ -167,6 +169,7 @@ export function LineageCanvasAppearanceControls({
   hoverPreviewsEnabled: boolean;
   loading: boolean;
   minimapVisible: boolean;
+  nextVariationLimit: number;
   variationPromptAutoEdit: boolean;
   onCanvasPresentation: (presentation: LineageCanvasPresentation) => void;
   onEdgeSummariesVisible: (visible: boolean) => void;
@@ -175,6 +178,7 @@ export function LineageCanvasAppearanceControls({
   onGraphDirection: (direction: LineageGraphDirection) => void;
   onHoverPreviewsEnabled: (enabled: boolean) => void;
   onMinimapVisible: (visible: boolean) => void;
+  onNextVariationLimit: (limit: number) => void;
   onVariationPromptAutoEdit: (enabled: boolean) => void;
   onResetAppearance: () => void;
   onTidyGraph: () => void;
@@ -276,6 +280,28 @@ export function LineageCanvasAppearanceControls({
           label="Edge labels"
           onChange={onEdgeSummariesVisible}
         />
+        </section>
+
+        <section aria-labelledby="canvas-settings-workflow" className="lineage-canvas-settings-group">
+        <div className="lineage-canvas-settings-group-head">
+          <span aria-hidden="true">⑂</span>
+          <div>
+            <h4 id="canvas-settings-workflow">Workflow</h4>
+            <p>Keep the variation queue focused for this workspace.</p>
+          </div>
+        </div>
+        <label className="lineage-setting-number">
+          <span><strong>Maximum queued branches</strong><small>New branches pause when this workspace reaches the limit</small></span>
+          <input
+            aria-label="Maximum queued branches"
+            disabled={disabled}
+            max={12}
+            min={1}
+            onChange={event => onNextVariationLimit(Number(event.target.value))}
+            type="number"
+            value={nextVariationLimit}
+          />
+        </label>
         </section>
 
         <section aria-labelledby="canvas-settings-view-aids" className="lineage-canvas-settings-group">

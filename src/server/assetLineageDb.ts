@@ -194,6 +194,7 @@ export function lineageDb(): DatabaseSync {
       sort_position integer not null default 0,
       collection_kind text not null default 'open',
       revision integer not null default 1,
+      max_queued_branches integer not null default 3 check (max_queued_branches between 1 and 12),
       unique(project_id, root_asset_id)
     );
     create index if not exists lineage_workspaces_project_status on lineage_workspaces(project_id, status, updated_at);
@@ -631,6 +632,7 @@ export function lineageDb(): DatabaseSync {
   migrateAssetSelections(database);
   dropLegacyAssetSelectionRootUnique(database);
   ensureColumn(database, 'asset_selections', 'notes', 'text');
+  ensureColumn(database, 'lineage_workspaces', 'max_queued_branches', 'integer not null default 3 check (max_queued_branches between 1 and 12)');
   backfillLineageTasks(database);
   ensureColumn(database, 'asset_ledger_records', 'first_seen_at', 'text');
   ensureColumn(database, 'asset_ledger_records', 'indexed_by_run_id', 'text');

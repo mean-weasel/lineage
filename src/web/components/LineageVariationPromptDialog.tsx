@@ -40,6 +40,7 @@ export function LineageVariationPromptDialog({
   const isBranch = mode === 'branch';
   const title = isBranch ? 'Describe the next branch' : 'Describe the re-roll';
   const action = isBranch ? 'Queue branch' : 'Queue re-roll';
+  const queued = isBranch ? node.user_selected : node.reroll_request?.status === 'pending';
   const trimmed = prompt.trim();
   const position = anchor && typeof window !== 'undefined'
     ? variationPromptPosition(anchor, window.innerWidth, window.innerHeight)
@@ -56,7 +57,7 @@ export function LineageVariationPromptDialog({
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (!trimmed || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
       await onSubmit(trimmed);
@@ -98,11 +99,13 @@ export function LineageVariationPromptDialog({
             rows={6}
             value={prompt}
           />
-          <small><span>{prompt.length}/1600</span> Be exact—this prompt travels with the node.</small>
+          <small><span>{prompt.length}/1600</span> Leave blank and your agent will ask what should change.</small>
         </label>
         <footer>
           <button disabled={busy} onClick={onClose} type="button">Cancel</button>
-          <button className="primary-button" disabled={!trimmed || busy} type="submit">{busy ? 'Saving…' : action}</button>
+          <button className="primary-button" disabled={busy} type="submit">
+            {busy ? 'Saving…' : trimmed ? (queued ? 'Save prompt' : action) : (queued ? 'Save without prompt' : 'Queue without prompt')}
+          </button>
         </footer>
       </form>
     </div>

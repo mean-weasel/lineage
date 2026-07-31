@@ -38,6 +38,7 @@
 .lineage-variation-card-footer { align-items: center; display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid #e5edef; padding: 8px 10px; }
 .lineage-variation-card-footer > span { color: #537078; font-size: 9px; font-weight: 850; text-transform: uppercase; }
 .lineage-variation-card-footer > span.locked { color: #9b5c18; }
+.lineage-variation-card-footer > span.needs-prompt { color: #a65f0b; }
 .lineage-variation-card-footer > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .lineage-variation-card-footer button { align-items: center; display: inline-flex; min-height: 28px; gap: 4px; border: 0; border-radius: 7px; background: transparent; color: #36525c; padding: 0 6px; font-size: 10px; font-weight: 850; }
 .lineage-variation-card-footer button:hover:not(:disabled), .lineage-variation-card-footer button:focus-visible { background: #e9f4f5; color: #086f78; }

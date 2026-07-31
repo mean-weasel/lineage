@@ -14,23 +14,32 @@ afterEach(() => {
 });
 
 describe('LineageVariationPromptDialog', () => {
-  it('requires and submits the exact branch prompt with agent-neutral copy', async () => {
+  it('submits an exact branch prompt with agent-neutral copy', async () => {
     const onSubmit = vi.fn(async () => undefined);
     render('branch', onSubmit);
     const textarea = container.querySelector('textarea')!;
-    const queue = button('Queue branch');
+    let queue = button('Queue without prompt');
 
     expect(container.textContent).not.toContain('Codex');
     expect(container.textContent).toContain('What should your agent change?');
-    expect(queue.disabled).toBe(true);
+    expect(queue.disabled).toBe(false);
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Restyle with a strict Swiss grid.');
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    queue = button('Queue branch');
     expect(queue.disabled).toBe(false);
 
     await act(async () => { queue.click(); });
     expect(onSubmit).toHaveBeenCalledWith('Restyle with a strict Swiss grid.');
+  });
+
+  it('queues a genuinely promptless branch when the user leaves the field blank', async () => {
+    const onSubmit = vi.fn(async () => undefined);
+    render('branch', onSubmit);
+    await act(async () => { button('Queue without prompt').click(); });
+    expect(onSubmit).toHaveBeenCalledWith('');
+    expect(container.textContent).toContain('your agent will ask');
   });
 
   it('shows the saved re-roll prompt when editing a queued attempt', () => {

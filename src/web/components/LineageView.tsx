@@ -66,6 +66,52 @@ export function lineageCanvasPresentationFromSearch(
   return requested === 'portrait' || requested === 'compact' ? requested : fallback;
 }
 
+type VariationLimitTarget = { project: string; rootAssetId: string; workspaceId: string | null };
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure stale-response guard shared with regression tests
+export function variationLimitTargetIsCurrent(requested: VariationLimitTarget, current: VariationLimitTarget): boolean {
+  return requested.project === current.project
+    && requested.rootAssetId === current.rootAssetId
+    && requested.workspaceId === current.workspaceId;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure save-result policy shared with regression tests
+export function variationLimitSaveOutcome(
+  generation: number,
+  currentGeneration: number,
+  requested: VariationLimitTarget,
+  current: VariationLimitTarget,
+): { announce: boolean; apply: boolean } {
+  const apply = variationLimitTargetIsCurrent(requested, current);
+  return { apply, announce: apply && generation === currentGeneration };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure request sequencing helper shared with regression tests
+export function serializeVariationLimitSave(previous: Promise<void>, save: () => Promise<void>): Promise<void> {
+  return previous.catch(() => undefined).then(save);
+}
+
+type RectBounds = Pick<DOMRect, 'bottom' | 'height' | 'left' | 'right' | 'top' | 'width'>;
+
+// eslint-disable-next-line react-refresh/only-export-components -- pure viewport geometry shared with regression tests
+export function variationQueueVisibleBounds(canvas: RectBounds, panel?: RectBounds): { bottom: number; left: number; right: number; top: number } {
+  const bounds = { bottom: canvas.height, left: 0, right: canvas.width, top: 0 };
+  if (!panel) return bounds;
+
+  const overlapLeft = Math.max(canvas.left, panel.left);
+  const overlapRight = Math.min(canvas.right, panel.right);
+  const overlapTop = Math.max(canvas.top, panel.top);
+  const overlapBottom = Math.min(canvas.bottom, panel.bottom);
+  const overlapWidth = Math.max(0, overlapRight - overlapLeft);
+  const overlapHeight = Math.max(0, overlapBottom - overlapTop);
+  if (overlapWidth === 0 || overlapHeight === 0) return bounds;
+
+  const coversMostWidth = overlapWidth >= canvas.width * 0.8;
+  if (coversMostWidth && overlapTop > canvas.top) bounds.bottom = overlapTop - canvas.top;
+  else if (overlapLeft > canvas.left) bounds.right = overlapLeft - canvas.left;
+  return bounds;
+}
+
 type LineageBranchMotion = {
   edgeIds: ReadonlySet<string>;
   nodeOffsets: ReadonlyMap<string, { x: number; y: number }>;
@@ -192,8 +238,9 @@ export function LineageView({
     () => new Set([...selectedNodes, ...rerollNodes].map(node => node.asset_id)),
     [rerollNodes, selectedNodes],
   );
-  const nextVariationLimit = 3;
+  const nextVariationLimit = snapshot?.next_variation_limit || 3;
   const selectionFull = selectedNodes.length >= nextVariationLimit;
+  const branchLimitMessage = `${selectedNodes.length} of ${nextVariationLimit} branches queued. Raise the maximum in Canvas settings or remove a branch.`;
   const detailNode = snapshot?.nodes.find(node => node.asset_id === detailNodeId) || null, historyNode = snapshot?.nodes.find(node => node.asset_id === historyNodeId) || null, menuNode = snapshot?.nodes.find(node => node.asset_id === nodeMenu?.assetId), targetNode = snapshot?.nodes.find(node => node.asset_id === targetNodeId) || null;
   const variationPromptNode = snapshot?.nodes.find(node => node.asset_id === variationPrompt?.nodeId) || null;
   const canvasHoverPreviewsEnabled = hoverPreviewsEnabled && !detailNode && !historyNode && !editingEdge && !variationPrompt && !panelMode && (!replaySnapshot || replayAtEnd);
@@ -202,6 +249,9 @@ export function LineageView({
   const authoritativeEdges = useRef<Edge[]>([]);
   const renderedGraphKey = useRef('');
   const workspaceRootRef = useRef('');
+  const activeWorkspaceIdRef = useRef<string | null>(null);
+  const variationLimitSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const variationLimitSaveGenerationRef = useRef(0);
   const panelReturnFocusRef = useRef<HTMLElement | null>(null);
   const branchMotionRef = useRef<LineageBranchMotion | null>(null);
   const branchMotionTimer = useRef<number | null>(null);
@@ -336,6 +386,7 @@ export function LineageView({
     project,
     workspaceId,
   });
+  activeWorkspaceIdRef.current = activeWorkspace?.id || null;
   useEffect(() => {
     if (activeWorkspace?.id === workspaceId) onCanvasPresentationChange(canvasPresentation);
   }, [activeWorkspace?.id, canvasPresentation, onCanvasPresentationChange, workspaceId]);
@@ -488,7 +539,7 @@ export function LineageView({
     }
   }
   function saveRationale() {
-    if (!activeNode?.user_selected || !selectionNote.trim()) return;
+    if (!activeNode?.user_selected) return;
     void mutateLineage('/api/selection', {
       assetId: activeNode.asset_id,
       rootAssetId: snapshot?.root_asset_id,
@@ -499,7 +550,7 @@ export function LineageView({
   }
   async function selectNextBase(node: LineageNode, notes = node.selection_note || '') {
     if (!node.user_selected && selectionFull) {
-      onToast('error', `Choose at most ${nextVariationLimit} assets for next variation`);
+      onToast('error', branchLimitMessage);
       return;
     }
     return mutateLineage('/api/selection', {
@@ -588,6 +639,26 @@ export function LineageView({
       returnFocus: anchorElement || (document.activeElement instanceof HTMLElement ? document.activeElement : undefined),
     });
   }
+  async function toggleBranch(node: LineageNode) {
+    if (variationTaskLocked(node, 'branch')) return;
+    if (node.user_selected) {
+      await clearNextVariation(node.asset_id);
+      return;
+    }
+    if (selectionFull) {
+      onToast('error', branchLimitMessage);
+      return;
+    }
+    openVariationPrompt(node, 'branch', 'add');
+  }
+  async function toggleReroll(node: LineageNode) {
+    if (variationTaskLocked(node, 'reroll')) return;
+    if (node.reroll_request?.status === 'pending') {
+      await clearReroll(node);
+      return;
+    }
+    openVariationPrompt(node, 'reroll');
+  }
   function closeVariationPrompt() {
     const returnFocus = variationPrompt?.returnFocus;
     setVariationPrompt(null);
@@ -614,11 +685,32 @@ export function LineageView({
     setVariationQueuePrimary(selection);
     setActiveNodeId(selection.nodeId);
     onSelectedAsset(selection.nodeId);
+    focusQueuedVariation(selection.nodeId);
   }
   function showQueuedVariation(node: LineageNode, mode: VariationPromptMode) {
     selectQueuedVariation({ mode, nodeId: node.asset_id });
-    const target = flowApi?.getNode(node.asset_id);
-    if (flowApi && target) void flowApi.fitView({ duration: 260, maxZoom: 1, nodes: [target], padding: 0.75 });
+  }
+  function focusQueuedVariation(nodeId: string) {
+    const target = flowApi?.getNode(nodeId);
+    const canvas = document.querySelector<HTMLElement>('.lineage-canvas');
+    if (!flowApi || !target || !canvas) return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const panelRect = document.querySelector<HTMLElement>('.lineage-variation-queue')?.getBoundingClientRect();
+    const targetWidth = target.measured?.width || target.width || 212;
+    const targetHeight = target.measured?.height || target.height || 164;
+    const targetCenter = {
+      x: target.position.x + targetWidth / 2,
+      y: target.position.y + targetHeight / 2,
+    };
+    const visibleBounds = variationQueueVisibleBounds(canvasRect, panelRect);
+    const zoom = Math.min(1, Math.max(0.82, flowApi.getZoom()));
+
+    void flowApi.setViewport({
+      x: (visibleBounds.left + visibleBounds.right) / 2 - targetCenter.x * zoom,
+      y: (visibleBounds.top + visibleBounds.bottom) / 2 - targetCenter.y * zoom,
+      zoom,
+    }, { duration: 260 });
   }
   async function submitVariationPrompt(prompt: string) {
     if (!variationPrompt || !variationPromptNode) return;
@@ -639,6 +731,48 @@ export function LineageView({
       saved = Boolean(await selectNextBase(variationPromptNode, prompt));
     }
     if (saved) closeVariationPrompt();
+  }
+  async function saveNextVariationLimit(limit: number) {
+    if (!activeWorkspace) return;
+    const normalized = Math.max(1, Math.min(12, Math.round(limit || 1)));
+    const generation = ++variationLimitSaveGenerationRef.current;
+    const requestedWorkspaceId = activeWorkspace.id;
+    const requestedTarget: VariationLimitTarget = {
+      project,
+      rootAssetId: workspaceRootAssetId,
+      workspaceId: requestedWorkspaceId,
+    };
+    const queued = serializeVariationLimitSave(variationLimitSaveQueueRef.current, async () => {
+      try {
+        const result = await api<{ workspace: LineageWorkspace }>(`/api/lineage-workspaces/${encodeURIComponent(requestedWorkspaceId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: requestedTarget.project, maxQueuedBranches: normalized, confirmWrite: true }),
+        });
+        const outcome = variationLimitSaveOutcome(generation, variationLimitSaveGenerationRef.current, requestedTarget, {
+          project: currentProjectRef.current,
+          rootAssetId: workspaceRootRef.current,
+          workspaceId: activeWorkspaceIdRef.current,
+        });
+        if (!outcome.apply) return;
+        setSnapshot(current => current ? { ...current, next_variation_limit: result.workspace.max_queued_branches || normalized } : current);
+        await refreshWorkspaces();
+        if (outcome.announce) {
+          onToast('ok', `Branch queue maximum set to ${result.workspace.max_queued_branches || normalized}`);
+        }
+      } catch (error) {
+        const outcome = variationLimitSaveOutcome(generation, variationLimitSaveGenerationRef.current, requestedTarget, {
+          project: currentProjectRef.current,
+          rootAssetId: workspaceRootRef.current,
+          workspaceId: activeWorkspaceIdRef.current,
+        });
+        if (outcome.announce) {
+          onToast('error', error instanceof Error ? error.message : String(error));
+        }
+      }
+    });
+    variationLimitSaveQueueRef.current = queued;
+    await queued;
   }
   async function toggleSocial(node: LineageNode) {
     if (!snapshot) return;
@@ -1196,15 +1330,19 @@ export function LineageView({
             onNodePosition={node => {
               if (canvasPresentation === 'compact') void saveNodePosition(node);
             }}
+            onBranchLimitReached={() => onToast('error', branchLimitMessage)}
+            onEditVariationPrompt={(node, mode) => openVariationPrompt(node, mode, mode === 'branch' ? 'edit' : undefined)}
             onToggleCollapse={toggleCollapsedBranch}
             onNodesChange={onNodesChange}
             onReady={setFlowApi}
             onSelectedAsset={onSelectedAsset}
-            onToggleBranch={node => openVariationPrompt(node, 'branch', node.user_selected ? 'edit' : 'add')}
-            onToggleReroll={node => openVariationPrompt(node, 'reroll')}
+            onToggleBranch={toggleBranch}
+            onToggleReroll={toggleReroll}
             onToggleSocial={toggleSocial}
             onViewportInteraction={markViewportInteraction}
             replayInteractive={!replaySnapshot || replayAtEnd}
+            selectedCount={selectedNodes.length}
+            selectionLimit={nextVariationLimit}
             selectionFull={selectionFull}
             workspaceProgress={workspaceProgress}
             workspaceRootAssetId={workspaceRootAssetId}
@@ -1246,7 +1384,7 @@ export function LineageView({
               <span aria-hidden="true" className="lineage-settings-sheet-handle" />
               <div>
                 <h3>Canvas settings</h3>
-                <p className="muted-copy">Appearance preferences are saved in this browser.</p>
+                <p className="muted-copy">Appearance stays in this browser; workflow settings follow this workspace.</p>
               </div>
               <button autoFocus aria-label="Close Canvas settings" className="icon-button" onClick={closePanel} type="button">×</button>
             </div>
@@ -1258,6 +1396,7 @@ export function LineageView({
               hoverPreviewsEnabled={hoverPreviewsEnabled}
               loading={loading}
               minimapVisible={minimapVisible}
+              nextVariationLimit={nextVariationLimit}
               variationPromptAutoEdit={variationPromptAutoEdit}
               onCanvasPresentation={selectCanvasPresentation}
               onEdgeSummariesVisible={selectEdgeSummariesVisible}
@@ -1266,6 +1405,7 @@ export function LineageView({
               onGraphDirection={direction => void orientGraph(direction)}
               onHoverPreviewsEnabled={selectHoverPreviews}
               onMinimapVisible={selectMinimapVisible}
+              onNextVariationLimit={limit => void saveNextVariationLimit(limit)}
               onVariationPromptAutoEdit={selectVariationPromptAutoEdit}
               onResetAppearance={resetAppearance}
               onTidyGraph={() => void tidyGraph()}

@@ -3,6 +3,7 @@ import { expect, test } from 'playwright/test';
 const project = 'demo-project';
 
 test('persists exact branch and re-roll prompts on nodes and in the agent task handoff', async ({ page, request }) => {
+  test.setTimeout(90_000);
   const seededResponse = await request.post('/api/lineage-workspaces/demo/seed', {
     data: { project, confirmWrite: true },
   });
@@ -77,6 +78,10 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
     await rerollCard.locator('.lineage-variation-select').click();
     await expect(rerollNode).toHaveClass(/variation-primary/);
     await expect(rerollCard.locator('textarea')).toBeFocused();
+    await expect.poll(async () => {
+      const [nodeBox, queueBox] = await Promise.all([rerollNode.boundingBox(), queue.boundingBox()]);
+      return Boolean(nodeBox && queueBox && nodeBox.x + nodeBox.width <= queueBox.x - 8);
+    }).toBe(true);
     await page.keyboard.press('Escape');
     await expect(rerollCard.locator('textarea')).toHaveCount(0);
     await expect(queue).toBeVisible();
@@ -125,6 +130,51 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
     };
     expect(brief.brief.variation_prompts).toContainEqual({ asset_id: seeded.root_asset_id, prompt: editedBranchPrompt });
     expect(brief.brief.prompt).toContain(editedBranchPrompt);
+
+    await rootNode.focus();
+    await rootNode.press('b');
+    await expect(rootNode).not.toHaveClass(/selected/);
+    await rerollNode.focus();
+    await rerollNode.press('r');
+    await expect(rerollNode.locator('.lineage-node-prompts span.reroll')).toHaveCount(0);
+
+    const afterRemoval = await (await request.get(`/api/lineage/${seeded.root_asset_id}?project=${project}`)).json() as {
+      nodes: Array<{ asset_id: string; branch_prompt?: string; reroll_request?: { prompt?: string } }>;
+      tasks: Array<{ status: string; target_asset_id: string; task_type: string }>;
+    };
+    expect(afterRemoval.nodes.find(node => node.asset_id === seeded.root_asset_id)?.branch_prompt).toBeUndefined();
+    expect(afterRemoval.nodes.find(node => node.asset_id === rerollAssetId)?.reroll_request).toBeUndefined();
+    expect(afterRemoval.tasks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ target_asset_id: seeded.root_asset_id, task_type: 'iterate' }),
+      expect.objectContaining({ target_asset_id: rerollAssetId, task_type: 'reroll' }),
+    ]));
+
+    const limitResponse = await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}`, {
+      data: { project, maxQueuedBranches: 1, confirmWrite: true },
+    });
+    expect(limitResponse.ok()).toBe(true);
+    await page.reload();
+    await rootNode.focus();
+    await rootNode.press('b');
+    await page.getByRole('dialog', { name: 'Describe the next branch' }).getByRole('button', { name: 'Queue without prompt' }).click();
+    await expect(rootNode.locator('.lineage-node-prompts span').filter({ hasText: 'Branch' })).toHaveAttribute('title', 'Branch has no prompt');
+
+    await page.getByRole('button', { name: 'Back to workspaces', exact: true }).focus();
+    await rerollNode.hover();
+    const cappedBranch = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Branch limit/ });
+    const capMessage = '1 of 1 branches queued. Raise the maximum in Canvas settings or remove a branch.';
+    await expect(cappedBranch).toHaveAttribute('aria-disabled', 'true');
+    await expect(cappedBranch).toHaveAttribute('title', capMessage);
+    await page.mouse.move(0, 0);
+    await rerollNode.focus();
+    await rerollNode.press('b');
+    await expect(page.getByRole('status')).toContainText(capMessage);
+
+    await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+    const maxBranches = page.getByRole('spinbutton', { name: 'Maximum queued branches' });
+    await expect(maxBranches).toHaveValue('1');
+    await maxBranches.fill('2');
+    await expect(maxBranches).toHaveValue('2');
   } finally {
     await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}/archive`, {
       data: { project, confirmWrite: true },

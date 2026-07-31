@@ -63,6 +63,16 @@ describe('LineageVariationQueuePanel', () => {
     act(() => container!.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' })));
     expect(container!.querySelector('textarea')).toBeNull();
   });
+
+  it('shows and saves promptless queue items as needing a prompt', async () => {
+    const onSave = vi.fn(async () => true);
+    render({ branchNodes: [node({ user_selected: true })], onSave });
+    expect(container!.textContent).toContain('No prompt yet — your agent will ask');
+    expect(container!.textContent).toContain('Needs prompt');
+    act(() => button('Add prompt').click());
+    await act(async () => button('Save without prompt').click());
+    expect(onSave).toHaveBeenCalledWith(expect.anything(), 'branch', '');
+  });
 });
 
 function render(overrides: Partial<Parameters<typeof LineageVariationQueuePanel>[0]> = {}) {

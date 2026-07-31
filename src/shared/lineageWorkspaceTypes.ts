@@ -15,6 +15,7 @@ export interface LineageWorkspace {
   sort_position?: number;
   collection_kind?: 'open' | 'archived';
   revision?: number;
+  max_queued_branches?: number;
 }
 
 export interface LineageWorkspaceSnapshot {
@@ -40,5 +41,6 @@ export interface LineageWorkspaceUpdateFields {
   status?: LineageWorkspaceStatus;
   notes?: string;
   activate?: boolean;
+  maxQueuedBranches?: number;
   confirmWrite: boolean;
 }

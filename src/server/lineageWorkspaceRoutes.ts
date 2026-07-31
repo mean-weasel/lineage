@@ -116,6 +116,7 @@ export function registerLineageWorkspaceRoutes(app: express.Express, projectFrom
       status: req.body.status === 'active' || req.body.status === 'paused' || req.body.status === 'archived' ? req.body.status : undefined,
       notes: typeof req.body.notes === 'string' ? req.body.notes : undefined,
       activate: req.body.activate === true,
+      maxQueuedBranches: typeof req.body.maxQueuedBranches === 'number' ? req.body.maxQueuedBranches : undefined,
       confirmWrite: req.body.confirmWrite === true,
     }));
   }));

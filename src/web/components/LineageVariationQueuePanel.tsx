@@ -29,12 +29,14 @@ export function LineageVariationQueuePanel({
 }) {
   const [editing, setEditing] = useState<VariationQueueSelection | null>(null);
   const total = branchNodes.length + rerollNodes.length;
+  const missingPromptCount = [...branchNodes.map(node => variationPromptFor(node, 'branch')), ...rerollNodes.map(node => variationPromptFor(node, 'reroll'))]
+    .filter(prompt => !prompt.trim()).length;
 
   return (
     <aside aria-label="Variation queue" className="lineage-side lineage-variation-queue" id="lineage-canvas-panel">
       <header className="lineage-side-head lineage-variation-queue-head">
         <div>
-          <span className="lineage-prompt-eyebrow">Ready for your agent</span>
+          <span className="lineage-prompt-eyebrow">{missingPromptCount > 0 ? `${missingPromptCount} ${missingPromptCount === 1 ? 'item needs' : 'items need'} a prompt` : 'Ready for your agent'}</span>
           <h3>Variation queue <span>{total}</span></h3>
           <p>Review every instruction and its place on the Canvas.</p>
         </div>
@@ -43,7 +45,7 @@ export function LineageVariationQueuePanel({
       {total === 0 ? (
         <div className="lineage-variation-empty">
           <strong>No variations queued</strong>
-          <p>Choose Branch or Re-roll on a Canvas node to add an exact prompt.</p>
+            <p>Choose Branch or Re-roll on a Canvas node to add it here.</p>
         </div>
       ) : (
         <div className="lineage-variation-groups">
@@ -162,7 +164,7 @@ function VariationCard({ autoEdit, editing, mode, node, onEdit, onEditClose, onR
   async function save(event?: FormEvent) {
     event?.preventDefault();
     const prompt = draft.trim();
-    if (!prompt || busy || locked) return;
+    if (busy || locked) return;
     setBusy(true);
     try {
       const saved = await onSave(prompt);
@@ -191,7 +193,7 @@ function VariationCard({ autoEdit, editing, mode, node, onEdit, onEditClose, onR
         <span className={`lineage-variation-kind ${mode}`}>{mode === 'branch' ? 'Branch' : 'Re-roll'}</span>
         <strong>{node.title}</strong>
         <code>{node.asset_id}</code>
-        {!editing && <span className={`lineage-variation-prompt ${initialPrompt ? '' : 'missing'}`}>{initialPrompt || 'Add a prompt'}</span>}
+        {!editing && <span className={`lineage-variation-prompt ${initialPrompt ? '' : 'missing'}`}>{initialPrompt || 'No prompt yet — your agent will ask'}</span>}
       </button>
       {editing && !locked && (
         <form className="lineage-variation-editor" onSubmit={save}>
@@ -202,12 +204,12 @@ function VariationCard({ autoEdit, editing, mode, node, onEdit, onEditClose, onR
           <small>⌘/Ctrl + Enter to save · Esc to cancel</small>
           <div>
             <button disabled={busy} onClick={() => { setDraft(initialPrompt); onEditClose(); }} type="button">Cancel</button>
-            <button className="primary-button" disabled={!draft.trim() || busy} type="submit">{busy ? 'Saving…' : 'Save'}</button>
+            <button className="primary-button" disabled={busy} type="submit">{busy ? 'Saving…' : draft.trim() ? 'Save' : 'Save without prompt'}</button>
           </div>
         </form>
       )}
       <div className="lineage-variation-card-footer">
-        <span className={locked ? 'locked' : 'ready'}>{locked ? `${task?.status === 'in_progress' ? 'In progress' : 'Claimed'} · prompt locked` : 'Ready for your agent'}</span>
+        <span className={locked ? 'locked' : initialPrompt ? 'ready' : 'needs-prompt'}>{locked ? `${task?.status === 'in_progress' ? 'In progress' : 'Claimed'} · prompt locked` : initialPrompt ? 'Ready for your agent' : 'Needs prompt'}</span>
         <div>
           <button aria-label={`${initialPrompt ? 'Edit' : 'Add'} ${mode} prompt for ${node.title}`} disabled={locked} onClick={onEdit} title={locked ? 'An agent is already working on this instruction' : undefined} type="button"><Pencil aria-hidden="true" size={14} />{initialPrompt ? 'Edit' : 'Add prompt'}</button>
           <button aria-label={`Show ${node.title} on canvas`} onClick={onShow} type="button"><Crosshair aria-hidden="true" size={14} />Show</button>

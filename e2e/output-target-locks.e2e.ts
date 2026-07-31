@@ -48,6 +48,8 @@ test('canvas persists independent node targets, plans only from their digest, an
     const sourceCards = sheet.locator('.lineage-node-target-source');
     await expect(sourceCards).toHaveCount(2);
     await expect(sourceCards).toContainText(['Inherited next 1080×1920', 'Inherited next 1080×1920']);
+    const aggregateDigest = sheet.locator('.lineage-resolution-digest code');
+    const initialAggregateDigest = await aggregateDigest.textContent();
 
     const secondCard = sourceCards.filter({ hasText: secondSource!.asset_id });
     await secondCard.locator('summary').click();
@@ -60,6 +62,7 @@ test('canvas persists independent node targets, plans only from their digest, an
     await editor.locator('.node-next-custom-targets input[type="number"]').nth(1).fill('1500');
     await editor.getByRole('button', { name: 'Set sticky targets' }).click();
     await expect(secondCard).toContainText('Sticky next 1200×1500');
+    await expect.poll(() => aggregateDigest.textContent()).not.toBe(initialAggregateDigest);
 
     await sheet.getByLabel('Generation prompt').fill('Create exact independent static-image variants');
     await sheet.getByLabel('Variations per produced geometry').fill('2');
@@ -67,7 +70,6 @@ test('canvas persists independent node targets, plans only from their digest, an
     await expect(sheet.getByText(/4 exact outputs/)).toBeVisible();
     await expect(sheet.getByText('1080 × 1920 px', { exact: true })).toBeVisible();
     await expect(sheet.getByText('1200 × 1500 px', { exact: true })).toBeVisible();
-    const aggregateDigest = sheet.locator('.lineage-resolution-digest code');
     await expect(aggregateDigest).toHaveText(/^[a-f0-9]{64}$/);
 
     await sheet.getByRole('button', { name: 'Create planned job' }).click();
