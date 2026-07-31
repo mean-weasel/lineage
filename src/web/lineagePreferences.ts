@@ -9,6 +9,7 @@ const minimapVisibleKey = 'lineage.preferences.minimap-visible';
 const compactDirectionKey = 'lineage.preferences.compact-direction';
 const portraitDirectionKey = 'lineage.preferences.portrait-direction';
 const canvasSettingsHintDismissedKey = 'lineage.preferences.canvas-settings-hint-dismissed';
+const variationPromptAutoEditKey = 'lineage.preferences.variation-prompt-auto-edit';
 
 type PreferenceReader = Pick<Storage, 'getItem'>;
 type PreferenceWriter = Pick<Storage, 'setItem'>;
@@ -22,7 +23,25 @@ const lineageAppearanceDefaults = {
   hoverPreviewsEnabled: true,
   minimapVisible: true,
   portraitDirection: 'LR',
+  variationPromptAutoEdit: true,
 } as const;
+
+export function readVariationPromptAutoEdit(storage?: PreferenceReader): boolean {
+  try {
+    return (storage || window.localStorage).getItem(variationPromptAutoEditKey) !== 'false';
+  } catch {
+    return lineageAppearanceDefaults.variationPromptAutoEdit;
+  }
+}
+
+export function writeVariationPromptAutoEdit(enabled: boolean, storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(variationPromptAutoEditKey, String(enabled));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function readHoverPreviewsEnabled(storage?: PreferenceReader): boolean {
   try {
@@ -166,6 +185,7 @@ export function resetLineageAppearancePreferences(storage?: PreferenceWriter): b
     writer.setItem(edgeLabelsKey, String(lineageAppearanceDefaults.edgeLabelsVisible));
     writer.setItem(hoverPreviewsKey, String(lineageAppearanceDefaults.hoverPreviewsEnabled));
     writer.setItem(minimapVisibleKey, String(lineageAppearanceDefaults.minimapVisible));
+    writer.setItem(variationPromptAutoEditKey, String(lineageAppearanceDefaults.variationPromptAutoEdit));
     return true;
   } catch {
     return false;

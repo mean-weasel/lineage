@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type EdgeChange, type NodeChange, type ReactFlowInstance } from '@xyflow/react';
+import { Pencil } from 'lucide-react';
 import type { LineageNode } from '../../shared/types';
 import {
   AssetNode,
@@ -63,6 +64,8 @@ export function LineageCanvas({
   onNodeOpenDetail,
   onNodeOpenHistory,
   onNodePosition,
+  onEditVariationPrompt,
+  onBranchLimitReached,
   onToggleCollapse,
   onNodesChange,
   onReady,
@@ -72,6 +75,8 @@ export function LineageCanvas({
   onToggleSocial,
   onViewportInteraction,
   replayInteractive,
+  selectedCount,
+  selectionLimit,
   selectionFull,
   workspaceProgress,
   workspaceRootAssetId,
@@ -95,6 +100,8 @@ export function LineageCanvas({
   onNodeOpenDetail: (assetId: string) => void;
   onNodeOpenHistory: (assetId: string) => void;
   onNodePosition: (node: AssetFlowNode) => void;
+  onEditVariationPrompt: (node: LineageNode, mode: 'branch' | 'reroll') => void;
+  onBranchLimitReached: () => void;
   onToggleCollapse: (assetId: string) => void;
   onNodesChange: (changes: NodeChange<AssetFlowNode>[]) => void;
   onReady: (instance: ReactFlowInstance<AssetFlowNode, Edge>) => void;
@@ -104,6 +111,8 @@ export function LineageCanvas({
   onToggleSocial: (node: LineageNode) => Promise<void> | void;
   onViewportInteraction: () => void;
   replayInteractive: boolean;
+  selectedCount: number;
+  selectionLimit: number;
   selectionFull: boolean;
   workspaceProgress: LineageWorkspaceProgress;
   workspaceRootAssetId: string;
@@ -191,7 +200,12 @@ export function LineageCanvas({
       onPreviewDismiss: dismissPreview,
       onToggleCollapse,
       onToggleBranch: (target: LineageNode) => {
-        if (quickActionState(target, selectionFull).branchDisabled) return;
+        const state = quickActionState(target, selectionFull, selectedCount, selectionLimit);
+        if (state.branchLimitReached) {
+          onBranchLimitReached();
+          return;
+        }
+        if (state.branchDisabled) return;
         void runQuickAction('branch', target);
       },
       onToggleReroll: (target: LineageNode) => {
@@ -204,7 +218,7 @@ export function LineageCanvas({
       },
       semanticZoomTier: canvasPresentation === 'portrait' ? semanticZoomTier : 'near',
     },
-  })), [canvasPresentation, changePreview, collapseInteractive, dismissPreview, flowNodes, hoverPreviewsEnabled, onToggleCollapse, openDetail, openHistory, runQuickAction, selectionFull, semanticZoomTier]);
+  })), [canvasPresentation, changePreview, collapseInteractive, dismissPreview, flowNodes, hoverPreviewsEnabled, onBranchLimitReached, onToggleCollapse, openDetail, openHistory, runQuickAction, selectedCount, selectionFull, selectionLimit, semanticZoomTier]);
 
   if (!flowNodes.length) {
     const emptyState = lineageCanvasEmptyState(workspaceRootAssetId, workspaceProgress);
@@ -226,7 +240,15 @@ export function LineageCanvas({
   }
   const activePreview = hoverPreviewsEnabled && previews.activeSource ? previews[previews.activeSource] : null;
   const previewNode = activePreview ? flowNodes.find(node => node.id === activePreview.assetId)?.data : undefined;
-  const actionState = previewNode ? quickActionState(previewNode, selectionFull) : null;
+  const actionState = previewNode ? quickActionState(previewNode, selectionFull, selectedCount, selectionLimit) : null;
+  const runBranchAction = (node: LineageNode) => {
+    const state = quickActionState(node, selectionFull, selectedCount, selectionLimit);
+    if (state.branchLimitReached) {
+      onBranchLimitReached();
+      return;
+    }
+    if (!state.branchDisabled) void runQuickAction('branch', node);
+  };
   const editFocusedEdge = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!replayInteractive) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -252,17 +274,17 @@ export function LineageCanvas({
           onKeyDown={event => {
             const key = event.key.toLowerCase();
             if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-            if (key === 'b' && !actionState.branchDisabled) {
+            if (key === 's' && !actionState.socialDisabled) {
               event.preventDefault();
-              void runQuickAction('branch', previewNode);
+              void runQuickAction('social', previewNode);
+            }
+            if (key === 'b') {
+              event.preventDefault();
+              runBranchAction(previewNode);
             }
             if (key === 'r' && !actionState.rerollDisabled) {
               event.preventDefault();
               void runQuickAction('reroll', previewNode);
-            }
-            if (key === 's' && !actionState.socialDisabled) {
-              event.preventDefault();
-              void runQuickAction('social', previewNode);
             }
             if (key === 'd') {
               event.preventDefault();
@@ -290,20 +312,35 @@ export function LineageCanvas({
             <strong>{previewNode.title}</strong>
             <code>{previewNode.asset_id}</code>
           </div>
+          {(previewNode.user_selected || actionState.rerollSelected) && (
+            <div className="lineage-hover-preview-prompts">
+              {previewNode.user_selected && (
+                <div>
+                  <span><b>Branch prompt</b><small>{previewNode.branch_prompt || previewNode.selection_note || 'No prompt yet — your agent will ask'}</small></span>
+                  <button aria-label={`Edit branch prompt for ${previewNode.title}`} disabled={actionState.branchLocked || Boolean(pendingAction)} onClick={() => onEditVariationPrompt(previewNode, 'branch')} type="button"><Pencil aria-hidden="true" size={14} />Edit</button>
+                </div>
+              )}
+              {actionState.rerollSelected && (
+                <div>
+                  <span><b>Re-roll prompt</b><small>{previewNode.reroll_request?.prompt || previewNode.reroll_request?.notes || 'No prompt yet — your agent will ask'}</small></span>
+                  <button aria-label={`Edit re-roll prompt for ${previewNode.title}`} disabled={actionState.rerollLocked || Boolean(pendingAction)} onClick={() => onEditVariationPrompt(previewNode, 'reroll')} type="button"><Pencil aria-hidden="true" size={14} />Edit</button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="lineage-hover-preview-actions">
             <button
-              aria-keyshortcuts="B"
+              aria-disabled={actionState.branchLimitReached || undefined}
               aria-pressed={previewNode.user_selected}
               className={previewNode.user_selected ? 'selected' : ''}
-              disabled={actionState.branchDisabled || Boolean(pendingAction)}
-              onClick={() => void runQuickAction('branch', previewNode)}
+              disabled={actionState.branchLocked || Boolean(pendingAction)}
+              onClick={() => runBranchAction(previewNode)}
               title={actionState.branchTitle}
               type="button"
             >
-              <kbd>B</kbd><span>{previewNode.user_selected ? 'Branch queued' : 'Branch'}</span>
+              <kbd>B</kbd><span>{previewNode.user_selected ? 'Remove branch' : actionState.branchLimitReached ? 'Branch limit' : 'Branch'}</span>
             </button>
             <button
-              aria-keyshortcuts="R"
               aria-pressed={actionState.rerollSelected}
               className={`reroll ${actionState.rerollSelected ? 'selected' : ''}`}
               disabled={actionState.rerollDisabled || Boolean(pendingAction)}
@@ -311,7 +348,7 @@ export function LineageCanvas({
               title={actionState.rerollTitle}
               type="button"
             >
-              <kbd>R</kbd><span>{actionState.rerollSelected ? 'Re-roll queued' : 'Re-roll'}</span>
+              <kbd>R</kbd><span>{actionState.rerollSelected ? 'Remove re-roll' : 'Re-roll'}</span>
             </button>
             <button
               aria-keyshortcuts="S"

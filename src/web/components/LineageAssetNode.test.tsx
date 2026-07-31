@@ -357,6 +357,22 @@ describe('AssetNode', () => {
     expect(container!.querySelector('.next-output-target')?.textContent).toBe('next unresolved');
     expect(container!.querySelector('.output-target')).toBeNull();
   });
+
+  it('keeps exact branch and re-roll prompts visible on the node', () => {
+    renderNode({
+      branch_prompt: 'Restyle with a strict Swiss grid.',
+      reroll_request: {
+        id: 'reroll-1', project_id: 'demo-project', root_asset_id: 'local-node', node_asset_id: 'local-node',
+        status: 'pending', requested_by: 'human', prompt: 'Repair the headline only.', created_at: '2026-07-30T00:00:00.000Z',
+      },
+      user_selected: true,
+    });
+
+    const prompts = container!.querySelectorAll<HTMLElement>('.lineage-node-prompts span');
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0].title).toBe('Branch prompt: Restyle with a strict Swiss grid.');
+    expect(prompts[1].title).toBe('Re-roll prompt: Repair the headline only.');
+  });
 });
 
 describe('hoverPreviewPosition', () => {

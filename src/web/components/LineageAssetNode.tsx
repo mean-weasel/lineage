@@ -20,6 +20,7 @@ type AssetNodeData = LineageNode & {
   collapseInteractive?: boolean;
   focusRole: LineageFocusRole;
   hoverPreviewsEnabled?: boolean;
+  variationQueueState?: 'ancestor' | 'primary' | 'queued';
   onOpenDetail?: (assetId: string) => void;
   onOpenHistory?: (assetId: string) => void;
   onPreviewChange?: (source: LineagePreviewSource, assetId: string, position: HoverPreviewPosition | null) => void;
@@ -57,6 +58,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
   const collapseInteractive = data.collapseInteractive !== false;
   const semanticZoomTier = data.semanticZoomTier || 'near';
   const hasWork = taskBadges.length > 0 || (data.reroll_request?.status === 'pending' && !data.lineage_tasks?.reroll);
+  const branchQueued = data.user_selected;
+  const rerollQueued = data.reroll_request?.status === 'pending';
+  const branchPrompt = branchQueued ? data.branch_prompt || data.selection_note : undefined;
+  const rerollPrompt = rerollQueued
+    ? data.reroll_request?.prompt || data.reroll_request?.notes
+    : undefined;
   const openFromNode = () => {
     data.onPreviewDismiss?.();
     if ((data.attempt_count || 1) > 1) data.onOpenHistory?.(data.asset_id);
@@ -81,7 +88,9 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
       <div
         aria-label={`${data.title} ${((data.attempt_count || 1) > 1) ? 'attempt history' : 'details'}`}
         aria-hidden={replayState === 'future' ? true : undefined}
-        className={`lineage-node lineage-node-${portrait ? 'portrait' : 'compact'} lineage-zoom-${semanticZoomTier} lineage-review-${data.review_state} ${hasWork ? 'lineage-has-work' : ''} ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
+        aria-keyshortcuts="B R S D"
+        className={`lineage-node lineage-node-${portrait ? 'portrait' : 'compact'} lineage-zoom-${semanticZoomTier} lineage-review-${data.review_state} ${hasWork ? 'lineage-has-work' : ''} ${data.root ? 'root-node' : ''} ${data.active ? 'active' : ''} ${data.user_selected ? 'selected' : ''} ${data.is_latest ? 'latest' : ''} ${data.variationQueueState ? `variation-${data.variationQueueState}` : ''} focus-${data.focusRole} ${replayState ? `lineage-node-replay-${replayState}` : ''}`}
+        data-asset-id={data.asset_id}
         data-focus-role={data.focusRole}
         data-has-work={hasWork ? 'true' : undefined}
         data-lineage-root={data.root ? 'true' : undefined}
@@ -163,6 +172,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
               {data.social_mark?.active && <span className="social">social</span>}
             </div>
             <small>{data.review_state.replaceAll('_', ' ')}</small>
+            {(branchQueued || rerollQueued) && (
+              <div className="lineage-node-prompts">
+                {branchQueued && <span className={branchPrompt ? '' : 'missing'} title={branchPrompt ? `Branch prompt: ${branchPrompt}` : 'Branch has no prompt'}><b>Branch</b>{branchPrompt || 'No prompt'}</span>}
+                {rerollQueued && <span className={`reroll ${rerollPrompt ? '' : 'missing'}`} title={rerollPrompt ? `Re-roll prompt: ${rerollPrompt}` : 'Re-roll has no prompt'}><b>Re-roll</b>{rerollPrompt || 'No prompt'}</span>}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -205,6 +220,12 @@ export function AssetNode({ data }: NodeProps<AssetFlowNode>) {
                 </span>
               )}
             </div>
+            {(branchQueued || rerollQueued) && (
+              <div className="lineage-node-prompts">
+                {branchQueued && <span className={branchPrompt ? '' : 'missing'} title={branchPrompt ? `Branch prompt: ${branchPrompt}` : 'Branch has no prompt'}><b>Branch</b>{branchPrompt || 'No prompt'}</span>}
+                {rerollQueued && <span className={`reroll ${rerollPrompt ? '' : 'missing'}`} title={rerollPrompt ? `Re-roll prompt: ${rerollPrompt}` : 'Re-roll has no prompt'}><b>Re-roll</b>{rerollPrompt || 'No prompt'}</span>}
+              </div>
+            )}
             <span aria-hidden="true" className="lineage-node-hint">{data.hoverPreviewsEnabled ? 'Hover to preview' : 'Double-click for details'}</span>
           </>
         )}

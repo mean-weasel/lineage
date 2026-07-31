@@ -36,6 +36,7 @@ import {
 import { registerLineageWorkspaceRoutes } from './lineageWorkspaceRoutes';
 import { fileSha256 } from './localReview';
 import { lineageDb } from './assetLineageDb';
+import { claimLineageTask, listLineageTasks } from './assetLineageTasks';
 import {
   deleteProject,
   deleteWorkspace,
@@ -569,6 +570,40 @@ describe('lineage workspaces', () => {
     expect(existsSync(defaultDemoFilesDir)).toBe(false);
   });
 
+  it('preserves a legacy demo prompt while its iterate task is active during reseed', () => {
+    const seeded = seedDemoLineageWorkspace(defaultProject, { confirmWrite: true });
+    const snapshot = getLineageSnapshot(defaultProject, seeded.root_asset_id);
+    const targetAssetId = snapshot.selected[0];
+    const legacyPrompt = 'Demo selected winner for the next variation.';
+    const database = lineageDb();
+    try {
+      database.prepare(`
+        update asset_selections set notes = ?
+        where project_id = ? and root_asset_id = ? and asset_id = ?
+      `).run(legacyPrompt, defaultProject, seeded.root_asset_id, targetAssetId);
+      database.prepare(`
+        update lineage_tasks set instructions = ?
+        where project_id = ? and root_asset_id = ? and target_asset_id = ?
+          and task_type = 'iterate' and status = 'pending'
+      `).run(legacyPrompt, defaultProject, seeded.root_asset_id, targetAssetId);
+    } finally {
+      database.close();
+    }
+    const task = listLineageTasks(defaultProject, seeded.root_asset_id).tasks.find(item => item.target_asset_id === targetAssetId);
+    if (!task) throw new Error('Expected the demo selection to have an iterate task');
+    claimLineageTask(defaultProject, { agentName: 'Demo migration test', taskId: task.id });
+
+    expect(() => seedDemoLineageWorkspace(defaultProject, { confirmWrite: true })).not.toThrow();
+
+    expect(getLineageSnapshot(defaultProject, seeded.root_asset_id).selections.find(item => item.asset_id === targetAssetId)).toMatchObject({
+      prompt: legacyPrompt,
+    });
+    expect(listLineageTasks(defaultProject, seeded.root_asset_id).tasks.find(item => item.id === task.id)).toMatchObject({
+      instructions: legacyPrompt,
+      status: 'claimed',
+    });
+  });
+
   it('reports and restores missing generated demo media', () => {
     const seeded = seedDemoLineageWorkspace(defaultProject, { confirmWrite: true });
     expect(demoSeedMediaStatus(defaultProject)).toMatchObject({
@@ -660,6 +695,7 @@ describe('lineage workspaces', () => {
     expect(existsSync(currentAttemptPath)).toBe(true);
     expect(readFileSync(currentAttemptPath).subarray(1, 4).toString('ascii')).toBe('PNG');
     expect(snapshot.nodes.every(node => node.local_path?.startsWith('rich-demo-drafts/swissifier-v1/'))).toBe(true);
+    expect(snapshot.selections.every(selection => !selection.prompt && !selection.notes)).toBe(true);
     expect(next.strategy).toBe('selected');
     expect(next.selection_mode).toBe('multiple');
     expect(workspaces.active_workspace).toMatchObject({
@@ -699,6 +735,54 @@ describe('lineage workspaces', () => {
       summary_updated_by: 'system',
       summary_updated_at: expect.any(String),
     });
+  });
+
+  it('clears legacy Swissifier prompts per node without changing claimed work', () => {
+    const seeded = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+    const legacyPrompt = 'Swissifier rich demo bases selected for the next variation.';
+    const claimedTarget = 'local-27050bc5c393';
+    const pendingTarget = 'local-6d06bdbd9f56';
+    const initialTasks = listLineageTasks(defaultProject, seeded.root_asset_id).tasks.filter(task => task.task_type === 'iterate');
+    const claimedTask = initialTasks.find(task => task.target_asset_id === claimedTarget);
+    expect(claimedTask).toBeDefined();
+    expect(initialTasks.find(task => task.target_asset_id === pendingTarget)).toBeDefined();
+
+    const database = lineageDb();
+    database.prepare(`
+      update asset_selections set notes = ?
+      where project_id = ? and root_asset_id = ? and asset_id in (?, ?)
+    `).run(legacyPrompt, defaultProject, seeded.root_asset_id, claimedTarget, pendingTarget);
+    database.prepare(`
+      update lineage_tasks set instructions = ?
+      where project_id = ? and root_asset_id = ? and task_type = 'iterate' and target_asset_id in (?, ?)
+    `).run(legacyPrompt, defaultProject, seeded.root_asset_id, claimedTarget, pendingTarget);
+    database.close();
+    claimLineageTask(defaultProject, { taskId: claimedTask!.id, agentName: 'migration-test' });
+
+    seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+
+    const snapshot = getLineageSnapshot(defaultProject, seeded.root_asset_id);
+    expect(snapshot.selections.find(selection => selection.asset_id === claimedTarget)).toMatchObject({ prompt: legacyPrompt, prompt_status: 'ready' });
+    expect(snapshot.selections.find(selection => selection.asset_id === pendingTarget)).toMatchObject({ prompt_status: 'needs_prompt' });
+    expect(snapshot.selections.find(selection => selection.asset_id === pendingTarget)?.prompt).toBeUndefined();
+    const tasks = listLineageTasks(defaultProject, seeded.root_asset_id).tasks.filter(task => task.task_type === 'iterate');
+    expect(tasks.find(task => task.target_asset_id === claimedTarget)).toMatchObject({ instructions: legacyPrompt, status: 'claimed' });
+    expect(tasks.find(task => task.target_asset_id === pendingTarget)).toMatchObject({ prompt_status: 'needs_prompt', status: 'pending' });
+    expect(tasks.find(task => task.target_asset_id === pendingTarget)?.instructions).toBeUndefined();
+  });
+
+  it('raises an incompatible archived Swissifier branch cap before restoring manifest selections', () => {
+    const seeded = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+    updateLineageWorkspace(defaultProject, seeded.workspace!.id, {
+      confirmWrite: true,
+      maxQueuedBranches: 1,
+      status: 'archived',
+    });
+
+    const reseeded = seedSwissifierRichDemoWorkspace(defaultProject, { confirmWrite: true });
+
+    expect(reseeded.workspace).toMatchObject({ max_queued_branches: 2, status: 'active' });
+    expect(getLineageSnapshot(defaultProject, seeded.root_asset_id).selected).toEqual(['local-27050bc5c393', 'local-6d06bdbd9f56']);
   });
 
   it('bootstraps Swissifier as its own project and respects delete until explicit restore', () => {

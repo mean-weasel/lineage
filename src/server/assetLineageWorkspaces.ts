@@ -1,5 +1,6 @@
 import { lineageDb, nowIso, type DatabaseSync } from './assetLineageDb';
 import { cancelLineageIterateTasksForAssets } from './assetLineageTasks';
+import { LINEAGE_NEXT_VARIATION_LIMIT, LINEAGE_NEXT_VARIATION_LIMIT_MAX } from './assetLineageSelection';
 import type {
   LineageWorkspace,
   LineageWorkspaceActor,
@@ -95,6 +96,7 @@ function rowToWorkspace(row: Row): LineageWorkspace {
     sort_position: Number(row.sort_position || 0),
     collection_kind: String(row.collection_kind || (row.status === 'archived' ? 'archived' : 'open')) as 'open' | 'archived',
     revision: Number(row.revision || 1),
+    max_queued_branches: Math.max(1, Math.min(LINEAGE_NEXT_VARIATION_LIMIT_MAX, Number(row.max_queued_branches || LINEAGE_NEXT_VARIATION_LIMIT))),
   };
 }
 
@@ -228,6 +230,7 @@ export function inferredLegacyLineageWorkspaces(database: DatabaseSync, project:
       sort_position: 0,
       collection_kind: 'open' as const,
       revision: 1,
+      max_queued_branches: LINEAGE_NEXT_VARIATION_LIMIT,
     }];
   });
 }
@@ -317,6 +320,7 @@ export function createLineageWorkspace(project: string, fields: LineageWorkspace
       sort_position: Number(positionRow.next_position || 0),
       collection_kind: collectionKind,
       revision: 1,
+      max_queued_branches: LINEAGE_NEXT_VARIATION_LIMIT,
     };
     if (!fields.confirmWrite) return { ok: true as const, dryRun: true as const, workspace };
     ensureProject(database, project);
@@ -403,6 +407,9 @@ export function updateLineageWorkspace(project: string, workspaceId: string, fie
       updated_at: timestamp,
       collection_kind: normalizeStatus(fields.status, current.status) === 'archived' ? 'archived' : 'open',
       revision: (current.revision || 1) + 1,
+      max_queued_branches: fields.maxQueuedBranches === undefined
+        ? current.max_queued_branches
+        : Math.max(1, Math.min(LINEAGE_NEXT_VARIATION_LIMIT_MAX, Math.round(fields.maxQueuedBranches))),
     };
     if (!fields.confirmWrite) return { ok: true as const, dryRun: true as const, workspace: next };
     const currentCollection = current.collection_kind || (current.status === 'archived' ? 'archived' : 'open');
@@ -418,7 +425,7 @@ export function updateLineageWorkspace(project: string, workspaceId: string, fie
         : current.sort_position || 0;
       database.prepare(`
         update lineage_workspaces
-        set title = ?, status = ?, notes = ?, active_at = ?, updated_at = ?,
+        set title = ?, status = ?, notes = ?, active_at = ?, updated_at = ?, max_queued_branches = ?,
             collection_kind = ?, sort_position = ?, revision = revision + 1
         where project_id = ? and id = ?
       `).run(
@@ -427,6 +434,7 @@ export function updateLineageWorkspace(project: string, workspaceId: string, fie
         next.notes || null,
         nextCollection === 'archived' ? null : next.active_at || null,
         timestamp,
+        next.max_queued_branches || LINEAGE_NEXT_VARIATION_LIMIT,
         nextCollection,
         nextPosition,
         project,

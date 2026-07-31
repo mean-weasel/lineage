@@ -3,7 +3,7 @@ import { basename, isAbsolute, join, resolve } from 'node:path';
 import { EdgeSummaryValidationError, normalizeEdgeSummary, requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, listAssets, repoRoot } from './assetCore';
 import { lineageDb as db, lineageDbPath, nowIso, type DatabaseSync } from './assetLineageDb';
-import { LINEAGE_NEXT_VARIATION_LIMIT, normalizeSelectionInput, selectedRows, selectionId } from './assetLineageSelection';
+import { nextVariationLimitFor, normalizeSelectionInput, selectedRows, selectionId } from './assetLineageSelection';
 import { cancelLineageTask, listLineageTasks, upsertLineageTask } from './assetLineageTasks';
 import { activeLineageWorkspaceRoot } from './assetLineageWorkspaces';
 import { requireLineageWorkspaceClaimForWrite } from './lineageClaimGuards';
@@ -303,6 +303,16 @@ function rowString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function rerollPromptMetadata(prompt?: string): Pick<LineageRerollRequest, 'agent_instruction' | 'notes' | 'prompt' | 'prompt_status'> {
+  const normalizedPrompt = prompt?.trim() || undefined;
+  return {
+    prompt: normalizedPrompt,
+    notes: normalizedPrompt,
+    prompt_status: normalizedPrompt ? 'ready' : 'needs_prompt',
+    agent_instruction: normalizedPrompt ? undefined : 'No re-roll prompt was provided for this node. Ask the user what they want changed before generating.',
+  };
+}
+
 function lineageEdgeFromRow(row: Record<string, unknown>): LineageEdge {
   const summary = rowString(row.summary);
   const summaryCreatedBy = rowString(row.summary_created_by) as LineageEdge['summary_created_by'];
@@ -343,6 +353,7 @@ function validatedHumanEdgeSummary(value: unknown): string {
 }
 
 function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
+  const prompt = rowString(row.notes);
   return {
     id: String(row.id),
     project_id: String(row.project_id),
@@ -350,7 +361,7 @@ function rerollRequestFrom(row: Record<string, unknown>): LineageRerollRequest {
     node_asset_id: String(row.node_asset_id),
     status: row.status as LineageRerollRequest['status'],
     requested_by: row.requested_by as LineageRerollRequest['requested_by'],
-    notes: rowString(row.notes),
+    ...rerollPromptMetadata(prompt),
     created_at: String(row.created_at),
     resolved_at: rowString(row.resolved_at),
   };
@@ -379,7 +390,7 @@ function taskBackedRerollRequest(project: string, rootAssetId: string, task: Lin
     node_asset_id: task.target_asset_id,
     status: 'pending',
     requested_by: task.created_by,
-    notes: task.instructions,
+    ...rerollPromptMetadata(task.instructions),
     created_at: task.created_at,
     task_id: task.id,
     task,
@@ -639,6 +650,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   const root = explicitWorkspaceRoot(database, project, assetId) || rootFor(database, project, assetId);
   const edges = descendants(database, project, root);
   const selected = selectedRows(database, project, root);
+  const nextVariationLimit = nextVariationLimitFor(database, project, root);
   const tasks = listLineageTasks(project, root).tasks;
   const ids = [...new Set([
     root,
@@ -654,7 +666,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     from assets a left join asset_reviews r on r.asset_id = a.id
       left join asset_layouts l on l.project_id = a.project_id and l.root_asset_id = ? and l.asset_id = a.id
     where a.project_id = ? and a.id in (${placeholders})
-  `).all(root, project, ...ids) as unknown as Array<Omit<LineageNode, 'attempt_count' | 'current_attempt' | 'is_latest' | 'lineage_tasks' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
+  `).all(root, project, ...ids) as unknown as Array<Omit<LineageNode, 'attempt_count' | 'branch_prompt' | 'current_attempt' | 'is_latest' | 'lineage_tasks' | 'position' | 'preview_url' | 'reroll_request' | 'selection_note' | 'user_selected'> & { asset_created_at?: string; layout_x?: number; layout_y?: number }>;
   const attemptRows = ids.length > 0
     ? database.prepare(`select * from asset_attempts where project_id = ? and node_asset_id in (${placeholders}) order by node_asset_id, attempt_index desc`).all(project, ...ids) as Array<Record<string, unknown>>
     : [];
@@ -687,10 +699,14 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
   }] as const));
   const childIds = new Set(edges.map(edge => edge.parent_asset_id));
   const selectedIds = new Set(selected.map(row => row.asset_id));
-  const selections = selected.map(row => ({
-    asset_id: row.asset_id, notes: row.notes || undefined,
-    position: Number(row.position || 0), selected_at: row.selected_at,
-  }));
+  const selections = selected.map(row => {
+    const prompt = row.notes?.trim() || undefined;
+    return {
+      asset_id: row.asset_id, notes: prompt, prompt,
+      prompt_status: prompt ? 'ready' as const : 'needs_prompt' as const,
+      position: Number(row.position || 0), selected_at: row.selected_at,
+    };
+  });
   const selection = selections[0] || null;
   const nodes = rows.map(row => {
     const position: LineagePosition | undefined = typeof row.layout_x === 'number' && typeof row.layout_y === 'number' ? { x: row.layout_x, y: row.layout_y } : undefined;
@@ -710,6 +726,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
       position,
       preview_url: canPreviewLocally(row.media_type, previewPath) ? localPreviewUrl(project, previewPath) : undefined,
       reroll_request: rerollsByNode.get(row.asset_id),
+      branch_prompt: nodeSelection?.prompt,
       selection_note: nodeSelection?.notes,
       social_mark: socialMarksByNode.get(row.asset_id),
       user_selected: selectedIds.has(row.asset_id),
@@ -720,6 +737,7 @@ export function getLineageSnapshot(project: string, assetId: string): LineageSna
     project,
     root_asset_id: root,
     active_asset_id: assetId,
+    next_variation_limit: nextVariationLimit,
     selected: selections.map(row => row.asset_id),
     selection,
     selections,
@@ -807,6 +825,7 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
     return {
       project,
       root_asset_id: snapshot.root_asset_id,
+      next_variation_limit: snapshot.next_variation_limit,
       strategy: 'selected',
       selection_mode: selectedNodes.length > 1 ? 'multiple' : 'single',
       recommended_action: 'evolve_variations',
@@ -826,6 +845,7 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
     return {
       project,
       root_asset_id: snapshot.root_asset_id,
+      next_variation_limit: snapshot.next_variation_limit,
       strategy: 'single_latest',
       selection_mode: 'fallback',
       recommended_action: 'evolve_variations',
@@ -844,6 +864,7 @@ export function getLineageNextAsset(project: string, rootAssetId?: string): Line
   return {
     project,
     root_asset_id: snapshot.root_asset_id,
+    next_variation_limit: snapshot.next_variation_limit,
     strategy: latestNodes.length > 1 ? 'ambiguous_latest' : 'empty',
     selection_mode: 'none',
     recommended_action: latestNodes.length > 1 ? 'choose_next_base' : 'none',
@@ -1102,24 +1123,25 @@ export function markLineageRerollRequest(project: string, fields: { rootAssetId:
       order by created_at desc limit 1
     `).get(project, fields.rootAssetId, fields.nodeAssetId) as Record<string, unknown> | undefined;
     const timestamp = nowIso();
-    const request: LineageRerollRequest = existing ? {
-      ...rerollRequestFrom(existing),
-      notes: fields.notes || rerollRequestFrom(existing).notes,
-      requested_by: fields.requestedBy || rerollRequestFrom(existing).requested_by,
-    } : {
-      id: rerollRequestId(project, fields.rootAssetId, fields.nodeAssetId, timestamp),
-      project_id: project,
-      root_asset_id: fields.rootAssetId,
-      node_asset_id: fields.nodeAssetId,
-      status: 'pending',
-      requested_by: fields.requestedBy || 'human',
-      notes: fields.notes,
-      created_at: timestamp,
+    const current = existing ? rerollRequestFrom(existing) : undefined;
+    const effectivePrompt = fields.notes === undefined ? current?.notes : fields.notes.trim() || undefined;
+    const request: LineageRerollRequest = {
+      ...(current || {
+        id: rerollRequestId(project, fields.rootAssetId, fields.nodeAssetId, timestamp),
+        project_id: project,
+        root_asset_id: fields.rootAssetId,
+        node_asset_id: fields.nodeAssetId,
+        status: 'pending' as const,
+        requested_by: fields.requestedBy || 'human',
+        created_at: timestamp,
+      }),
+      ...rerollPromptMetadata(effectivePrompt),
+      requested_by: fields.requestedBy || current?.requested_by || 'human',
     };
     if (!fields.confirmWrite) return { ok: true, dryRun: true, request };
     const taskResult = upsertLineageTask(project, {
       createdBy: request.requested_by,
-      instructions: request.notes,
+      instructions: request.notes ?? null,
       rootAssetId: fields.rootAssetId,
       targetAssetId: fields.nodeAssetId,
       taskType: 'reroll',
@@ -1205,7 +1227,10 @@ export function updateSelectedAsset(project: string, fields: SelectionFields) {
     requireAsset(database, project, root);
     for (const assetId of inputAssetIds) requireAsset(database, project, assetId);
     mode = fields.mode || 'replace';
-    limit = fields.maxSelections || LINEAGE_NEXT_VARIATION_LIMIT;
+    const workspaceLimit = nextVariationLimitFor(database, project, root);
+    limit = fields.maxSelections === undefined
+      ? workspaceLimit
+      : Math.min(workspaceLimit, Math.max(1, Math.round(fields.maxSelections)));
     if (!fields.confirmWrite) {
       return { ok: true as const, dryRun: true, root_asset_id: root, asset_ids: inputAssetIds, mode, clear: Boolean(fields.clear), max_selections: limit };
     }
@@ -1226,20 +1251,24 @@ export function updateSelectedAsset(project: string, fields: SelectionFields) {
     }
     nextIds = [...new Set(nextIds)];
     if (!fields.clear && inputAssetIds.length === 0) throw new LineageError('Selection set requires assetId or assetIds');
-    if (nextIds.length > limit) throw new LineageError(`Select at most ${limit} assets for next variation`);
+    const currentIds = new Set(current.map(row => row.asset_id));
+    const addedIds = nextIds.filter(assetId => !currentIds.has(assetId));
+    if (nextIds.length > limit && addedIds.length > 0) throw new LineageError(`Select at most ${limit} assets for next variation`);
     for (const assetId of nextIds) {
       const existing = current.find(row => row.asset_id === assetId);
-      notesByAsset.set(assetId, inputAssetIds.includes(assetId) ? fields.notes || existing?.notes : existing?.notes);
+      notesByAsset.set(assetId, inputAssetIds.includes(assetId)
+        ? fields.notes === undefined ? existing?.notes : fields.notes.trim() || undefined
+        : existing?.notes);
     }
   } finally {
     database.close();
   }
 
   const removedIds = current.map(row => row.asset_id).filter(assetId => !nextIds.includes(assetId));
-  const openIterateTasks = listLineageTasks(project, root, ['pending']).tasks.filter(task => task.task_type === 'iterate');
+  const activeIterateTasks = listLineageTasks(project, root, ['pending', 'claimed', 'in_progress']).tasks.filter(task => task.task_type === 'iterate');
   for (const assetId of removedIds) {
-    const task = openIterateTasks.find(item => item.target_asset_id === assetId);
-    if (task) {
+    const task = activeIterateTasks.find(item => item.target_asset_id === assetId);
+    if (task?.status === 'pending') {
       cancelLineageTask(project, {
         actor: 'human',
         confirmWrite: true,
@@ -1248,9 +1277,17 @@ export function updateSelectedAsset(project: string, fields: SelectionFields) {
     }
   }
   for (const assetId of nextIds) {
+    const task = activeIterateTasks.find(item => item.target_asset_id === assetId);
+    const promptExplicitlyEdited = inputAssetIds.includes(assetId) && fields.notes !== undefined;
+    const taskPrompt = task?.instructions?.trim() || undefined;
+    if (!promptExplicitlyEdited && taskPrompt) notesByAsset.set(assetId, taskPrompt);
+    const prompt = notesByAsset.get(assetId);
+    const shouldSyncTask = promptExplicitlyEdited
+      || !task
+      || (task.status === 'pending' && !taskPrompt && Boolean(prompt));
     upsertLineageTask(project, {
       createdBy: 'human',
-      instructions: notesByAsset.get(assetId),
+      instructions: shouldSyncTask ? prompt ?? null : undefined,
       rootAssetId: root,
       targetAssetId: assetId,
       taskType: 'iterate',

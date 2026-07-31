@@ -174,3 +174,6 @@
     max-height: min(52vh, 460px);
   }
 }
+.lineage-variation-queue-launch { align-items: center; display: flex; gap: 7px; }
+.lineage-toolbar-count { display: inline-grid; min-width: 21px; height: 21px; place-items: center; border-radius: 999px; background: #dff2f3; color: #08747d; font-size: 10px; font-weight: 900; }
+.lineage-variation-queue-launch kbd { margin-left: auto; border: 1px solid #b9ccd2; border-radius: 5px; background: rgba(255,255,255,.72); color: #5a7079; padding: 2px 5px; font: inherit; font-size: 9px; }

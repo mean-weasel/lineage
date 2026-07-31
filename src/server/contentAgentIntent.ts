@@ -244,7 +244,10 @@ export function resolveContentAgentHandoff(prompt: string, fallbackProject = def
   const assetSelection = matchedTerms(normalized, assetSelectionTerms);
   if (assetSelection.length > 0) {
     const lineageHandoff = getLineageWorkspaceAgentHandoff(project);
-    if (lineageHandoff.status === 'ok' && lineageHandoff.guardrails.safe_to_start) {
+    const activeLineageQueue = lineageHandoff.target?.type === 'lineage_workspace'
+      && lineageHandoff.target.status === 'active'
+      && Boolean(lineageHandoff.target.next_asset_ids?.length);
+    if ((lineageHandoff.status === 'ok' && lineageHandoff.guardrails.safe_to_start) || activeLineageQueue) {
       return withNatural(lineageHandoff, {
         matched_intent: 'lineage.workspace.active',
         matched_terms: assetSelection,

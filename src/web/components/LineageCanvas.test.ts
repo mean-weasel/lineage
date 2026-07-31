@@ -10,10 +10,11 @@ describe('lineage inspector quick-action safety', () => {
       branchLocked: false,
       branchTitle: 'Use as a base for the next branch (B)',
     });
-    expect(quickActionState(node(), true)).toMatchObject({
+    expect(quickActionState(node(), true, 4, 4)).toMatchObject({
       branchDisabled: true,
+      branchLimitReached: true,
       branchLocked: false,
-      branchTitle: 'The branch selection is full.',
+      branchTitle: '4 of 4 branches queued. Raise the maximum in Canvas settings or remove a branch.',
     });
     expect(quickActionState(node({ user_selected: true }), true)).toMatchObject({
       branchDisabled: false,

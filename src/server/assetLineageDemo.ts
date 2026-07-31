@@ -7,7 +7,7 @@ import { requireEdgeSummary } from '../shared/edgeSummary';
 import { defaultProject, packageRoot, repoRoot } from './assetCore';
 import { linkLineageAssets, updateLineageLayout, updateSelectedAsset } from './assetLineage';
 import { lineageDb, nowIso } from './assetLineageDb';
-import { archiveLineageWorkspace, createLineageWorkspace, isLineageWorkspaceError, lineageWorkspaceId, listLineageWorkspaces } from './assetLineageWorkspaces';
+import { archiveLineageWorkspace, createLineageWorkspace, isLineageWorkspaceError, lineageWorkspaceId, listLineageWorkspaces, updateLineageWorkspace } from './assetLineageWorkspaces';
 import {
   ensureSwissifierDemoProject,
   restoreSwissifierDemoProjectDefinition,
@@ -19,6 +19,37 @@ const demoWorkspaceTitle = 'Demo: Content iteration tree';
 const demoWorkspaceNotes = 'Repeatable sample lineage for demos and onboarding. Archive it when reviewing real work.';
 const demoBasePath = ['lineage-demo', '2026-06-lineage-demo'];
 const swissifierManifestPath = join(packageRoot, 'fixtures', defaultProject, 'lineage', 'swissifier-rich-demo.json');
+const legacyDemoSelectionPrompt = 'Demo selected winner for the next variation.';
+const legacySwissifierSelectionPrompt = 'Swissifier rich demo bases selected for the next variation.';
+
+function clearLegacySeedSelectionPrompt(project: string, rootAssetId: string, prompt: string): void {
+  const database = lineageDb();
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    database.prepare(`
+      update asset_selections
+      set notes = null
+      where project_id = ? and root_asset_id = ? and notes = ?
+        and asset_id not in (
+          select target_asset_id from lineage_tasks
+          where project_id = ? and root_asset_id = ? and task_type = 'iterate'
+            and status in ('claimed', 'in_progress')
+        )
+    `).run(project, rootAssetId, prompt, project, rootAssetId);
+    database.prepare(`
+      update lineage_tasks
+      set instructions = null, updated_at = ?
+      where project_id = ? and root_asset_id = ? and task_type = 'iterate'
+        and status = 'pending' and instructions = ?
+    `).run(nowIso(), project, rootAssetId, prompt);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  } finally {
+    database.close();
+  }
+}
 
 interface SwissifierManifestAsset {
   asset_id: string;
@@ -821,10 +852,10 @@ export function seedDemoLineageWorkspace(project: string, fields: { activate?: b
   for (const [parent, child] of demoEdges) {
     linkLineageAssets(project, { parentAssetId: ids[parent], childAssetId: ids[child], confirmWrite: true });
   }
+  clearLegacySeedSelectionPrompt(project, rootAssetId, legacyDemoSelectionPrompt);
   updateSelectedAsset(project, {
     assetId: ids.winner,
     confirmWrite: true,
-    notes: 'Demo selected winner for the next variation.',
     rootAssetId,
   });
   updateLineageLayout(project, {
@@ -870,19 +901,7 @@ export function seedSwissifierRichDemoWorkspace(project: string, fields: { activ
   }
   backfillSwissifierEdgeSummaries(project, manifest);
   const reroll_attempts = upsertSwissifierRerollAttempts(project, manifest);
-  updateSelectedAsset(project, {
-    assetIds: manifest.selected_asset_ids,
-    confirmWrite: true,
-    maxSelections: manifest.selected_asset_ids.length,
-    notes: 'Swissifier rich demo bases selected for the next variation.',
-    rootAssetId: manifest.root_asset_id,
-  });
-  updateLineageLayout(project, {
-    confirmWrite: true,
-    rootAssetId: manifest.root_asset_id,
-    positions: manifest.assets.map(asset => ({ assetId: asset.asset_id, ...asset.position })),
-  });
-  const workspace = createLineageWorkspace(project, {
+  let workspace = createLineageWorkspace(project, {
     activate: fields.activate !== false,
     confirmWrite: true,
     createdBy: 'system',
@@ -890,6 +909,24 @@ export function seedSwissifierRichDemoWorkspace(project: string, fields: { activ
     rootAssetId: manifest.root_asset_id,
     title: manifest.title,
   }).workspace;
+  if (workspace && (workspace.max_queued_branches ?? 3) < manifest.selected_asset_ids.length) {
+    workspace = updateLineageWorkspace(project, workspace.id, {
+      confirmWrite: true,
+      maxQueuedBranches: manifest.selected_asset_ids.length,
+    }).workspace;
+  }
+  clearLegacySeedSelectionPrompt(project, manifest.root_asset_id, legacySwissifierSelectionPrompt);
+  updateSelectedAsset(project, {
+    assetIds: manifest.selected_asset_ids,
+    confirmWrite: true,
+    maxSelections: manifest.selected_asset_ids.length,
+    rootAssetId: manifest.root_asset_id,
+  });
+  updateLineageLayout(project, {
+    confirmWrite: true,
+    rootAssetId: manifest.root_asset_id,
+    positions: manifest.assets.map(asset => ({ assetId: asset.asset_id, ...asset.position })),
+  });
   return {
     ok: true as const,
     message: `Seeded ${manifest.title}`,

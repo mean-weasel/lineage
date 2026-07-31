@@ -45,7 +45,7 @@ describe('LineageToolbar', () => {
 
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Replay growth');
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Plan outputs');
-    expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Manage selection');
+    expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Variation queue');
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).toContain('Output target defaults');
     expect(container!.querySelector('.lineage-primary-controls')?.textContent).not.toContain('New lineage');
     expect([...container!.querySelectorAll('summary')].some(summary => summary.textContent === 'Actions')).toBe(false);
@@ -158,10 +158,10 @@ describe('LineageToolbar', () => {
     for (const [label, callback] of [
       ['Plan outputs', onOpenGeneration],
       ['Output target defaults', onOpenOutputDefaults],
-      ['Manage selection', onToggleNextPanel],
+      ['Variation queue', onToggleNextPanel],
     ] as const) {
       const button = [...container!.querySelectorAll<HTMLButtonElement>('.lineage-primary-controls button')]
-        .find(candidate => candidate.textContent === label)!;
+        .find(candidate => candidate.textContent?.includes(label))!;
       act(() => button.click());
       expect(callback).toHaveBeenCalledOnce();
     }
@@ -205,6 +205,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof LineageToolbar>[0]> 
     workspaceLoading: false,
     workspaceProgress: null,
     workspaceRootAssetId: workspace.root_asset_id,
+    variationQueueCount: 2,
     ...overrides,
   };
 

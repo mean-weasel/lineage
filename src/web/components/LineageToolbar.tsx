@@ -28,6 +28,7 @@ type LineageToolbarProps = {
   workspaceLoading: boolean;
   workspaceProgress: LineageWorkspaceProgress;
   workspaceRootAssetId: string;
+  variationQueueCount: number;
 };
 
 export function LineageToolbar({
@@ -54,6 +55,7 @@ export function LineageToolbar({
   workspaceLoading,
   workspaceProgress,
   workspaceRootAssetId,
+  variationQueueCount,
 }: LineageToolbarProps) {
   const [demoToolsOpen, setDemoToolsOpen] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
@@ -104,7 +106,9 @@ export function LineageToolbar({
         </button>
         {onOpenGeneration && <button className="primary-button" disabled={!snapshot || snapshot.selected.length === 0} onClick={onOpenGeneration} type="button">Plan outputs</button>}
         {onOpenOutputDefaults && <button className="secondary-button" disabled={!snapshot} onClick={onOpenOutputDefaults} type="button">Output target defaults</button>}
-        <button aria-controls="lineage-canvas-panel" aria-expanded={sideOpen} className="secondary-button" disabled={!snapshot} onClick={onToggleNextPanel} type="button">Manage selection</button>
+        <button aria-controls="lineage-canvas-panel" aria-expanded={sideOpen} aria-keyshortcuts="V" className="secondary-button lineage-variation-queue-launch" disabled={!snapshot} onClick={onToggleNextPanel} type="button">
+          <span>Variation queue</span><span className="lineage-toolbar-count">{variationQueueCount}</span><kbd>V</kbd>
+        </button>
       </div>
       <div className="lineage-tool-sections">
         <details className="lineage-tool-section" onToggle={event => setMaintenanceOpen(event.currentTarget.open)} open={maintenanceOpen}>
