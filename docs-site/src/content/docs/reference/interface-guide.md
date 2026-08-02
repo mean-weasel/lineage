@@ -51,6 +51,10 @@ sheet on mobile:
 - **Edit prompt when selecting a variation** opens the inline editor when you
   select a Variation Queue item. It is on by default and can be switched off
   when selection should only focus the associated node.
+- **Ask for Branch prompt** opens the prompt editor before a card is marked for
+  Branch. Switch it off to mark Branch immediately with **B** or the action
+  button; a prompt can still be added later.
+- **Ask for Re-roll prompt** independently does the same for Re-roll and **R**.
 
 Canvas appearance choices are remembered in the current browser. Use **Fit
 graph** to frame the current tree, **Tidy tree** to restore automatic spacing,
@@ -59,10 +63,11 @@ or **Reset appearance** to return all Canvas settings to their defaults.
 ## Variation queue and prompts
 
 Choose **Branch** or **Re-roll** on a node, or focus that node and press **B**
-or **R**, to open its prompt editor. Describe the exact visual change your
-agent should make, then queue the work. A prompt may be left blank; Lineage
-marks it as needing a prompt and tells the agent to ask before generating
-instead of inventing an instruction.
+or **R**, to mark the action. Both actions open their prompt editor by default.
+Their independent Canvas switches can disable that step so either action marks
+immediately without a prompt. You can add or edit the prompt later from the
+node preview or Variation Queue. When a prompt is missing, Lineage tells the
+agent to ask before generating instead of inventing an instruction.
 
 Open **Variation queue** from the Canvas contextual panel, or press **V**, to
 review every queued branch and re-roll in one scroll. Opening it closes any

@@ -5,11 +5,13 @@ import { Pencil } from 'lucide-react';
 import type { LineageNode } from '../../shared/types';
 import {
   AssetNode,
+  LineageStateChips,
   type AssetFlowNode,
   type LineageCanvasPresentation,
   type LineagePreviewSource,
   type LineageSemanticZoomTier,
 } from './LineageAssetNode';
+import type { LineagePreviewActionVisibility } from '../lineagePreferences';
 import type { HoverPreviewPosition } from './lineageHoverPreview';
 import { quickActionState } from './lineageQuickActions';
 import './LineageCanvas.css';
@@ -64,6 +66,7 @@ export function LineageCanvas({
   onNodeOpenDetail,
   onNodeOpenHistory,
   onNodePosition,
+  onEditDiscussionNote,
   onEditVariationPrompt,
   onBranchLimitReached,
   onToggleCollapse,
@@ -72,12 +75,14 @@ export function LineageCanvas({
   onSelectedAsset,
   onToggleBranch,
   onToggleReroll,
+  onToggleDiscussion,
   onToggleSocial,
   onViewportInteraction,
   replayInteractive,
   selectedCount,
   selectionLimit,
   selectionFull,
+  visibleActions,
   workspaceProgress,
   workspaceRootAssetId,
 }: {
@@ -100,6 +105,7 @@ export function LineageCanvas({
   onNodeOpenDetail: (assetId: string) => void;
   onNodeOpenHistory: (assetId: string) => void;
   onNodePosition: (node: AssetFlowNode) => void;
+  onEditDiscussionNote: (node: LineageNode) => void;
   onEditVariationPrompt: (node: LineageNode, mode: 'branch' | 'reroll') => void;
   onBranchLimitReached: () => void;
   onToggleCollapse: (assetId: string) => void;
@@ -108,12 +114,14 @@ export function LineageCanvas({
   onSelectedAsset: (assetId: string) => void;
   onToggleBranch: (node: LineageNode) => Promise<void> | void;
   onToggleReroll: (node: LineageNode) => Promise<void> | void;
+  onToggleDiscussion: (node: LineageNode) => Promise<void> | void;
   onToggleSocial: (node: LineageNode) => Promise<void> | void;
   onViewportInteraction: () => void;
   replayInteractive: boolean;
   selectedCount: number;
   selectionLimit: number;
   selectionFull: boolean;
+  visibleActions: LineagePreviewActionVisibility;
   workspaceProgress: LineageWorkspaceProgress;
   workspaceRootAssetId: string;
 }) {
@@ -173,7 +181,7 @@ export function LineageCanvas({
     dismissPreview();
     onNodeActionMenu(assetId, x, y);
   }, [dismissPreview, onNodeActionMenu]);
-  const runQuickAction = useCallback(async (action: 'branch' | 'reroll' | 'social', node: LineageNode) => {
+  const runQuickAction = useCallback(async (action: 'branch' | 'discussion' | 'reroll' | 'social', node: LineageNode) => {
     const actionId = `${action}:${node.asset_id}`;
     if (pendingActionRef.current) return;
     pendingActionRef.current = true;
@@ -181,12 +189,13 @@ export function LineageCanvas({
     try {
       if (action === 'branch') await onToggleBranch(node);
       else if (action === 'reroll') await onToggleReroll(node);
+      else if (action === 'discussion') await onToggleDiscussion(node);
       else await onToggleSocial(node);
     } finally {
       pendingActionRef.current = false;
       setPendingAction(null);
     }
-  }, [onToggleBranch, onToggleReroll, onToggleSocial]);
+  }, [onToggleBranch, onToggleDiscussion, onToggleReroll, onToggleSocial]);
   const interactiveNodes = useMemo(() => flowNodes.map(node => ({
     ...node,
     data: {
@@ -211,6 +220,10 @@ export function LineageCanvas({
       onToggleReroll: (target: LineageNode) => {
         if (quickActionState(target, selectionFull).rerollDisabled) return;
         void runQuickAction('reroll', target);
+      },
+      onToggleDiscussion: (target: LineageNode) => {
+        if (quickActionState(target, selectionFull).discussionDisabled) return;
+        void runQuickAction('discussion', target);
       },
       onToggleSocial: (target: LineageNode) => {
         if (quickActionState(target, selectionFull).socialDisabled) return;
@@ -286,6 +299,10 @@ export function LineageCanvas({
               event.preventDefault();
               void runQuickAction('reroll', previewNode);
             }
+            if (key === 'f' && !actionState.discussionDisabled) {
+              event.preventDefault();
+              void runQuickAction('discussion', previewNode);
+            }
             if (key === 'd') {
               event.preventDefault();
               openDetail(previewNode.asset_id);
@@ -299,6 +316,7 @@ export function LineageCanvas({
           }}
           style={{ left: activePreview.position.left, top: activePreview.position.top }}
         >
+          <LineageStateChips className="lineage-state-chips-preview" node={previewNode} />
           <div className="lineage-hover-preview-media">
             {previewNode.preview_url && (previewNode.media_type === 'image' || previewNode.media_type === 'gif') ? (
               <img alt="" src={previewNode.preview_url} />
@@ -312,7 +330,7 @@ export function LineageCanvas({
             <strong>{previewNode.title}</strong>
             <code>{previewNode.asset_id}</code>
           </div>
-          {(previewNode.user_selected || actionState.rerollSelected) && (
+          {(previewNode.user_selected || actionState.rerollSelected || actionState.discussionSelected) && (
             <div className="lineage-hover-preview-prompts">
               {previewNode.user_selected && (
                 <div>
@@ -326,21 +344,31 @@ export function LineageCanvas({
                   <button aria-label={`Edit re-roll prompt for ${previewNode.title}`} disabled={actionState.rerollLocked || Boolean(pendingAction)} onClick={() => onEditVariationPrompt(previewNode, 'reroll')} type="button"><Pencil aria-hidden="true" size={14} />Edit</button>
                 </div>
               )}
+              {actionState.discussionSelected && (
+                <div>
+                  <span><b>Discussion note</b><small>{previewNode.discussion_mark?.notes || 'No note — ask a general question across flagged nodes'}</small></span>
+                  <button aria-label={`Edit discussion note for ${previewNode.title}`} disabled={Boolean(pendingAction)} onClick={() => { dismissPreview(); onEditDiscussionNote(previewNode); }} type="button"><Pencil aria-hidden="true" size={14} />Edit</button>
+                </div>
+              )}
             </div>
           )}
           <div className="lineage-hover-preview-actions">
-            <button
+            {visibleActions.branch && <button
+              aria-label={previewNode.user_selected ? 'Remove branch' : actionState.branchLimitReached ? 'Branch limit' : 'Branch'}
+              aria-keyshortcuts="B"
               aria-disabled={actionState.branchLimitReached || undefined}
               aria-pressed={previewNode.user_selected}
-              className={previewNode.user_selected ? 'selected' : ''}
+              className={`branch ${previewNode.user_selected ? 'selected' : ''}`}
               disabled={actionState.branchLocked || Boolean(pendingAction)}
               onClick={() => runBranchAction(previewNode)}
               title={actionState.branchTitle}
               type="button"
             >
-              <kbd>B</kbd><span>{previewNode.user_selected ? 'Remove branch' : actionState.branchLimitReached ? 'Branch limit' : 'Branch'}</span>
-            </button>
-            <button
+              <kbd>B</kbd><span>Branch</span>
+            </button>}
+            {visibleActions.reroll && <button
+              aria-label={actionState.rerollSelected ? 'Remove re-roll' : 'Re-roll'}
+              aria-keyshortcuts="R"
               aria-pressed={actionState.rerollSelected}
               className={`reroll ${actionState.rerollSelected ? 'selected' : ''}`}
               disabled={actionState.rerollDisabled || Boolean(pendingAction)}
@@ -348,9 +376,10 @@ export function LineageCanvas({
               title={actionState.rerollTitle}
               type="button"
             >
-              <kbd>R</kbd><span>{actionState.rerollSelected ? 'Remove re-roll' : 'Re-roll'}</span>
-            </button>
-            <button
+              <kbd>R</kbd><span>Re-roll</span>
+            </button>}
+            {visibleActions.social && <button
+              aria-label="Social"
               aria-keyshortcuts="S"
               aria-pressed={actionState.socialSelected}
               className={`social ${actionState.socialSelected ? 'selected' : ''}`}
@@ -359,9 +388,21 @@ export function LineageCanvas({
               title={actionState.socialTitle}
               type="button"
             >
-              <kbd>S</kbd><span>{actionState.socialSelected ? 'Social marked' : 'Social'}</span>
-            </button>
-            <button aria-keyshortcuts="D" onClick={() => openDetail(previewNode.asset_id)} type="button"><kbd>D</kbd><span>Details</span></button>
+              <kbd>S</kbd><span>Social</span>
+            </button>}
+            {visibleActions.flag && <button
+              aria-label="Flag"
+              aria-keyshortcuts="F"
+              aria-pressed={actionState.discussionSelected}
+              className={`discussion ${actionState.discussionSelected ? 'selected' : ''}`}
+              disabled={actionState.discussionDisabled || Boolean(pendingAction)}
+              onClick={() => void runQuickAction('discussion', previewNode)}
+              title={actionState.discussionTitle}
+              type="button"
+            >
+              <kbd>F</kbd><span>Flag</span>
+            </button>}
+            {visibleActions.details && <button aria-keyshortcuts="D" aria-label="Details" className="details" onClick={() => openDetail(previewNode.asset_id)} type="button"><kbd>D</kbd><span>Details</span></button>}
           </div>
           {(actionState.branchLocked || actionState.rerollLocked) && <p className="lineage-hover-preview-lock">Active work is managed in the task queue.</p>}
         </section>,

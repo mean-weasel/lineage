@@ -136,6 +136,7 @@ test('loads the demo lineage at its canonical project and workspace route', asyn
   await rootNode.hover();
   const queuedBranchAction = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Remove branch/ });
   await expect(queuedBranchAction).toHaveAttribute('aria-pressed', 'true');
+  await expect(queuedBranchAction).toHaveClass(/selected/);
   await page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Edit branch prompt/ }).click();
   const branchEditPrompt = page.getByRole('dialog', { name: 'Describe the next branch' });
   await expect(branchEditPrompt).toBeVisible();
@@ -157,6 +158,7 @@ test('loads the demo lineage at its canonical project and workspace route', asyn
   await rootNode.hover();
   const queuedRerollAction = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Remove re-roll/ });
   await expect(queuedRerollAction).toHaveAttribute('aria-pressed', 'true');
+  await expect(queuedRerollAction).toHaveClass(/selected/);
   await page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Edit re-roll prompt/ }).click();
   const rerollEditPrompt = page.getByRole('dialog', { name: 'Describe the re-roll' });
   await expect(rerollEditPrompt).toBeVisible();

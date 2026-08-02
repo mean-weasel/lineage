@@ -1,4 +1,5 @@
 import type { AssetSocialMark } from './socialMarkTypes';
+import type { AssetDiscussionMark } from './discussionMarkTypes';
 
 type AssetStatus = 'planned' | 'working' | 'approved' | 'published' | 'archived';
 export type AssetContentType = 'image' | 'video' | 'gif' | 'audio' | 'doc' | 'other';
@@ -298,6 +299,7 @@ export interface LineageNode {
   current_attempt?: LineageAttempt;
   lineage_tasks?: Partial<Record<LineageTaskType, LineageTask>>;
   reroll_request?: LineageRerollRequest;
+  discussion_mark?: AssetDiscussionMark;
   social_mark?: AssetSocialMark;
 }
 

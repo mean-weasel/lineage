@@ -35,6 +35,9 @@ describe('LineageToolbar', () => {
     expect(container!.querySelector('.lineage-title')).toBeNull();
     expect(container!.querySelector('h2')?.textContent).not.toBe('Lineage');
     expect(container!.querySelector('.lineage-workspace-picker')).toBeNull();
+    expect(container!.querySelector(`[aria-label="Current canvas: ${workspace.title}"]`)).not.toBeNull();
+    expect(container!.querySelector('.lineage-workspace-context')?.textContent).toContain('Current canvas');
+    expect(container!.querySelector('.lineage-workspace-context')?.textContent).toContain('Open');
     expect(container!.querySelector('.lineage-workspace-context strong')?.textContent).toBe(workspace.title);
     expect(container!.querySelector('.lineage-toolbar-context')?.textContent).toContain('7 nodes');
     expect(container!.querySelector('.lineage-toolbar-context')?.textContent).toContain('6 links');
@@ -51,6 +54,12 @@ describe('LineageToolbar', () => {
     expect([...container!.querySelectorAll('summary')].some(summary => summary.textContent === 'Actions')).toBe(false);
     expect(container!.textContent).not.toContain('Fit graph');
     expect(container!.textContent).not.toContain('Tidy tree');
+  });
+
+  it('keeps the persistent Discussion collection out of the contextual left column', () => {
+    renderToolbar();
+    expect(container!.querySelector('[aria-label="Discussion set"]')).toBeNull();
+    expect(container!.querySelector('.lineage-discussion-set')).toBeNull();
   });
 
   it('opens target planning from the selected branch and keeps defaults in human settings', () => {

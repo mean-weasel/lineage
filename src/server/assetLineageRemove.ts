@@ -129,6 +129,11 @@ export function removeLineageNode(project: string, fields: LineageRemoveNodeFiel
       set unmarked_by = 'lineage:remove-node', unmarked_at = ?, updated_at = ?
       where project_id = ? and root_asset_id = ? and asset_id = ? and unmarked_at is null
     `).run(timestamp, timestamp, project, root, fields.assetId);
+    database.prepare(`
+      update asset_discussion_marks
+      set unmarked_by = 'lineage:remove-node', unmarked_at = ?, updated_at = ?
+      where project_id = ? and root_asset_id = ? and asset_id = ? and unmarked_at is null
+    `).run(timestamp, timestamp, project, root, fields.assetId);
     compactSelectionsAfterRemove(database, project, root, fields.assetId, timestamp);
     database.exec('commit');
   } catch (error) {

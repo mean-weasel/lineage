@@ -714,6 +714,7 @@ function workspaceImpactCounts(database: DatabaseSync, project: string, workspac
     ['asset_layouts', 'select count(*) count from asset_layouts where project_id = ? and root_asset_id = ?', [project, root]],
     ['asset_selections', 'select count(*) count from asset_selections where project_id = ? and root_asset_id = ?', [project, root]],
     ['asset_social_marks', 'select count(*) count from asset_social_marks where project_id = ? and root_asset_id = ?', [project, root]],
+    ['asset_discussion_marks', 'select count(*) count from asset_discussion_marks where project_id = ? and root_asset_id = ?', [project, root]],
     ['asset_reroll_requests', 'select count(*) count from asset_reroll_requests where project_id = ? and root_asset_id = ?', [project, root]],
     ['generation_target_defaults', 'select count(*) count from generation_target_defaults where project_id = ? and root_asset_id = ?', [project, root]],
     ['node_next_output_target_settings', 'select count(*) count from node_next_output_target_settings where project_id = ? and root_asset_id = ?', [project, root]],
@@ -931,7 +932,7 @@ export function deleteWorkspace(projectInput: string, workspaceId: string, field
       `).run(project, plan.root_asset_id);
       database.prepare('delete from lineage_tasks where project_id = ? and root_asset_id = ?').run(project, plan.root_asset_id);
       deleteGenerationJobsForRoot(database, project, plan.root_asset_id);
-      for (const table of ['asset_layouts', 'asset_selections', 'asset_social_marks', 'asset_reroll_requests', 'generation_target_defaults', 'node_next_output_target_settings']) {
+      for (const table of ['asset_layouts', 'asset_selections', 'asset_social_marks', 'asset_discussion_marks', 'asset_reroll_requests', 'generation_target_defaults', 'node_next_output_target_settings']) {
         database.prepare(`delete from ${table} where project_id = ? and root_asset_id = ?`).run(project, plan.root_asset_id);
       }
       if (exclusiveNodes.length) {
@@ -978,6 +979,7 @@ const projectDirectTables = [
   'node_next_output_target_settings',
   'adapter_settings',
   'asset_social_marks',
+  'asset_discussion_marks',
   'asset_reroll_requests',
   'asset_selections',
   'asset_layouts',
@@ -1072,6 +1074,7 @@ function projectStateDigest(database: DatabaseSync, project: string): string {
     'asset_attempts',
     'asset_reroll_requests',
     'asset_social_marks',
+    'asset_discussion_marks',
     'asset_selections',
     'asset_layouts',
     'lineage_workspaces',
@@ -1199,6 +1202,7 @@ function deleteProjectRows(database: DatabaseSync, project: string): void {
     'generation_jobs',
     'selection_sets',
     'asset_social_marks',
+    'asset_discussion_marks',
     'asset_reroll_requests',
     'asset_selections',
     'asset_layouts',

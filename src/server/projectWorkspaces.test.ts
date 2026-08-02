@@ -420,6 +420,10 @@ describe('project/workspace organization persistence', () => {
       values ('delete-layout', ?, ?, ?, 1, 2, ?)
     `).run(project, root, child, '2026-07-29T12:00:00.000Z');
     database.prepare(`
+      insert into asset_discussion_marks (id, project_id, root_asset_id, asset_id, notes, marked_by, marked_at, updated_at)
+      values ('workspace-delete-discussion', ?, ?, ?, 'Discuss', 'human', ?, ?)
+    `).run(project, root, child, '2026-07-29T12:00:00.000Z', '2026-07-29T12:00:00.000Z');
+    database.prepare(`
       insert into agent_claims (
         id, token_hash, project_id, scope_type, target_id, agent_name, agent_kind,
         status, created_at, heartbeat_at, expires_at
@@ -496,6 +500,7 @@ describe('project/workspace organization persistence', () => {
     const plan = planWorkspaceDeletion(project, root);
     expect(plan.preserved).toMatchObject({ local_files: true, cloud_objects: true, asset_rows: 2 });
     expect(Object.fromEntries(plan.counts.map(item => [item.table, item.count]))).toMatchObject({
+      asset_discussion_marks: 1,
       agent_claim_events: 1,
       agent_claims: 1,
       generation_job_inputs: 1,
@@ -512,6 +517,7 @@ describe('project/workspace organization persistence', () => {
     expect(verification.prepare('select count(*) count from lineage_workspaces where project_id = ?').get(project)).toEqual({ count: 0 });
     expect(verification.prepare('select count(*) count from deleted_lineage_workspaces where project_id = ?').get(project)).toEqual({ count: 1 });
     expect(verification.prepare('select count(*) count from assets where project_id = ?').get(project)).toEqual({ count: 2 });
+    expect(verification.prepare('select count(*) count from asset_discussion_marks where project_id = ?').get(project)).toEqual({ count: 0 });
     expect(verification.prepare('pragma foreign_key_check').all()).toEqual([]);
     verification.close();
     expect(listLineageWorkspaces(project).workspaces).toHaveLength(0);

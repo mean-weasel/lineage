@@ -190,7 +190,7 @@ test('keeps Canvas full-height and restores focus when its shared panel closes',
   await expect(settings).toBeVisible();
   await expect(gear).toHaveAttribute('aria-expanded', 'true');
   await expect(settings.getByRole('radio')).toHaveCount(9);
-  await expect(settings.getByRole('switch')).toHaveCount(4);
+  await expect(settings.getByRole('switch')).toHaveCount(12);
   await expect(settings.getByRole('radio', { name: 'Portrait cards' })).toBeChecked();
   await settings.getByRole('radio', { name: 'Compact nodes' }).focus();
   await page.keyboard.press('ArrowRight');

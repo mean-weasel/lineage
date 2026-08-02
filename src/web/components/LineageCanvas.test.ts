@@ -83,6 +83,26 @@ describe('lineage inspector quick-action safety', () => {
       socialTitle: 'Unmark from Social (S)',
     });
   });
+
+  it('exposes a discussion Flag state with the F shortcut', () => {
+    expect(quickActionState(node(), false)).toMatchObject({
+      discussionDisabled: false,
+      discussionSelected: false,
+      discussionTitle: 'Flag for discussion (F)',
+    });
+    expect(quickActionState(node({
+      discussion_mark: { active: true, asset_id: 'local-node', id: 'discussion-1', marked_at: 'now', marked_by: 'human', project_id: 'demo-project', root_asset_id: 'root', updated_at: 'now' },
+      reroll_request: rerollRequest('pending'),
+      social_mark: { active: true, asset_id: 'local-node', id: 'social-1', marked_at: 'now', marked_by: 'human', project_id: 'demo-project', root_asset_id: 'root', updated_at: 'now' },
+      user_selected: true,
+    }), false)).toMatchObject({
+      branchDisabled: false,
+      discussionSelected: true,
+      discussionTitle: 'Remove discussion flag (F)',
+      rerollSelected: true,
+      socialSelected: true,
+    });
+  });
 });
 
 describe('lineage canvas empty-state truthfulness', () => {

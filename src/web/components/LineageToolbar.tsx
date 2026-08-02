@@ -1,3 +1,4 @@
+import { Network } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { LineageSnapshot, LineageWorkspace } from '../../shared/types';
 import type { LineageWorkspaceProgress } from './LineageCanvas';
@@ -90,11 +91,18 @@ export function LineageToolbar({
   return (
     <section className="lineage-context-tools">
       <div className="lineage-primary-controls">
-        <div className="lineage-workspace-context">
-          <span>Workspace</span>
-          <strong>{activeWorkspace?.title || 'No workspace selected'}</strong>
+        <div
+          aria-label={`Current canvas: ${activeWorkspace?.title || 'No workspace selected'}`}
+          className="lineage-workspace-context"
+        >
+          <span aria-hidden="true" className="lineage-workspace-context-icon"><Network size={17} /></span>
+          <span className="lineage-workspace-context-copy">
+            <span>Current canvas</span>
+            <strong>{activeWorkspace?.title || 'No workspace selected'}</strong>
+            <span className="lineage-toolbar-context">{workspaceContext}</span>
+          </span>
+          {activeWorkspace && <span className="lineage-workspace-context-state">Open</span>}
         </div>
-        <p className="lineage-toolbar-context">{workspaceContext}</p>
         <button
           aria-pressed={replayActive}
           className="secondary-button lineage-replay-launch"

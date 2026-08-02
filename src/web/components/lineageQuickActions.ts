@@ -6,7 +6,11 @@ export function quickActionState(node: LineageNode, selectionFull: boolean, sele
   const rerollLocked = taskIsLocked(node.lineage_tasks?.reroll);
   const rerollSelected = node.reroll_request?.status === 'pending';
   const socialSelected = node.social_mark?.active === true;
+  const discussionSelected = node.discussion_mark?.active === true;
   return {
+    discussionDisabled: false,
+    discussionSelected,
+    discussionTitle: discussionSelected ? 'Remove discussion flag (F)' : 'Flag for discussion (F)',
     branchDisabled: branchLocked || branchLimitReached,
     branchLimitReached,
     branchLocked,

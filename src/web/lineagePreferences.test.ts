@@ -8,6 +8,10 @@ import {
   readLineageGraphDirection,
   readLineageMinimapVisible,
   readVariationPromptAutoEdit,
+  readBranchPromptOnMark,
+  readRerollPromptOnMark,
+  readDiscussionNotePrompt,
+  readLineagePreviewActions,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
   writeCanvasSettingsHintDismissed,
@@ -17,6 +21,10 @@ import {
   writeLineageGraphDirection,
   writeLineageMinimapVisible,
   writeVariationPromptAutoEdit,
+  writeBranchPromptOnMark,
+  writeRerollPromptOnMark,
+  writeDiscussionNotePrompt,
+  writeLineagePreviewActions,
 } from './lineagePreferences';
 
 describe('lineage hover preview preference', () => {
@@ -42,6 +50,58 @@ describe('variation queue prompt editing preference', () => {
     expect(writeVariationPromptAutoEdit(false, { setItem })).toBe(true);
     expect(setItem).toHaveBeenCalledWith('lineage.preferences.variation-prompt-auto-edit', 'false');
     expect(writeVariationPromptAutoEdit(true, { setItem: () => { throw new Error('denied'); } })).toBe(false);
+  });
+});
+
+describe('prompt-on-mark preferences', () => {
+  it('defaults both prompts on and persists Branch and Re-roll independently', () => {
+    expect(readBranchPromptOnMark({ getItem: () => null })).toBe(true);
+    expect(readRerollPromptOnMark({ getItem: () => null })).toBe(true);
+    expect(readBranchPromptOnMark({ getItem: key => key.endsWith('branch-prompt-on-mark') ? 'false' : 'true' })).toBe(false);
+    expect(readRerollPromptOnMark({ getItem: key => key.endsWith('reroll-prompt-on-mark') ? 'false' : 'true' })).toBe(false);
+
+    const setItem = vi.fn();
+    expect(writeBranchPromptOnMark(false, { setItem })).toBe(true);
+    expect(writeRerollPromptOnMark(true, { setItem })).toBe(true);
+    expect(setItem.mock.calls).toEqual([
+      ['lineage.preferences.branch-prompt-on-mark', 'false'],
+      ['lineage.preferences.reroll-prompt-on-mark', 'true'],
+    ]);
+  });
+
+  it('uses safe defaults and reports unavailable storage', () => {
+    expect(readBranchPromptOnMark({ getItem: () => { throw new Error('denied'); } })).toBe(true);
+    expect(readRerollPromptOnMark({ getItem: () => { throw new Error('denied'); } })).toBe(true);
+    expect(writeBranchPromptOnMark(false, { setItem: () => { throw new Error('denied'); } })).toBe(false);
+    expect(writeRerollPromptOnMark(false, { setItem: () => { throw new Error('denied'); } })).toBe(false);
+  });
+});
+
+describe('Discussion optional-note prompt preference', () => {
+  it('defaults off, persists an explicit choice, and fails safely', () => {
+    expect(readDiscussionNotePrompt({ getItem: () => null })).toBe(false);
+    expect(readDiscussionNotePrompt({ getItem: () => 'true' })).toBe(true);
+    expect(readDiscussionNotePrompt({ getItem: () => { throw new Error('denied'); } })).toBe(false);
+    const setItem = vi.fn();
+    expect(writeDiscussionNotePrompt(true, { setItem })).toBe(true);
+    expect(setItem).toHaveBeenCalledWith('lineage.preferences.discussion-note-prompt', 'true');
+    expect(writeDiscussionNotePrompt(false, { setItem: () => { throw new Error('denied'); } })).toBe(false);
+  });
+});
+
+describe('hover preview action visibility', () => {
+  it('shows every action by default and safely merges stored choices', () => {
+    expect(readLineagePreviewActions({ getItem: () => null })).toEqual({ branch: true, reroll: true, social: true, flag: true, details: true });
+    expect(readLineagePreviewActions({ getItem: () => JSON.stringify({ reroll: false, flag: false }) })).toEqual({ branch: true, reroll: false, social: true, flag: false, details: true });
+    expect(readLineagePreviewActions({ getItem: () => '{broken' })).toEqual({ branch: true, reroll: true, social: true, flag: true, details: true });
+  });
+
+  it('persists the complete visibility map and fails safely', () => {
+    const setItem = vi.fn();
+    const visibility = { branch: true, reroll: false, social: true, flag: false, details: true };
+    expect(writeLineagePreviewActions(visibility, { setItem })).toBe(true);
+    expect(setItem).toHaveBeenCalledWith('lineage.preferences.preview-actions', JSON.stringify(visibility));
+    expect(writeLineagePreviewActions(visibility, { setItem: () => { throw new Error('denied'); } })).toBe(false);
   });
 });
 
@@ -125,6 +185,10 @@ describe('lineage canvas appearance preferences', () => {
       ['lineage.preferences.hover-previews', 'true'],
       ['lineage.preferences.minimap-visible', 'true'],
       ['lineage.preferences.variation-prompt-auto-edit', 'true'],
+      ['lineage.preferences.branch-prompt-on-mark', 'true'],
+      ['lineage.preferences.reroll-prompt-on-mark', 'true'],
+      ['lineage.preferences.discussion-note-prompt', 'false'],
+      ['lineage.preferences.preview-actions', '{"branch":true,"reroll":true,"social":true,"flag":true,"details":true}'],
     ]);
   });
 });

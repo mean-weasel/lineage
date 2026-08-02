@@ -31,11 +31,23 @@ describe('Sidebar', () => {
 
     expect(text()).toContain('Demo Project');
     expect(selectOrNull('Project')).toBeNull();
-    expect(buttonWithText('Back to workspaces')).not.toBeNull();
+    expect(buttonByLabel('Back to Demo Project workspaces')).not.toBeNull();
+    expect(buttonByLabel('Back to Demo Project workspaces')?.textContent).toContain('Browse canvases and creative branches');
     expect(select('Source').value).toBe('local');
     expect(select('Status').value).toBe('all');
     expect(select('Channel').value).toBe('all');
     expect(select('Placement').value).toBe('all');
+  });
+
+  it('makes the project workspace return a full-row action', () => {
+    const onProjectOverview = vi.fn();
+    renderSidebar('lineage', { onProjectOverview });
+
+    const workspaceReturn = buttonByLabel('Back to Demo Project workspaces')!;
+    expect(workspaceReturn.classList.contains('context-location-card')).toBe(true);
+    expect(workspaceReturn.textContent).toContain('Demo Project');
+    act(() => workspaceReturn.click());
+    expect(onProjectOverview).toHaveBeenCalledOnce();
   });
 
   it('removes quick sets and bucket stats from the default sidebar', () => {
@@ -325,11 +337,6 @@ function selectOrNull(label: string): HTMLSelectElement | null {
 function buttonByLabel(label: string): HTMLButtonElement | null {
   return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
     .find(item => item.getAttribute('aria-label') === label) || null;
-}
-
-function buttonWithText(label: string): HTMLButtonElement | null {
-  return Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
-    .find(item => item.textContent === label) || null;
 }
 
 function text(): string {
