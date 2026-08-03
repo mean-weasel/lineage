@@ -1,5 +1,5 @@
 {
-  "reviewedFor": "0.1.34",
+  "reviewedFor": "0.1.35",
   "result": "updated",
   "areas": [
     "reference-interface",
@@ -7,6 +7,7 @@
     "canvas-settings",
     "canvas-branch-collapse",
     "canvas-variation-queue",
+    "discussion-flags",
     "about-lineage"
   ]
 }
