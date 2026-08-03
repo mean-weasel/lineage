@@ -23,19 +23,23 @@ test('rotates lineage graph layout and handles without stale saved positions', a
     await openCanvasSettings(page);
     await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
+    await assertOrientationSaved(page, 'Rotated lineage graph top to bottom');
     const topToBottomPath = await firstEdgePath(page);
     expect(topToBottomPath).toMatch(/V|Q/);
 
     await page.getByRole('radio', { name: 'Left to right' }).check();
     await assertRootLeftOfChild(root, child);
+    await assertOrientationSaved(page, 'Rotated lineage graph left to right');
     const leftToRightPath = await firstEdgePath(page);
     expect(leftToRightPath).not.toBe(topToBottomPath);
 
     await page.getByRole('radio', { name: 'Top to bottom' }).check();
     await assertRootAboveChild(root, child);
+    await assertOrientationSaved(page, 'Rotated lineage graph top to bottom');
 
     await page.getByRole('radio', { name: 'Left to right' }).check();
     await assertRootLeftOfChild(root, child);
+    await assertOrientationSaved(page, 'Rotated lineage graph left to right');
 
     await page.getByRole('radio', { name: 'Portrait cards' }).check();
     await page.getByRole('radio', { name: 'Top to bottom' }).check();
@@ -82,6 +86,10 @@ async function assertRootAboveChild(root: Locator, child: Locator) {
 async function firstEdgePath(page: Page): Promise<string> {
   await expect(page.locator('.react-flow__edge-path').first()).toBeVisible();
   return await page.locator('.react-flow__edge-path').first().getAttribute('d') || '';
+}
+
+async function assertOrientationSaved(page: Page, message: string) {
+  await expect(page.locator('.toast[role="status"]')).toContainText(message);
 }
 
 async function openCanvasSettings(page: Page) {

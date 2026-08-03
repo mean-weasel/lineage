@@ -116,7 +116,7 @@ test('canvas persists independent node targets, plans only from their digest, an
     ].sort((a, b) => a.parent.localeCompare(b.parent)));
 
     const firstSourceTitle = snapshot.nodes.find(node => node.asset_id === firstSourceId)!.title;
-    await page.getByRole('button', { name: `${firstSourceTitle} details`, exact: true }).dispatchEvent('dblclick');
+    await page.getByRole('button', { name: `${firstSourceTitle} details` }).dispatchEvent('dblclick');
     await expect(page.getByRole('complementary', { name: 'Canvas asset details' })).toBeVisible();
     await page.getByRole('button', { name: `Open full detail for ${firstSourceTitle}` }).click();
     const detail = page.getByRole('dialog', { name: firstSourceTitle });

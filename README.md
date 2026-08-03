@@ -128,8 +128,9 @@ switcher.
 
 Use the gear at the upper right of Canvas for presentation and graph controls:
 compact or portrait cards, direction, edge weight, edge labels, hover
-previews, minimap visibility, the maximum queued branches, prompt-editing
-behavior, Fit graph, Tidy tree, and Reset appearance.
+previews, minimap visibility, the maximum queued branches, independent Branch
+and Re-roll prompt behavior, prompt editing in the variation queue, Fit graph,
+Tidy tree, and Reset appearance.
 Visual choices use direct option cards, while minimap, edge labels, and hover
 previews use on/off switches. These appearance choices are stored in the
 browser. Canvas settings, selection, and Canvas asset details share one
@@ -139,8 +140,10 @@ reduced-motion preference. Agent handoff now flows through the direct agent/UX
 bridge and the Agents view rather than a separate bottom Agent Context drawer.
 
 Choose **Branch** or **Re-roll** on a node—or focus it and press **B** or
-**R**—to queue that action with an exact prompt. The prompt remains visible on
-the node and is included in agent-readable task and generation handoffs. Open
+**R**—to queue that action. By default, Lineage first offers an exact prompt;
+the two **Ask for … prompt** Canvas switches can independently make Branch or
+Re-roll a one-step mark instead. Saved prompts remain visible on the node and
+are included in agent-readable task and generation handoffs. Open
 **Variation queue** from the context panel or press **V** to see all queued
 actions in one scroll, highlight their nodes, focus an item on the unobstructed
 Canvas, edit its prompt, or remove it. Blank prompts remain explicitly missing

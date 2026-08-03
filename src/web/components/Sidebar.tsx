@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   ArchiveRestore,
   Bot,
   BookOpen,
@@ -83,6 +84,7 @@ export function Sidebar(props: {
   } = props;
   const showAssetFilters = props.surface === 'studio' && (props.view === 'assets' || props.view === 'review' || props.view === 'backup');
   const hasProject = projects.some(item => item.id === project);
+  const projectDisplayName = projects.find(item => item.id === project)?.display_name || project;
   const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileCloseRef = useRef<HTMLButtonElement | null>(null);
   const mobileWasOpen = useRef(mobileContextOpen);
@@ -329,18 +331,38 @@ export function Sidebar(props: {
             </section>
 
             {props.surface !== 'projects' && (
-              <section className="side-section">
-                <h2>Project</h2>
+              <section className="side-section context-location-section">
+                <h2>{props.surface === 'studio' ? 'Project workspaces' : 'Projects'}</h2>
                 {props.surface === 'studio' ? (
-                  <>
-                    <strong className="context-project-name">{projects.find(item => item.id === project)?.display_name || project}</strong>
-                    <button className="text-button" onClick={props.onProjectOverview} type="button">Back to workspaces</button>
-                  </>
+                  <button
+                    aria-label={`Back to ${projectDisplayName} workspaces`}
+                    className="context-location-card"
+                    onClick={props.onProjectOverview}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="context-location-card-icon"><ArrowLeft size={17} /></span>
+                    <span className="context-location-card-copy">
+                      <span>Back to workspaces</span>
+                      <strong className="context-project-name">{projectDisplayName}</strong>
+                      <small>Browse canvases and creative branches</small>
+                    </span>
+                    <FolderKanban aria-hidden="true" className="context-location-card-destination" size={17} />
+                  </button>
                 ) : (
-                  <>
-                    <strong className="context-project-name">{projects.find(item => item.id === project)?.display_name || project}</strong>
-                    <button className="text-button" onClick={props.onProjects} type="button">All projects</button>
-                  </>
+                  <button
+                    aria-label={`Back to all projects from ${projectDisplayName}`}
+                    className="context-location-card"
+                    onClick={props.onProjects}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="context-location-card-icon"><ArrowLeft size={17} /></span>
+                    <span className="context-location-card-copy">
+                      <span>Back to all projects</span>
+                      <strong className="context-project-name">{projectDisplayName}</strong>
+                      <small>Choose another project</small>
+                    </span>
+                    <FolderKanban aria-hidden="true" className="context-location-card-destination" size={17} />
+                  </button>
                 )}
               </section>
             )}

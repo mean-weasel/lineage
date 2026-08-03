@@ -153,6 +153,22 @@ export function lineageDb(): DatabaseSync {
     );
     create index if not exists asset_social_marks_root_active
       on asset_social_marks(project_id, root_asset_id, unmarked_at, marked_at);
+    create table if not exists asset_discussion_marks (
+      id text primary key,
+      project_id text not null references projects(id),
+      root_asset_id text not null references assets(id),
+      asset_id text not null references assets(id),
+      notes text,
+      marked_by text not null,
+      marked_at text not null,
+      unmarked_by text,
+      unmarked_at text,
+      updated_at text not null,
+      updated_by text,
+      unique(project_id, root_asset_id, asset_id)
+    );
+    create index if not exists asset_discussion_marks_root_active
+      on asset_discussion_marks(project_id, root_asset_id, unmarked_at, marked_at);
     create table if not exists asset_reviews (
       asset_id text primary key references assets(id),
       review_state text not null check (review_state in ('unreviewed', 'approved', 'needs_revision', 'rejected', 'ignored')),
@@ -628,6 +644,7 @@ export function lineageDb(): DatabaseSync {
   ensureColumn(database, 'asset_edges', 'summary_created_by', "text check (summary_created_by in ('human', 'agent', 'system'))");
   ensureColumn(database, 'asset_edges', 'summary_updated_by', "text check (summary_updated_by in ('human', 'agent', 'system'))");
   ensureColumn(database, 'asset_edges', 'summary_updated_at', 'text');
+  ensureColumn(database, 'asset_discussion_marks', 'updated_by', 'text');
   ensureColumn(database, 'generation_job_outputs', 'edge_summary', 'text');
   migrateAssetSelections(database);
   dropLegacyAssetSelectionRootUnique(database);

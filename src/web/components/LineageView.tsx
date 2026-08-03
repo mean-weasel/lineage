@@ -18,6 +18,11 @@ import {
   readLineageGraphDirection,
   readLineageMinimapVisible,
   readVariationPromptAutoEdit,
+  readBranchPromptOnMark,
+  readRerollPromptOnMark,
+  readDiscussionNotePrompt,
+  readLineagePreviewActions,
+  lineagePreviewActionDefaults,
   resetLineageAppearancePreferences,
   writeHoverPreviewsEnabled,
   writeCanvasSettingsHintDismissed,
@@ -27,7 +32,12 @@ import {
   writeLineageGraphDirection,
   writeLineageMinimapVisible,
   writeVariationPromptAutoEdit,
+  writeBranchPromptOnMark,
+  writeRerollPromptOnMark,
+  writeDiscussionNotePrompt,
+  writeLineagePreviewActions,
   type LineageEdgeWeight,
+  type LineagePreviewAction,
 } from '../lineagePreferences';
 import type { AssetFlowNode, LineageCanvasPresentation } from './LineageAssetNode';
 import { LineageCanvas, type LineageWorkspaceProgress } from './LineageCanvas';
@@ -43,6 +53,7 @@ import { LineageSidePanel } from './LineageSidePanel';
 import { LineageToolbar } from './LineageToolbar';
 import { LineageGenerationSheet } from './LineageGenerationSheet';
 import { LineageVariationPromptDialog, type VariationPromptMode } from './LineageVariationPromptDialog';
+import { LineageDiscussionNoteDialog } from './LineageDiscussionNoteDialog';
 import { LineageVariationQueuePanel, type VariationQueueSelection, variationTaskLocked } from './LineageVariationQueuePanel';
 import { decorateSnapshotWithGenerationTargets } from './LineageGenerationTargets';
 import { NodeNextOutputTargetsEditor } from './NodeNextOutputTargets';
@@ -166,6 +177,10 @@ export function LineageView({
   const [historyAttempts, setHistoryAttempts] = useState<LineageAttempt[]>([]);
   const [hoverPreviewsEnabled, setHoverPreviewsEnabled] = useState(readHoverPreviewsEnabled);
   const [variationPromptAutoEdit, setVariationPromptAutoEdit] = useState(readVariationPromptAutoEdit);
+  const [branchPromptOnMark, setBranchPromptOnMark] = useState(readBranchPromptOnMark);
+  const [rerollPromptOnMark, setRerollPromptOnMark] = useState(readRerollPromptOnMark);
+  const [discussionNotePrompt, setDiscussionNotePrompt] = useState(readDiscussionNotePrompt);
+  const [previewActions, setPreviewActions] = useState(readLineagePreviewActions);
   const [minimapVisible, setMinimapVisible] = useState(readLineageMinimapVisible);
   const [brief, setBrief] = useState<LineageBriefResponse | null>(null);
   const [claims, setClaims] = useState<AgentClaimSummary[]>([]);
@@ -181,6 +196,12 @@ export function LineageView({
     mode: VariationPromptMode;
     nodeId: string;
     returnFocus?: HTMLElement;
+  } | null>(null);
+  const [discussionDialog, setDiscussionDialog] = useState<{
+    anchor?: { bottom: number; left: number; right: number; top: number };
+    mode: 'edit' | 'mark';
+    nodeId: string;
+    returnFocus: HTMLElement | null;
   } | null>(null);
   const [nodeMenu, setNodeMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [newLineageOpen, setNewLineageOpen] = useState(false);
@@ -228,6 +249,7 @@ export function LineageView({
     () => snapshot?.selected.map(assetId => snapshot.nodes.find(node => node.asset_id === assetId)).filter((node): node is LineageNode => Boolean(node)) || [],
     [snapshot],
   );
+  const discussionDialogNode = snapshot?.nodes.find(node => node.asset_id === discussionDialog?.nodeId);
   const selectedNode = selectedNodes[0];
   const rerollNodes = useMemo(
     () => snapshot?.nodes.filter(node => node.reroll_request?.status === 'pending') || [],
@@ -639,17 +661,37 @@ export function LineageView({
       returnFocus: anchorElement || (document.activeElement instanceof HTMLElement ? document.activeElement : undefined),
     });
   }
+  async function requestBranchAction(node: LineageNode, branchAction: 'add' | 'replace' = 'add') {
+    if (variationTaskLocked(node, 'branch')) return;
+    if (branchAction === 'add' && !node.user_selected && selectionFull) {
+      onToast('error', branchLimitMessage);
+      return;
+    }
+    if (branchPromptOnMark) {
+      openVariationPrompt(node, 'branch', branchAction);
+      return;
+    }
+    if (branchAction === 'replace') {
+      await replaceNextVariation(node, node.branch_prompt || node.selection_note || '');
+      return;
+    }
+    await selectNextBase(node, '');
+  }
+  async function requestRerollAction(node: LineageNode) {
+    if (variationTaskLocked(node, 'reroll')) return;
+    if (rerollPromptOnMark) {
+      openVariationPrompt(node, 'reroll');
+      return;
+    }
+    await markReroll(node, '');
+  }
   async function toggleBranch(node: LineageNode) {
     if (variationTaskLocked(node, 'branch')) return;
     if (node.user_selected) {
       await clearNextVariation(node.asset_id);
       return;
     }
-    if (selectionFull) {
-      onToast('error', branchLimitMessage);
-      return;
-    }
-    openVariationPrompt(node, 'branch', 'add');
+    await requestBranchAction(node, 'add');
   }
   async function toggleReroll(node: LineageNode) {
     if (variationTaskLocked(node, 'reroll')) return;
@@ -657,7 +699,7 @@ export function LineageView({
       await clearReroll(node);
       return;
     }
-    openVariationPrompt(node, 'reroll');
+    await requestRerollAction(node);
   }
   function closeVariationPrompt() {
     const returnFocus = variationPrompt?.returnFocus;
@@ -782,6 +824,54 @@ export function LineageView({
       actor: 'human:canvas',
       confirmWrite: true,
     }, active ? `Unmarked ${node.asset_id} from Social` : `Marked ${node.asset_id} for Social`);
+  }
+  function nodeElementForDiscussion(nodeId: string): HTMLElement | null {
+    return Array.from(document.querySelectorAll<HTMLElement>('.lineage-node[data-asset-id]'))
+      .find(element => element.dataset.assetId === nodeId) || null;
+  }
+  function openDiscussionDialog(node: LineageNode, mode: 'edit' | 'mark') {
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const nodeElement = nodeElementForDiscussion(node.asset_id);
+    const anchorElement = active?.isConnected ? active : nodeElement;
+    const returnFocus = active?.isConnected && !active.closest('.lineage-context-menu') ? active : nodeElement;
+    const rect = anchorElement?.getBoundingClientRect();
+    setDiscussionDialog({
+      anchor: rect ? { bottom: rect.bottom, left: rect.left, right: rect.right, top: rect.top } : undefined,
+      mode,
+      nodeId: node.asset_id,
+      returnFocus,
+    });
+  }
+  function closeDiscussionDialog() {
+    const returnFocus = discussionDialog?.returnFocus?.isConnected
+      ? discussionDialog.returnFocus
+      : discussionDialog ? nodeElementForDiscussion(discussionDialog.nodeId) : null;
+    setDiscussionDialog(null);
+    window.requestAnimationFrame(() => returnFocus?.focus());
+  }
+  async function toggleDiscussion(node: LineageNode) {
+    if (!snapshot) return;
+    if (node.discussion_mark?.active) {
+      await mutateLineage(`/api/lineage/${encodeURIComponent(snapshot.root_asset_id)}/discussion-marks/${encodeURIComponent(node.asset_id)}/unmark`, {
+        actor: 'human:canvas', confirmWrite: true,
+      }, `Removed discussion flag from ${node.asset_id}`);
+      return;
+    }
+    if (discussionNotePrompt) {
+      openDiscussionDialog(node, 'mark');
+      return;
+    }
+    await mutateLineage(`/api/lineage/${encodeURIComponent(snapshot.root_asset_id)}/discussion-marks/${encodeURIComponent(node.asset_id)}`, {
+      actor: 'human:canvas', confirmWrite: true,
+    }, `Flagged ${node.asset_id} for discussion`);
+  }
+  async function saveDiscussionNote(note: string) {
+    if (!snapshot || !discussionDialog || !discussionDialogNode) return;
+    const suffix = discussionDialog.mode === 'edit' ? '/note' : '';
+    const saved = await mutateLineage(`/api/lineage/${encodeURIComponent(snapshot.root_asset_id)}/discussion-marks/${encodeURIComponent(discussionDialogNode.asset_id)}${suffix}`, {
+      actor: 'human:canvas', confirmWrite: true, notes: note,
+    }, discussionDialog.mode === 'edit' ? `Updated discussion note for ${discussionDialogNode.asset_id}` : `Flagged ${discussionDialogNode.asset_id} for discussion`);
+    if (saved) closeDiscussionDialog();
   }
   async function openAttemptHistory(assetId: string) {
     if (!snapshot) return;
@@ -969,6 +1059,31 @@ export function LineageView({
       onToast('error', 'Variation prompt behavior changed for this session, but browser storage is unavailable so the preference could not be saved');
     }
   }
+  function selectBranchPromptOnMark(enabled: boolean) {
+    setBranchPromptOnMark(enabled);
+    if (!writeBranchPromptOnMark(enabled)) {
+      onToast('error', 'Branch prompt behavior changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
+  }
+  function selectRerollPromptOnMark(enabled: boolean) {
+    setRerollPromptOnMark(enabled);
+    if (!writeRerollPromptOnMark(enabled)) {
+      onToast('error', 'Re-roll prompt behavior changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
+  }
+  function selectDiscussionNotePrompt(enabled: boolean) {
+    setDiscussionNotePrompt(enabled);
+    if (!writeDiscussionNotePrompt(enabled)) {
+      onToast('error', 'Discussion note behavior changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
+  }
+  function selectPreviewAction(action: LineagePreviewAction, enabled: boolean) {
+    const next = { ...previewActions, [action]: enabled };
+    setPreviewActions(next);
+    if (!writeLineagePreviewActions(next)) {
+      onToast('error', 'Preview actions changed for this session, but browser storage is unavailable so the preference could not be saved');
+    }
+  }
   function selectEdgeSummariesVisible(visible: boolean) {
     setEdgeSummariesVisible(visible);
     if (!writeLineageEdgeLabelsVisible(visible)) {
@@ -990,6 +1105,10 @@ export function LineageView({
     setHoverPreviewsEnabled(true);
     setMinimapVisible(true);
     setVariationPromptAutoEdit(true);
+    setBranchPromptOnMark(true);
+    setRerollPromptOnMark(true);
+    setDiscussionNotePrompt(false);
+    setPreviewActions({ ...lineagePreviewActionDefaults });
     setFlowApi(null);
     if (!resetLineageAppearancePreferences()) {
       onToast('error', 'Appearance reset for this session, but browser storage is unavailable so the defaults could not be saved');
@@ -1275,12 +1394,15 @@ export function LineageView({
               onClick={onExitWorkspace}
               type="button"
             >
-              <ArrowLeft aria-hidden="true" size={16} />
-              <span>Workspaces</span>
+              <span aria-hidden="true" className="lineage-workspace-exit-icon"><ArrowLeft size={16} /></span>
+              <span className="lineage-workspace-exit-copy">
+                <small>Back to</small>
+                <strong>Workspaces</strong>
+              </span>
             </button>
             <span aria-hidden="true" className="lineage-workspace-divider" />
             <span className="lineage-workspace-title">
-              <small>Canvas</small>
+              <small>Current canvas</small>
               <strong>{activeWorkspace.title}</strong>
             </span>
           </nav>
@@ -1331,6 +1453,7 @@ export function LineageView({
               if (canvasPresentation === 'compact') void saveNodePosition(node);
             }}
             onBranchLimitReached={() => onToast('error', branchLimitMessage)}
+            onEditDiscussionNote={node => openDiscussionDialog(node, 'edit')}
             onEditVariationPrompt={(node, mode) => openVariationPrompt(node, mode, mode === 'branch' ? 'edit' : undefined)}
             onToggleCollapse={toggleCollapsedBranch}
             onNodesChange={onNodesChange}
@@ -1338,12 +1461,14 @@ export function LineageView({
             onSelectedAsset={onSelectedAsset}
             onToggleBranch={toggleBranch}
             onToggleReroll={toggleReroll}
+            onToggleDiscussion={toggleDiscussion}
             onToggleSocial={toggleSocial}
             onViewportInteraction={markViewportInteraction}
             replayInteractive={!replaySnapshot || replayAtEnd}
             selectedCount={selectedNodes.length}
             selectionLimit={nextVariationLimit}
             selectionFull={selectionFull}
+            visibleActions={previewActions}
             workspaceProgress={workspaceProgress}
             workspaceRootAssetId={workspaceRootAssetId}
           />
@@ -1398,6 +1523,10 @@ export function LineageView({
               minimapVisible={minimapVisible}
               nextVariationLimit={nextVariationLimit}
               variationPromptAutoEdit={variationPromptAutoEdit}
+              branchPromptOnMark={branchPromptOnMark}
+              rerollPromptOnMark={rerollPromptOnMark}
+              discussionNotePrompt={discussionNotePrompt}
+              previewActions={previewActions}
               onCanvasPresentation={selectCanvasPresentation}
               onEdgeSummariesVisible={selectEdgeSummariesVisible}
               onEdgeWeight={selectEdgeWeight}
@@ -1407,6 +1536,10 @@ export function LineageView({
               onMinimapVisible={selectMinimapVisible}
               onNextVariationLimit={limit => void saveNextVariationLimit(limit)}
               onVariationPromptAutoEdit={selectVariationPromptAutoEdit}
+              onBranchPromptOnMark={selectBranchPromptOnMark}
+              onRerollPromptOnMark={selectRerollPromptOnMark}
+              onDiscussionNotePrompt={selectDiscussionNotePrompt}
+              onPreviewAction={selectPreviewAction}
               onResetAppearance={resetAppearance}
               onTidyGraph={() => void tidyGraph()}
               snapshotAvailable={Boolean(snapshot)}
@@ -1435,7 +1568,13 @@ export function LineageView({
             closePanel={closePanel}
             latestNodes={latestNodes}
             linkChild={linkChild}
-            editVariationPrompt={openVariationPrompt}
+            editVariationPrompt={(node, mode, branchAction) => {
+              if (mode === 'branch' && branchAction !== 'edit') {
+                void requestBranchAction(node, branchAction || 'add');
+                return;
+              }
+              openVariationPrompt(node, mode, branchAction);
+            }}
             markReview={markReview}
             nextVariationLimit={nextVariationLimit}
             noteDirty={noteDirty}
@@ -1461,7 +1600,7 @@ export function LineageView({
             snapshot={snapshot}
           />
         )}
-        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onEditOutputTargets={() => setTargetNodeId(menuNode.asset_id)} onMarkReroll={() => openVariationPrompt(menuNode, 'reroll')} onOpenDetail={() => openAssetPanel(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => openVariationPrompt(menuNode, 'branch', 'replace')} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => openVariationPrompt(menuNode, 'branch', 'add')} onToggleSocial={() => void toggleSocial(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
+        {nodeMenu && menuNode && snapshot && <LineageContextMenu canRemoveFromLineage={menuNode.asset_id !== snapshot.root_asset_id} claims={lineageWorkspaceClaims(claims, project, snapshot.root_asset_id)} node={menuNode} onClaimControl={(action, claim, body) => { void controlClaim(action, claim, body); }} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(menuNode.asset_id)} onClearReroll={() => void clearReroll(menuNode)} onClose={() => setNodeMenu(null)} onEditDiscussionNote={() => openDiscussionDialog(menuNode, 'edit')} onEditOutputTargets={() => setTargetNodeId(menuNode.asset_id)} onMarkReroll={() => void requestRerollAction(menuNode)} onOpenDetail={() => openAssetPanel(menuNode.asset_id)} onRemoveFromLineage={() => void removeNodeFromLineage(menuNode)} onReplaceNext={() => void requestBranchAction(menuNode, 'replace')} onReview={reviewState => void markReview(reviewState, menuNode.asset_id)} onSelectNext={() => void requestBranchAction(menuNode, 'add')} onToggleDiscussion={() => void toggleDiscussion(menuNode)} onToggleSocial={() => void toggleSocial(menuNode)} position={nodeMenu} selectedCount={selectedNodes.length} selectionFull={selectionFull} />}
       </div>
       {historyNode && snapshot && (
         <LineageAttemptHistoryModal
@@ -1471,9 +1610,9 @@ export function LineageView({
             onClearNext: () => void clearNextVariation(historyNode.asset_id),
             onOpenNode: openDetailFromHistory,
             onRemoveFromLineage: node => void removeNodeFromLineage(node),
-            onReplaceNext: node => openVariationPrompt(node, 'branch', 'replace'),
+            onReplaceNext: node => void requestBranchAction(node, 'replace'),
             onReview: markReview,
-            onSelectNext: node => openVariationPrompt(node, 'branch', 'add'),
+            onSelectNext: node => void requestBranchAction(node, 'add'),
             onToast,
             selectedCount: selectedNodes.length,
             selectionFull,
@@ -1486,7 +1625,7 @@ export function LineageView({
           project={project}
         />
       )}
-      {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onEditOutputTargets={() => setTargetNodeId(detailNode.asset_id)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={node => openVariationPrompt(node, 'branch', 'replace')} onReview={markReview} onSelectNext={node => openVariationPrompt(node, 'branch', 'add')} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
+      {detailNode && snapshot && <LineageDetailModal canRemoveFromLineage={detailNode.asset_id !== snapshot.root_asset_id} node={detailNode} onClearAllNext={() => void clearNextVariation()} onClearNext={() => void clearNextVariation(detailNode.asset_id)} onClose={() => setDetailNodeId(null)} onEditOutputTargets={() => setTargetNodeId(detailNode.asset_id)} onOpenNode={setDetailNodeId} onRemoveFromLineage={node => void removeNodeFromLineage(node)} onReplaceNext={node => void requestBranchAction(node, 'replace')} onReview={markReview} onSelectNext={node => void requestBranchAction(node, 'add')} onToast={onToast} selectedCount={selectedNodes.length} selectionFull={selectionFull} snapshot={snapshot} />}
       {targetNode && snapshot && (
         <NodeNextOutputTargetsEditor
           nodeAssetId={targetNode.asset_id}
@@ -1495,6 +1634,15 @@ export function LineageView({
           onSaved={() => { void refreshNodeTargets(snapshot); }}
           project={project}
           rootAssetId={snapshot.root_asset_id}
+        />
+      )}
+      {discussionDialog && discussionDialogNode && (
+        <LineageDiscussionNoteDialog
+          anchor={discussionDialog.anchor}
+          mode={discussionDialog.mode}
+          node={discussionDialogNode}
+          onCancel={closeDiscussionDialog}
+          onSave={saveDiscussionNote}
         />
       )}
       {generationOpen && snapshot && (

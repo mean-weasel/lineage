@@ -10,11 +10,24 @@ const compactDirectionKey = 'lineage.preferences.compact-direction';
 const portraitDirectionKey = 'lineage.preferences.portrait-direction';
 const canvasSettingsHintDismissedKey = 'lineage.preferences.canvas-settings-hint-dismissed';
 const variationPromptAutoEditKey = 'lineage.preferences.variation-prompt-auto-edit';
+const branchPromptOnMarkKey = 'lineage.preferences.branch-prompt-on-mark';
+const rerollPromptOnMarkKey = 'lineage.preferences.reroll-prompt-on-mark';
+const discussionNotePromptKey = 'lineage.preferences.discussion-note-prompt';
+const previewActionsKey = 'lineage.preferences.preview-actions';
 
 type PreferenceReader = Pick<Storage, 'getItem'>;
 type PreferenceWriter = Pick<Storage, 'setItem'>;
 
 export type LineageEdgeWeight = 'fine' | 'standard' | 'bold';
+export type LineagePreviewAction = 'branch' | 'reroll' | 'social' | 'flag' | 'details';
+export type LineagePreviewActionVisibility = Record<LineagePreviewAction, boolean>;
+export const lineagePreviewActionDefaults: LineagePreviewActionVisibility = {
+  branch: true,
+  reroll: true,
+  social: true,
+  flag: true,
+  details: true,
+};
 const lineageAppearanceDefaults = {
   canvasPresentation: 'compact',
   compactDirection: 'LR',
@@ -24,7 +37,47 @@ const lineageAppearanceDefaults = {
   minimapVisible: true,
   portraitDirection: 'LR',
   variationPromptAutoEdit: true,
+  branchPromptOnMark: true,
+  rerollPromptOnMark: true,
+  discussionNotePrompt: false,
 } as const;
+
+export function readLineagePreviewActions(storage?: PreferenceReader): LineagePreviewActionVisibility {
+  try {
+    const stored = JSON.parse((storage || window.localStorage).getItem(previewActionsKey) || '{}') as Partial<LineagePreviewActionVisibility>;
+    return Object.fromEntries(
+      Object.entries(lineagePreviewActionDefaults).map(([action, enabled]) => [action, typeof stored[action as LineagePreviewAction] === 'boolean' ? stored[action as LineagePreviewAction] : enabled]),
+    ) as LineagePreviewActionVisibility;
+  } catch {
+    return { ...lineagePreviewActionDefaults };
+  }
+}
+
+export function writeLineagePreviewActions(actions: LineagePreviewActionVisibility, storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(previewActionsKey, JSON.stringify(actions));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readDiscussionNotePrompt(storage?: PreferenceReader): boolean {
+  try {
+    return (storage || window.localStorage).getItem(discussionNotePromptKey) === 'true';
+  } catch {
+    return lineageAppearanceDefaults.discussionNotePrompt;
+  }
+}
+
+export function writeDiscussionNotePrompt(enabled: boolean, storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(discussionNotePromptKey, String(enabled));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function readVariationPromptAutoEdit(storage?: PreferenceReader): boolean {
   try {
@@ -37,6 +90,40 @@ export function readVariationPromptAutoEdit(storage?: PreferenceReader): boolean
 export function writeVariationPromptAutoEdit(enabled: boolean, storage?: PreferenceWriter): boolean {
   try {
     (storage || window.localStorage).setItem(variationPromptAutoEditKey, String(enabled));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readBranchPromptOnMark(storage?: PreferenceReader): boolean {
+  try {
+    return (storage || window.localStorage).getItem(branchPromptOnMarkKey) !== 'false';
+  } catch {
+    return lineageAppearanceDefaults.branchPromptOnMark;
+  }
+}
+
+export function writeBranchPromptOnMark(enabled: boolean, storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(branchPromptOnMarkKey, String(enabled));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readRerollPromptOnMark(storage?: PreferenceReader): boolean {
+  try {
+    return (storage || window.localStorage).getItem(rerollPromptOnMarkKey) !== 'false';
+  } catch {
+    return lineageAppearanceDefaults.rerollPromptOnMark;
+  }
+}
+
+export function writeRerollPromptOnMark(enabled: boolean, storage?: PreferenceWriter): boolean {
+  try {
+    (storage || window.localStorage).setItem(rerollPromptOnMarkKey, String(enabled));
     return true;
   } catch {
     return false;
@@ -186,6 +273,10 @@ export function resetLineageAppearancePreferences(storage?: PreferenceWriter): b
     writer.setItem(hoverPreviewsKey, String(lineageAppearanceDefaults.hoverPreviewsEnabled));
     writer.setItem(minimapVisibleKey, String(lineageAppearanceDefaults.minimapVisible));
     writer.setItem(variationPromptAutoEditKey, String(lineageAppearanceDefaults.variationPromptAutoEdit));
+    writer.setItem(branchPromptOnMarkKey, String(lineageAppearanceDefaults.branchPromptOnMark));
+    writer.setItem(rerollPromptOnMarkKey, String(lineageAppearanceDefaults.rerollPromptOnMark));
+    writer.setItem(discussionNotePromptKey, String(lineageAppearanceDefaults.discussionNotePrompt));
+    writer.setItem(previewActionsKey, JSON.stringify(lineagePreviewActionDefaults));
     return true;
   } catch {
     return false;

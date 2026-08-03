@@ -8,7 +8,7 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
     data: { project, confirmWrite: true },
   });
   expect(seededResponse.ok()).toBe(true);
-  const seeded = await seededResponse.json() as { root_asset_id: string; workspace?: { id: string } };
+  const seeded = await seededResponse.json() as { root_asset_id: string; workspace?: { id: string; max_queued_branches?: number } };
   if (!seeded.workspace?.id) throw new Error('Demo seed did not return a workspace');
 
   const before = await (await request.get(`/api/lineage/${seeded.root_asset_id}?project=${project}`)).json() as {
@@ -53,7 +53,7 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
     await expect(rerollDialog).toBeHidden();
     await expect(rerollNode.locator('.lineage-node-prompts span.reroll')).toHaveAttribute('title', `Re-roll prompt: ${rerollPrompt}`);
 
-    const unrelatedControl = page.getByRole('button', { name: 'Back to workspaces', exact: true });
+    const unrelatedControl = page.getByRole('button', { name: /Back to .* workspaces/ });
     await unrelatedControl.focus();
     await page.keyboard.press('v');
     await expect(page.getByRole('complementary', { name: 'Variation queue' })).toHaveCount(0);
@@ -149,6 +149,50 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
       expect.objectContaining({ target_asset_id: rerollAssetId, task_type: 'reroll' }),
     ]));
 
+    await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+    const branchPromptOnMark = page.getByRole('switch', { name: 'Ask for a Branch prompt when marking' });
+    const rerollPromptOnMark = page.getByRole('switch', { name: 'Ask for a Re-roll prompt when marking' });
+    await expect(branchPromptOnMark).toHaveAttribute('aria-checked', 'true');
+    await expect(rerollPromptOnMark).toHaveAttribute('aria-checked', 'true');
+    await branchPromptOnMark.click();
+    await expect(branchPromptOnMark).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: 'Close Canvas settings' }).click();
+
+    await rootNode.focus();
+    await rootNode.press('b');
+    await expect(page.getByRole('dialog', { name: 'Describe the next branch' })).toHaveCount(0);
+    await expect(rootNode.locator('.lineage-state-chips-node .branch')).toContainText('B');
+    await expect(rootNode.locator('.lineage-node-prompts span').filter({ hasText: 'Branch' })).toHaveAttribute('title', 'Branch has no prompt');
+
+    await rerollNode.focus();
+    await rerollNode.press('r');
+    await expect(page.getByRole('dialog', { name: 'Describe the re-roll' })).toBeVisible();
+    await page.getByRole('dialog', { name: 'Describe the re-roll' }).getByRole('button', { name: 'Cancel' }).click();
+    await rootNode.focus();
+    await rootNode.press('b');
+    await expect(rootNode.locator('.lineage-state-chips-node .branch')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Open Canvas settings' }).click();
+    await branchPromptOnMark.click();
+    await rerollPromptOnMark.click();
+    await expect(branchPromptOnMark).toHaveAttribute('aria-checked', 'true');
+    await expect(rerollPromptOnMark).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: 'Close Canvas settings' }).click();
+
+    await rerollNode.focus();
+    await rerollNode.press('r');
+    await expect(page.getByRole('dialog', { name: 'Describe the re-roll' })).toHaveCount(0);
+    await expect(rerollNode.locator('.lineage-state-chips-node .reroll')).toContainText('R');
+    await expect(rerollNode.locator('.lineage-node-prompts span.reroll')).toHaveAttribute('title', 'Re-roll has no prompt');
+
+    await rootNode.focus();
+    await rootNode.press('b');
+    await expect(page.getByRole('dialog', { name: 'Describe the next branch' })).toBeVisible();
+    await page.getByRole('dialog', { name: 'Describe the next branch' }).getByRole('button', { name: 'Cancel' }).click();
+    await rerollNode.focus();
+    await rerollNode.press('r');
+    await expect(rerollNode.locator('.lineage-state-chips-node .reroll')).toHaveCount(0);
+
     const limitResponse = await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}`, {
       data: { project, maxQueuedBranches: 1, confirmWrite: true },
     });
@@ -159,7 +203,7 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
     await page.getByRole('dialog', { name: 'Describe the next branch' }).getByRole('button', { name: 'Queue without prompt' }).click();
     await expect(rootNode.locator('.lineage-node-prompts span').filter({ hasText: 'Branch' })).toHaveAttribute('title', 'Branch has no prompt');
 
-    await page.getByRole('button', { name: 'Back to workspaces', exact: true }).focus();
+    await page.getByRole('button', { name: /Back to .* workspaces/ }).focus();
     await rerollNode.hover();
     const cappedBranch = page.getByTestId('lineage-hover-preview').getByRole('button', { name: /Branch limit/ });
     const capMessage = '1 of 1 branches queued. Raise the maximum in Canvas settings or remove a branch.';
@@ -176,8 +220,19 @@ test('persists exact branch and re-roll prompts on nodes and in the agent task h
     await maxBranches.fill('2');
     await expect(maxBranches).toHaveValue('2');
   } finally {
-    await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}/archive`, {
-      data: { project, confirmWrite: true },
+    await request.post('/api/selection', {
+      data: { project, rootAssetId: seeded.root_asset_id, clear: true, confirmWrite: true },
+    });
+    const cleanupSnapshot = await (await request.get(`/api/lineage/${seeded.root_asset_id}?project=${project}`)).json() as {
+      nodes: Array<{ asset_id: string; reroll_request?: { status: string } }>;
+    };
+    for (const node of cleanupSnapshot.nodes.filter(item => item.reroll_request?.status === 'pending')) {
+      await request.post(`/api/lineage/${seeded.root_asset_id}/rerolls/${node.asset_id}/cancel`, {
+        data: { project, confirmWrite: true },
+      });
+    }
+    await request.post(`/api/lineage-workspaces/${encodeURIComponent(seeded.workspace.id)}`, {
+      data: { project, maxQueuedBranches: seeded.workspace.max_queued_branches || 3, confirmWrite: true },
     });
   }
 });
